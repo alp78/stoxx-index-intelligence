@@ -1,4 +1,4 @@
-"""ESG ingestion pipeline orchestrator — daily operational steps only.
+"""STOXX ingestion pipeline orchestrator — daily operational steps only.
 
 Runs all pipeline steps in the correct order: fetch -> load -> transform.
 Each step checks per-index preconditions and skips indices that already
@@ -331,7 +331,7 @@ STEPS = [
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ESG ingestion pipeline")
+    parser = argparse.ArgumentParser(description="STOXX ingestion pipeline")
     parser.add_argument("--step", type=int, help="Run a single step")
     parser.add_argument("--from", type=int, dest="from_step", help="Resume from step N")
     args = parser.parse_args()

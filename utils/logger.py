@@ -1,4 +1,4 @@
-"""Structured logging for the ESG ingestion pipeline.
+"""Structured logging for the STOXX ingestion pipeline.
 
 Console output is human-readable. Datadog gets JSON in logs/pipeline.jsonl.
 

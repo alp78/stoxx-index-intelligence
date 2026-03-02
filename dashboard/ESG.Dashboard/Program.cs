@@ -14,8 +14,8 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.Components.Server.Circuits.Circu
 builder.Services.AddMudServices();
 
 // Database
-var connectionString = builder.Configuration.GetConnectionString("ESG")
-    ?? throw new InvalidOperationException("Connection string 'ESG' not found.");
+var connectionString = builder.Configuration.GetConnectionString("stoxx")
+    ?? throw new InvalidOperationException("Connection string 'stoxx' not found.");
 builder.Services.AddSingleton(new DbConnectionFactory(connectionString));
 builder.Services.AddScoped<ScoresRepository>();
 builder.Services.AddScoped<IndexPerformanceRepository>();

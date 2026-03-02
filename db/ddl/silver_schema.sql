@@ -4,7 +4,7 @@
 -- Fully idempotent: safe to run multiple times.
 -- ============================================================================
 
-USE ESG;
+USE stoxx;
 GO
 
 SET QUOTED_IDENTIFIER ON;

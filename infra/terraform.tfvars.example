@@ -1,0 +1,4 @@
+project_id  = "stoxx-index-intelligence"
+region      = "europe-west1"
+zone        = "europe-west1-b"
+db_password = "YourStrong!Passw0rd"

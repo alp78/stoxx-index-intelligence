@@ -11,7 +11,7 @@ def get_connection(autocommit=False):
 
     host = os.getenv("SQL_HOST", "localhost")
     port = os.getenv("SQL_PORT", "1434")
-    database = os.getenv("SQL_DATABASE", "ESG")
+    database = os.getenv("SQL_DATABASE", "stoxx")
     user = os.getenv("SQL_USER", "sa")
     password = os.getenv("SA_PASSWORD")
 

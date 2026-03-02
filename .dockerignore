@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+.claude
+
+# Python
+__pycache__
+*.pyc
+.venv
+venv
+
+# .NET build artifacts
+**/bin
+**/obj
+
+# Data (fetched at runtime)
+data/dimensions
+data/ohlcv
+data/signals
+data/pulse
+data/tickers
+logs
+
+# Docker
+docker-compose.yml
+.dockerignore
+
+# Misc
+*.md
+.env
+.env.example

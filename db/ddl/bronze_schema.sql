@@ -1,15 +1,15 @@
 -- ============================================================================
--- Bronze schema: Create ESG database and bronze layer
+-- Bronze schema: Create stoxx database and bronze layer
 -- Bronze = raw data, 1:1 with source JSON
 -- Fully idempotent: safe to run multiple times.
 -- ============================================================================
 
 -- Create database
-IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'ESG')
-    CREATE DATABASE ESG;
+IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'stoxx')
+    CREATE DATABASE stoxx;
 GO
 
-USE ESG;
+USE stoxx;
 GO
 
 -- Create bronze schema
