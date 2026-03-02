@@ -1,8 +1,8 @@
 .esg/
 .env/
 .claude/
-data/
-!data/definitions/
+/data/
+!/data/definitions/
 logs/
 __pycache__/
 
