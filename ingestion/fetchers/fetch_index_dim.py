@@ -89,9 +89,9 @@ def extract_full_identity(symbol):
 
 def build_registries():
     # 1. Resolve absolute paths based on this script's location
-    # Assumes script is in /ingestion, going up one level to /data/stage
+    # Assumes script is in /ingestion/fetchers, going up two levels to /data/stage
     script_dir = Path(__file__).resolve().parent
-    stage_dir = script_dir.parent / "data" / "stage"
+    stage_dir = script_dir.parent.parent / "data" / "stage"
     
     # Airflow Compatibility: Create directories if they do not exist
     stage_dir.mkdir(parents=True, exist_ok=True)

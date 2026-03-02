@@ -73,10 +73,10 @@ def fetch_time_series_history(reg_file, output_file):
 
 if __name__ == "__main__":
     # Resolve absolute paths based on this script's location
-    # Assumes script is in /ingestion, going up one level to /data
+    # Assumes script is in /ingestion/fetchers, going up two levels to /data
     script_dir = Path(__file__).resolve().parent
-    stage_dir = script_dir.parent / "data" / "stage"
-    history_dir = script_dir.parent / "data" / "history"
+    stage_dir = script_dir.parent.parent / "data" / "stage"
+    history_dir = script_dir.parent.parent / "data" / "history"
     
     # Process Euro Index
     fetch_time_series_history(

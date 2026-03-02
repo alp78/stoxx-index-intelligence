@@ -1,0 +1,4 @@
+-- ============================================================================
+-- Migration 002: REVERTED — SCD2 belongs in silver, not bronze.
+-- This migration is intentionally empty. See silver layer migrations.
+-- ============================================================================

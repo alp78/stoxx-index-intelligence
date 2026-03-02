@@ -76,10 +76,10 @@ def fetch_daily_signals(reg_file, output_file):
 
 if __name__ == "__main__":
     # Resolve absolute paths based on this script's location
-    # Assumes script is in /ingestion, going up one level to /data
+    # Assumes script is in /ingestion/fetchers, going up two levels to /data
     script_dir = Path(__file__).resolve().parent
-    stage_dir = script_dir.parent / "data" / "stage"
-    signals_dir = script_dir.parent / "data" / "signals"
+    stage_dir = script_dir.parent.parent / "data" / "stage"
+    signals_dir = script_dir.parent.parent / "data" / "signals"
     
     # Track 2: Market Signals - Euro Index
     fetch_daily_signals(
