@@ -147,6 +147,69 @@ Infrastructure is managed separately through Terraform. The `infra/` directory c
 
 ---
 
+## Network, secrets & security
+
+### Network isolation
+
+All data-plane traffic stays inside a VPC. Cloud SQL exposes only a private IP (`ipv4_enabled = false`) reachable through VPC peering. Cloud Run services and jobs connect to the database via a VPC connector with egress restricted to `PRIVATE_RANGES_ONLY`, so no database traffic ever traverses the public internet.
+
+Firewall rules follow a deny-all-except model. The only internal rule allows APM trace traffic on port 8126 from the VPC CIDR (`10.0.0.0/24`) to the Datadog Agent on the Airflow VM. SSH and Airflow UI access are restricted by network tags, and IAP tunnel access is scoped to Google's IAP IP range (`35.235.240.0/20`).
+
+The dashboard is the only public-facing surface. It runs on Cloud Run behind Google's managed load balancer with TLS termination, and serves read-only data from the gold layer. There is no write path from the dashboard to the database.
+
+### Secrets management
+
+Database credentials are stored in **GCP Secret Manager** (`stoxx-db-password`) with automatic multi-region replication. Cloud Run services access the password at runtime through IAM-bound environment variable injection — only the `stoxx-pipeline` and `stoxx-dashboard` service accounts hold the `secretmanager.secretAccessor` role.
+
+CI/CD authentication uses a dedicated `stoxx-ci` service account whose JSON key is stored as a GitHub Actions secret (`GCP_SA_KEY`). This account has only the minimum roles needed: `artifactregistry.writer` to push images and `run.developer` to update deployments. It cannot access the database, secrets, or networking resources.
+
+The Datadog API key is passed to the Airflow VM through GCP instance metadata attributes, retrieved at startup via the metadata server. The entire Datadog integration is opt-in: setting `dd_api_key = ""` in Terraform removes all observability resources.
+
+### IAM & least privilege
+
+Each workload runs under its own service account with scoped roles:
+
+| Service account | Roles | Purpose |
+|----------------|-------|---------|
+| `stoxx-pipeline` | `cloudsql.client`, `secretmanager.secretAccessor` | Pipeline DB access |
+| `stoxx-dashboard` | `cloudsql.client`, `secretmanager.secretAccessor` | Dashboard DB access |
+| `stoxx-airflow` | `run.invoker`, `run.developer`, `logging.viewer` | Trigger Cloud Run jobs |
+| `stoxx-ci` | `artifactregistry.writer`, `run.developer`, `iam.serviceAccountUser` | CI/CD deployments |
+| `stoxx-datadog` | `monitoring.viewer`, `compute.viewer`, `cloudasset.viewer` | Read-only GCP metrics |
+
+No service account has `editor` or `owner` roles. The CI account can assume pipeline and dashboard identities only for deployment (via `serviceAccountUser`), not for data access.
+
+### Data integrity & idempotency
+
+Every loader and transform is designed to be safely rerunnable. The pipeline uses three idempotency strategies depending on the data characteristics:
+
+**Merge on composite key** — OHLCV prices check for existing `(symbol, date)` pairs before inserting. Duplicate runs skip already-loaded rows. Commits happen in batches of 5,000–10,000 rows to bound memory usage while maintaining throughput.
+
+**Truncate-per-index and reload** — Volatile data like daily signals and pulse snapshots delete all rows for a given index, then insert the fresh snapshot in a single transaction. This guarantees the table always reflects the latest fetch without partial state.
+
+**Upsert with change detection** — Silver-layer transforms pre-load existing rows into memory, compare values, and execute insert/update/skip decisions per row. Unchanged rows are not touched, which avoids unnecessary write amplification and keeps audit trails clean.
+
+### Database transactions & rollback
+
+All database operations run inside explicit transactions with `autocommit=False`. Every loader and transform follows the same pattern:
+
+```
+try:
+    execute operations (batched commits every 5k–10k rows)
+    conn.commit()
+except Exception:
+    conn.rollback()
+    log error and propagate
+```
+
+Long-running transforms use periodic commits to avoid holding locks across millions of rows. If a failure occurs mid-batch, the rollback reverts only the uncommitted portion — previously committed batches are idempotent and will be skipped on re-run.
+
+Cloud SQL runs automated backups daily at 03:00 UTC on a stable maintenance window (Sunday 04:00 UTC). The pipeline job is configured with `max_retries = 1` at the Cloud Run level, so a transient failure (OOM, network blip) triggers an automatic retry of the entire job. At the application level, per-index errors are caught and logged without stopping the pipeline — a failed index is skipped and the remaining indices continue. Subsequent scheduled runs recover naturally because every step is idempotent.
+
+> **Why not savepoints and two-phase commits** The data volume is moderate and the pipeline runs frequently (three times daily). If a transform fails, the cost of re-running the entire step from bronze is low — typically under a minute. Adding savepoint complexity for sub-transaction recovery is not worth it when idempotent re-execution achieves the same result with simpler code.
+
+---
+
 ## Cost
 
 Running in GCP europe-west1:
