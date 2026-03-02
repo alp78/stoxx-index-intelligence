@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from utils.config import INDICES, data_path, safe_write_json, utcnow_str
+from utils.config import INDICES, data_path, safe_write_json, cet_now_str
 from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger(__name__)
@@ -48,7 +48,7 @@ def fetch_daily_signals(reg_file, output_file):
 
                 record = {
                     "symbol": symbol,
-                    "timestamp": utcnow_str(),
+                    "timestamp": cet_now_str(),
                     "price_metrics": {
                         "currentPrice": current_price,
                         "forwardPE": info.get("forwardPE"),

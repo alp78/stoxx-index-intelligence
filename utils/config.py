@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 _CONFIG_DIR = Path(__file__).resolve().parent
@@ -108,9 +108,10 @@ def format_epoch(epoch_val, is_ms=False):
         return None
 
 
-def utcnow_str(fmt='%Y-%m-%d %H:%M:%S'):
-    """Return current UTC time as a formatted string."""
-    return datetime.now(timezone.utc).strftime(fmt)
+def cet_now_str(fmt='%Y-%m-%d %H:%M:%S'):
+    """Return current CET/CEST time as a formatted string."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Europe/Paris")).strftime(fmt)
 
 
 def safe_write_json(filepath, data):

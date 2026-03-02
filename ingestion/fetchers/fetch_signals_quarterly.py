@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from utils.config import INDICES, data_path, safe_write_json, format_epoch, utcnow_str
+from utils.config import INDICES, data_path, safe_write_json, format_epoch, cet_now_str
 from utils.logger import get_logger, log_info, log_error, StepTimer
 
 logger = get_logger(__name__)
@@ -44,7 +44,7 @@ def fetch_quarterly_fundamentals(reg_file, output_file):
 
                 record = {
                     "symbol": symbol,
-                    "as_of_date": utcnow_str('%Y-%m-%d'),
+                    "as_of_date": cet_now_str('%Y-%m-%d'),
                     "quality_metrics": {
                         "grossMargins": info.get("grossMargins"),
                         "operatingMargins": info.get("operatingMargins"),

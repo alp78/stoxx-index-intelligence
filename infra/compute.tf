@@ -1,9 +1,9 @@
 # --------------------------------------------------------------------------
-# Airflow VM (Docker Compose on e2-small)
+# Airflow VM (LocalExecutor + PostgreSQL on COS)
 # --------------------------------------------------------------------------
 resource "google_compute_instance" "airflow" {
   name         = "stoxx-airflow"
-  machine_type = "e2-small"
+  machine_type = "e2-medium"
   zone         = var.zone
   tags         = ["airflow"]
 
@@ -29,27 +29,7 @@ resource "google_compute_instance" "airflow" {
   }
 
   metadata = {
-    gce-container-declaration = yamlencode({
-      spec = {
-        containers = [{
-          image = "apache/airflow:2.10-python3.12"
-          env = [
-            { name = "AIRFLOW__CORE__LOAD_EXAMPLES", value = "false" },
-            { name = "AIRFLOW__CORE__EXECUTOR",      value = "SequentialExecutor" },
-          ]
-          command = ["bash", "-c", "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@local && airflow standalone"]
-          ports   = [{ containerPort = 8080 }]
-          volumeMounts = [{
-            name      = "dags"
-            mountPath = "/opt/airflow/dags"
-          }]
-        }]
-        volumes = [{
-          name = "dags"
-          hostPath = { path = "/home/airflow/dags" }
-        }]
-      }
-    })
+    startup-script = file("${path.module}/scripts/airflow-startup.sh")
   }
 
   allow_stopping_for_update = true

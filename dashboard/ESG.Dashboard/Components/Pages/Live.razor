@@ -42,26 +42,34 @@ else
 
     <!-- Market Pulse -->
     <div style="margin-bottom: 24px;">
-        <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-            <ChildContent>
-                <span style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">
-                    <MudText Typo="Typo.subtitle2" Style="opacity: 0.5; font-weight: 700; margin-bottom: 10px; font-size: 0.85rem;">Market Pulse</MudText>
-                </span>
-            </ChildContent>
-            <TooltipContent>
-                <div style="@_tipStyle">
-                    <div style="@_tipHead">Market Pulse</div>
-                    <div style="@_tipDesc">Real-time snapshot of the most active tickers per index:</div>
-                    <ul style="@_tipList">
-                        <li><b>Price</b> &mdash; last traded price</li>
-                        <li><b>Change</b> &mdash; % change from previous close</li>
-                        <li><b>Day Range</b> &mdash; current price position within today's high/low</li>
-                        <li><b>Vol Ratio</b> &mdash; current volume / 10-day average (&gt;1.5x = elevated)</li>
-                    </ul>
-                    <div style="@_tipNote">Updated every 60 seconds from live market data.</div>
-                </div>
-            </TooltipContent>
-        </MudTooltip>
+        <div class="d-flex align-center" style="margin-bottom: 10px;">
+            <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                <ChildContent>
+                    <span style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">
+                        <MudText Typo="Typo.subtitle2" Style="opacity: 0.5; font-weight: 700; font-size: 0.85rem;">Market Pulse</MudText>
+                    </span>
+                </ChildContent>
+                <TooltipContent>
+                    <div style="@_tipStyle">
+                        <div style="@_tipHead">Market Pulse</div>
+                        <div style="@_tipDesc">Real-time snapshot of the most active tickers per index:</div>
+                        <ul style="@_tipList">
+                            <li><b>Price</b> &mdash; last traded price</li>
+                            <li><b>Change</b> &mdash; % change from previous close</li>
+                            <li><b>Day Range</b> &mdash; current price position within today's high/low</li>
+                            <li><b>Vol Ratio</b> &mdash; current volume / 10-day average (&gt;1.5x = elevated)</li>
+                        </ul>
+                        <div style="@_tipNote">Updated every 60 seconds from live market data.</div>
+                    </div>
+                </TooltipContent>
+            </MudTooltip>
+            <span style="margin-left: auto; font-size: 0.7rem; opacity: 0.35;">
+                @if (_lastDataTimestamp.HasValue)
+                {
+                    @($"Last update: {_lastDataTimestamp.Value:dd MMM yyyy HH:mm} CET")
+                }
+            </span>
+        </div>
 
         <MudGrid Spacing="3">
             @for (int idxPos = 0; idxPos < _indices.Length; idxPos++)
@@ -219,6 +227,7 @@ else
 @code {
     private bool _loading = true;
     private DateTime? _lastRefresh;
+    private DateTime? _lastDataTimestamp;
     private CancellationTokenSource? _refreshCts;
 
     // Data
@@ -254,6 +263,9 @@ else
             .ToDictionary(g => g.Key, g => g.ToList());
         _tickersByIndex = tickers.GroupBy(t => t.Index)
             .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Latest data timestamp (already stored as CET)
+        _lastDataTimestamp = pulse.Count > 0 ? pulse.Max(p => p.Timestamp) : null;
 
         _lastRefresh = DateTime.Now;
     }

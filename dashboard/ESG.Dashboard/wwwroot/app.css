@@ -6,6 +6,11 @@ html {
     background: #1E1E2D !important;
 }
 
+/* Hide TradingView attribution link and watermark */
+.tv-lightweight-charts a {
+    display: none !important;
+}
+
 html, body {
     font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     margin: 0;

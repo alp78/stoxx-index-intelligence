@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from utils.config import INDICES, data_path, safe_write_json, utcnow_str
+from utils.config import INDICES, data_path, safe_write_json, cet_now_str
 from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger(__name__)
@@ -94,7 +94,7 @@ def discover_pulse_tickers(reg_file, output_file):
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     tickers = {
-        "discovered_at": utcnow_str(),
+        "discovered_at": cet_now_str(),
         "symbols": [item['symbol'] for item in top_10],
         "ranking": top_10
     }
@@ -146,7 +146,7 @@ def fetch_pulse(ticker_file, output_file, index_name):
 
                 record = {
                     "symbol": symbol,
-                    "timestamp": utcnow_str(),
+                    "timestamp": cet_now_str(),
                     "price": {
                         "current": current_price,
                         "open": info.get("regularMarketOpen"),

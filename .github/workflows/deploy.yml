@@ -3,6 +3,10 @@ name: Deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "infra/**"
+      - "**.md"
+      - ".gitignore"
 
 env:
   REGION: europe-west1
