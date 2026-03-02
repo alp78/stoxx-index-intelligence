@@ -9,12 +9,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from utils.config import INDICES, data_path, safe_write_json, format_epoch, cet_now_str
+from utils.db import get_connection
 from utils.logger import get_logger, log_info, log_error, StepTimer
 
 logger = get_logger(__name__)
 
 
-def fetch_quarterly_fundamentals(reg_file, output_file):
+def fetch_quarterly_fundamentals(reg_file, output_file, index_key=None):
     log_info(logger, "Fetching quarterly fundamentals (margins, leverage, governance) from yfinance",
              step="fetch", source="yfinance", kind="signals_quarterly",
              reg_file=str(reg_file))
@@ -23,12 +24,26 @@ def fetch_quarterly_fundamentals(reg_file, output_file):
 
     all_fundamentals = []
 
+    registry = None
     try:
         with open(reg_file, 'r', encoding='utf-8') as f:
             registry = json.load(f)
     except FileNotFoundError:
-        log_error(logger, "Cannot fetch quarterly signals — registry file not found",
-                  step="fetch", reg_file=str(reg_file))
+        if index_key:
+            log_info(logger, "Registry JSON not found — falling back to bronze.index_dim",
+                     step="fetch", index=index_key)
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT symbol FROM bronze.index_dim WHERE _index = ?", index_key)
+            symbols = [r[0] for r in cur.fetchall() if r[0]]
+            cur.close()
+            conn.close()
+            if symbols:
+                registry = [{"symbol": s} for s in symbols]
+
+    if not registry:
+        log_error(logger, "Cannot fetch quarterly signals — no stock symbols available (file or DB)",
+                  step="fetch", reg_file=str(reg_file), index=index_key)
         return
 
     with StepTimer() as timer:
@@ -91,5 +106,6 @@ if __name__ == "__main__":
         key = idx["key"]
         fetch_quarterly_fundamentals(
             reg_file=data_path(key, "dim"),
-            output_file=data_path(key, "signals_quarterly")
+            output_file=data_path(key, "signals_quarterly"),
+            index_key=key
         )

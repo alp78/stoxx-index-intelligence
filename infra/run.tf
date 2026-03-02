@@ -12,6 +12,7 @@ resource "google_cloud_run_v2_service" "dashboard" {
 
   template {
     service_account = google_service_account.dashboard.email
+    timeout         = "3600s"
 
     scaling {
       min_instance_count = 0
@@ -23,6 +24,16 @@ resource "google_cloud_run_v2_service" "dashboard" {
 
       ports {
         container_port = 8080
+      }
+
+      # Blazor Server uses WebSockets (SignalR) — needs HTTP/2 end-to-end
+      startup_probe {
+        http_get {
+          path = "/"
+        }
+        initial_delay_seconds = 3
+        period_seconds        = 10
+        failure_threshold     = 3
       }
 
       env {

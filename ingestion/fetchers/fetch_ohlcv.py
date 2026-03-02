@@ -40,13 +40,26 @@ def fetch_ohlcv(index_key):
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
-    # Read symbol list from dim JSON
+    # Read symbol list from dim JSON, fall back to DB (Cloud Run ephemeral filesystem)
+    registry = None
     try:
         with open(dim_file, "r", encoding="utf-8") as f:
             registry = json.load(f)
     except FileNotFoundError:
-        log_error(logger, "Cannot fetch OHLCV — registry file not found",
-                  step="fetch", reg_file=str(dim_file))
+        log_info(logger, "Dim JSON not found — falling back to bronze.index_dim",
+                 step="fetch", index=index_key)
+        conn_dim = get_connection()
+        cur = conn_dim.cursor()
+        cur.execute("SELECT symbol FROM bronze.index_dim WHERE _index = ?", index_key)
+        symbols = [r[0] for r in cur.fetchall() if r[0]]
+        cur.close()
+        conn_dim.close()
+        if symbols:
+            registry = [{"symbol": s} for s in symbols]
+
+    if not registry:
+        log_error(logger, "Cannot fetch OHLCV — no stock symbols available (file or DB)",
+                  step="fetch", index=index_key)
         return
 
     # Query silver for last date per symbol

@@ -14,27 +14,58 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from utils.config import INDICES, data_path, safe_write_json, cet_now_str
+from utils.db import get_connection
 from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger(__name__)
 
 
-def discover_pulse_tickers(reg_file, output_file):
+def _get_tickers_from_db(index_key):
+    """Read pulse ticker symbols from bronze.pulse_tickers (DB fallback for Cloud Run)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT symbol FROM bronze.pulse_tickers WHERE _index = ?", index_key)
+    symbols = [row[0] for row in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return symbols
+
+
+def _get_registry_from_db(index_key):
+    """Read stock symbols from bronze.index_dim (DB fallback for Cloud Run)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT symbol FROM bronze.index_dim WHERE _index = ?", index_key)
+    symbols = [row[0] for row in cursor.fetchall() if row[0]]
+    cursor.close()
+    conn.close()
+    return symbols
+
+
+def discover_pulse_tickers(reg_file, output_file, index_key=None):
     """Ranks registered stocks by activity score to find the 10 most dynamic.
     Activity = 0.5 * volume_surge + 0.5 * price_range_intensity (z-scored).
+    Falls back to reading symbols from bronze.index_dim when the registry
+    JSON file is missing (Cloud Run ephemeral filesystem).
     Intended to run hourly."""
     log_info(logger, "Ranking all stocks by activity score to find top 10 most dynamic tickers",
              step="fetch", kind="pulse_discover", reg_file=str(reg_file))
 
+    valid_symbols = []
     try:
         with open(reg_file, 'r', encoding='utf-8') as f:
             registry = json.load(f)
+        valid_symbols = [c.get('symbol') for c in registry if c.get('symbol')]
     except FileNotFoundError:
-        log_error(logger, "Cannot discover pulse tickers — registry file not found",
-                  step="fetch", reg_file=str(reg_file))
-        return
+        if index_key:
+            log_info(logger, "Registry JSON not found — falling back to bronze.index_dim",
+                     step="fetch", index=index_key)
+            valid_symbols = _get_registry_from_db(index_key)
 
-    valid_symbols = [c.get('symbol') for c in registry if c.get('symbol')]
+    if not valid_symbols:
+        log_warning(logger, "Cannot discover pulse tickers — no stock symbols available (file or DB)",
+                    step="fetch", reg_file=str(reg_file), index=index_key)
+        return
 
     raw_scores = []
     with StepTimer() as timer:
@@ -107,21 +138,26 @@ def discover_pulse_tickers(reg_file, output_file):
              duration_ms=timer.duration_ms)
 
 
-def fetch_pulse(ticker_file, output_file, index_name):
+def fetch_pulse(ticker_file, output_file, index_name, index_key=None):
     """Fetches a lightweight quote snapshot for the pre-discovered tickers.
-    Intended to run every minute."""
+    Falls back to reading symbols from bronze.pulse_tickers when the JSON
+    file is missing (Cloud Run ephemeral filesystem).
+    Intended to run every 5 minutes."""
+    symbols = []
     try:
         with open(ticker_file, 'r', encoding='utf-8') as f:
             tickers = json.load(f)
+        symbols = tickers.get('symbols', [])
     except FileNotFoundError:
-        log_error(logger, "Cannot fetch pulse — ticker file not found",
-                  step="fetch", ticker_file=str(ticker_file))
-        return
+        if index_key:
+            log_info(logger, "Ticker JSON not found — falling back to bronze.pulse_tickers",
+                     step="fetch", index=index_key)
+            symbols = _get_tickers_from_db(index_key)
 
-    symbols = tickers.get('symbols', [])
     if not symbols:
-        log_warning(logger, "Cannot fetch pulse — ticker file has no symbols",
-                    step="fetch", ticker_file=str(ticker_file))
+        log_warning(logger, "Cannot fetch pulse — no ticker symbols available (file or DB)",
+                    step="fetch", ticker_file=str(ticker_file),
+                    index=index_key or index_name)
         return
 
     log_info(logger, "Fetching real-time price/book/volume snapshots for pulse tickers",
@@ -189,7 +225,8 @@ if __name__ == "__main__":
             key = idx["key"]
             discover_pulse_tickers(
                 reg_file=data_path(key, "dim"),
-                output_file=data_path(key, "tickers")
+                output_file=data_path(key, "tickers"),
+                index_key=key
             )
     else:
         for idx in INDICES:
@@ -197,5 +234,6 @@ if __name__ == "__main__":
             fetch_pulse(
                 ticker_file=data_path(key, "tickers"),
                 output_file=data_path(key, "pulse"),
-                index_name=idx["name"]
+                index_name=idx["name"],
+                index_key=key
             )

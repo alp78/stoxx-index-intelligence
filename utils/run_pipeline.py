@@ -93,14 +93,11 @@ def _skip(key, reason):
 # ---------------------------------------------------------------------------
 
 def step_01_fetch_ohlcv():
-    """Smart OHLCV fetch: detect gaps, fetch only missing data."""
+    """Smart OHLCV fetch: detect gaps, fetch only missing data.
+    Falls back to DB for stock symbols when dim file is missing (Cloud Run)."""
     from fetchers.fetch_ohlcv import fetch_ohlcv
     for idx in INDICES:
         key = idx["key"]
-        dim = data_path(key, "dim")
-        if not _file_ok(dim):
-            _skip(key, "dim file missing, cannot fetch ohlcv")
-            continue
         try:
             fetch_ohlcv(key)
         except Exception as e:
@@ -137,16 +134,14 @@ def step_03_transform_ohlcv():
 # ---------------------------------------------------------------------------
 
 def step_04_fetch_signals_daily():
-    """Fetch daily trading signals from yfinance -> JSON."""
+    """Fetch daily trading signals from yfinance -> JSON.
+    Falls back to DB for stock symbols when dim file is missing (Cloud Run)."""
     from fetchers.fetch_signals_daily import fetch_daily_signals
     for idx in INDICES:
         key = idx["key"]
-        dim = data_path(key, "dim")
-        if not _file_ok(dim):
-            _skip(key, "dim file missing or invalid, cannot fetch signals_daily")
-            continue
         try:
-            fetch_daily_signals(dim, data_path(key, "signals_daily"))
+            fetch_daily_signals(data_path(key, "dim"), data_path(key, "signals_daily"),
+                                index_key=key)
         except Exception as e:
             _skip(key, f"signals_daily fetch failed: {e}")
 
@@ -170,16 +165,14 @@ def step_05_load_signals_daily():
 
 
 def step_06_fetch_signals_quarterly():
-    """Fetch quarterly fundamental signals from yfinance -> JSON."""
+    """Fetch quarterly fundamental signals from yfinance -> JSON.
+    Falls back to DB for stock symbols when dim file is missing (Cloud Run)."""
     from fetchers.fetch_signals_quarterly import fetch_quarterly_fundamentals
     for idx in INDICES:
         key = idx["key"]
-        dim = data_path(key, "dim")
-        if not _file_ok(dim):
-            _skip(key, "dim file missing or invalid, cannot fetch signals_quarterly")
-            continue
         try:
-            fetch_quarterly_fundamentals(dim, data_path(key, "signals_quarterly"))
+            fetch_quarterly_fundamentals(data_path(key, "dim"), data_path(key, "signals_quarterly"),
+                                         index_key=key)
         except Exception as e:
             _skip(key, f"signals_quarterly fetch failed: {e}")
 
@@ -219,16 +212,14 @@ def step_09_transform_signals_quarterly():
 # ---------------------------------------------------------------------------
 
 def step_10_fetch_pulse_tickers():
-    """Discover most active tickers from yfinance -> JSON."""
+    """Discover most active tickers from yfinance -> JSON.
+    Falls back to DB for stock symbols when dim file is missing (Cloud Run)."""
     from fetchers.fetch_pulse import discover_pulse_tickers
     for idx in INDICES:
         key = idx["key"]
-        dim = data_path(key, "dim")
-        if not _file_ok(dim):
-            _skip(key, "dim file missing or invalid, cannot discover pulse tickers")
-            continue
         try:
-            discover_pulse_tickers(dim, data_path(key, "tickers"))
+            discover_pulse_tickers(data_path(key, "dim"), data_path(key, "tickers"),
+                                   index_key=key)
         except Exception as e:
             _skip(key, f"pulse ticker discovery failed: {e}")
 
@@ -252,16 +243,14 @@ def step_11_load_pulse_tickers():
 
 
 def step_12_fetch_pulse():
-    """Fetch real-time pulse snapshots from yfinance -> JSON."""
+    """Fetch real-time pulse snapshots from yfinance -> JSON.
+    Falls back to DB for ticker symbols when JSON file is missing (Cloud Run)."""
     from fetchers.fetch_pulse import fetch_pulse
     for idx in INDICES:
         key = idx["key"]
-        tickers = data_path(key, "tickers")
-        if not _file_ok(tickers):
-            _skip(key, "tickers file missing or invalid, cannot fetch pulse")
-            continue
         try:
-            fetch_pulse(tickers, data_path(key, "pulse"), idx["name"])
+            fetch_pulse(data_path(key, "tickers"), data_path(key, "pulse"),
+                        idx["name"], index_key=key)
         except Exception as e:
             _skip(key, f"pulse fetch failed: {e}")
 
