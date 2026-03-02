@@ -7,6 +7,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import get_connection
 from config import INDICES
+from logger import get_logger, log_info
+
+logger = get_logger(__name__)
 
 
 BRONZE_OHLCV_DDL = """
@@ -72,15 +75,18 @@ def setup():
 
     for idx in INDICES:
         table = idx["ohlcv_table"]
-        print(f"\n--- {idx['key']}: {table} ---")
 
         cursor.execute(BRONZE_OHLCV_DDL.format(table=table))
         cursor.execute(SILVER_OHLCV_DDL.format(table=table))
         conn.commit()
 
+        log_info(logger, "Index tables checked", step="setup",
+                 index=idx["key"], table=table)
+
     cursor.close()
     conn.close()
-    print("\nDone.")
+    log_info(logger, "Setup complete", step="setup",
+             indices=len(INDICES))
 
 
 if __name__ == "__main__":

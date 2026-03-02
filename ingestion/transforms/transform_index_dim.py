@@ -10,6 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
+from logger import get_logger, log_info, log_error, StepTimer
+
+logger = get_logger(__name__)
 
 COMPARE_COLS = [
     "long_name", "short_name", "sector", "sector_key",
@@ -24,60 +27,73 @@ ALL_COLS = ["_index", "symbol"] + COMPARE_COLS
 
 
 def run():
+    log_info(logger, "Transform started", step="transform",
+             target="silver.index_dim", type="SCD2")
+
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Load bronze snapshot (latest per index+symbol)
-    cursor.execute(f"""
-        SELECT {', '.join(ALL_COLS)}
-        FROM bronze.index_dim
-    """)
-    bronze_rows = cursor.fetchall()
-    bronze_map = {}
-    for row in bronze_rows:
-        key = (row[0], row[1])  # (_index, symbol)
-        bronze_map[key] = row
+    try:
+        with StepTimer() as timer:
+            # Load bronze snapshot (latest per index+symbol)
+            cursor.execute(f"""
+                SELECT {', '.join(ALL_COLS)}
+                FROM bronze.index_dim
+            """)
+            bronze_rows = cursor.fetchall()
+            bronze_map = {}
+            for row in bronze_rows:
+                key = (row[0], row[1])  # (_index, symbol)
+                bronze_map[key] = row
 
-    # Load current silver rows
-    cursor.execute(f"""
-        SELECT {', '.join(ALL_COLS)}
-        FROM silver.index_dim
-        WHERE is_current = 1
-    """)
-    silver_rows = cursor.fetchall()
-    silver_map = {}
-    for row in silver_rows:
-        key = (row[0], row[1])
-        silver_map[key] = row
+            # Load current silver rows
+            cursor.execute(f"""
+                SELECT {', '.join(ALL_COLS)}
+                FROM silver.index_dim
+                WHERE is_current = 1
+            """)
+            silver_rows = cursor.fetchall()
+            silver_map = {}
+            for row in silver_rows:
+                key = (row[0], row[1])
+                silver_map[key] = row
 
-    inserted = 0
-    updated = 0
-    closed = 0
+            inserted = 0
+            updated = 0
+            closed = 0
 
-    # New or changed
-    for key, b_row in bronze_map.items():
-        if key not in silver_map:
-            # New symbol -> insert
-            _insert_row(cursor, b_row)
-            inserted += 1
-        else:
-            s_row = silver_map[key]
-            # Compare attribute columns (index 2 onward)
-            if _has_changed(b_row, s_row):
-                _close_row(cursor, key)
-                _insert_row(cursor, b_row)
-                updated += 1
+            # New or changed
+            for key, b_row in bronze_map.items():
+                if key not in silver_map:
+                    _insert_row(cursor, b_row)
+                    inserted += 1
+                else:
+                    s_row = silver_map[key]
+                    if _has_changed(b_row, s_row):
+                        _close_row(cursor, key)
+                        _insert_row(cursor, b_row)
+                        updated += 1
 
-    # Removed from index (in silver but not in bronze)
-    for key in silver_map:
-        if key not in bronze_map:
-            _close_row(cursor, key)
-            closed += 1
+            # Removed from index (in silver but not in bronze)
+            for key in silver_map:
+                if key not in bronze_map:
+                    _close_row(cursor, key)
+                    closed += 1
 
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print(f"SCD2 index_dim: {inserted} new, {updated} changed, {closed} closed")
+            conn.commit()
+
+        log_info(logger, "Transform complete", step="transform",
+                 target="silver.index_dim", records_inserted=inserted,
+                 records_updated=updated, records_closed=closed,
+                 duration_ms=timer.duration_ms)
+    except Exception:
+        conn.rollback()
+        log_error(logger, "Transform failed", exc_info=True,
+                  step="transform", target="silver.index_dim")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def _has_changed(b_row, s_row):
@@ -85,7 +101,6 @@ def _has_changed(b_row, s_row):
     for i in range(2, len(b_row)):
         bv = b_row[i]
         sv = s_row[i]
-        # Normalize None vs empty string
         if bv is None and sv is None:
             continue
         if str(bv) != str(sv):

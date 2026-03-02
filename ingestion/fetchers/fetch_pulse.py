@@ -1,3 +1,10 @@
+"""Pulse data fetcher: discovers most active tickers and fetches real-time snapshots.
+
+Usage:
+  python fetch_pulse.py --discover   # Hourly: rank all stocks, save top 10
+  python fetch_pulse.py              # Every minute: fetch pulse for discovered tickers
+"""
+
 import json
 import sys
 import yfinance as yf
@@ -7,51 +14,58 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import INDICES, data_path
+from logger import get_logger, log_info, log_warning, log_error, StepTimer
+
+logger = get_logger(__name__)
+
 
 def discover_pulse_tickers(reg_file, output_file):
     """Ranks registered stocks by activity score to find the 10 most dynamic.
     Activity = 0.5 * volume_surge + 0.5 * price_range_intensity (z-scored).
-    Intended to run hourly (e.g., via Airflow hourly DAG)."""
-    print(f"\n--- Discovering top 10 most active from {reg_file} ---")
+    Intended to run hourly."""
+    log_info(logger, "Discovery started", step="fetch", kind="pulse_discover",
+             reg_file=str(reg_file))
 
     try:
         with open(reg_file, 'r', encoding='utf-8') as f:
             registry = json.load(f)
     except FileNotFoundError:
-        print(f"Error: {reg_file} not found.")
+        log_error(logger, "Registry file not found", step="fetch",
+                  reg_file=str(reg_file))
         return
 
     valid_symbols = [c.get('symbol') for c in registry if c.get('symbol')]
-    print(f"Found {len(valid_symbols)} registered symbols. Ranking by activity...")
 
     raw_scores = []
-    for symbol in valid_symbols:
-        print(f"Ranking: {symbol:<8}", end="\r")
-        try:
-            tkr = yf.Ticker(symbol)
-            info = tkr.info
+    with StepTimer() as timer:
+        for symbol in valid_symbols:
+            try:
+                tkr = yf.Ticker(symbol)
+                info = tkr.info
 
-            last_vol = info.get("volume")
-            avg_vol = info.get("averageDailyVolume10Day")
-            day_high = info.get("regularMarketDayHigh")
-            day_low = info.get("regularMarketDayLow")
-            prev_close = info.get("regularMarketPreviousClose")
+                last_vol = info.get("volume")
+                avg_vol = info.get("averageDailyVolume10Day")
+                day_high = info.get("regularMarketDayHigh")
+                day_low = info.get("regularMarketDayLow")
+                prev_close = info.get("regularMarketPreviousClose")
 
-            vol_surge = (last_vol / avg_vol) if (last_vol and avg_vol) else 0.0
-            range_intensity = ((day_high - day_low) / prev_close) if (day_high and day_low and prev_close) else 0.0
+                vol_surge = (last_vol / avg_vol) if (last_vol and avg_vol) else 0.0
+                range_intensity = ((day_high - day_low) / prev_close) if (day_high and day_low and prev_close) else 0.0
 
-            raw_scores.append({
-                "symbol": symbol,
-                "volumeSurge": round(vol_surge, 4),
-                "rangeIntensity": round(range_intensity, 4)
-            })
-        except Exception as e:
-            print(f"\nError ranking {symbol}: {e}")
+                raw_scores.append({
+                    "symbol": symbol,
+                    "volumeSurge": round(vol_surge, 4),
+                    "rangeIntensity": round(range_intensity, 4)
+                })
+            except Exception as e:
+                log_error(logger, "Symbol ranking failed", step="fetch",
+                          symbol=symbol, error=str(e))
 
-        time.sleep(0.1)
+            time.sleep(0.1)
 
     if not raw_scores:
-        print("No scores collected, skipping.")
+        log_warning(logger, "No scores collected", step="fetch",
+                    kind="pulse_discover")
         return
 
     # Z-score both metrics across the index, then composite
@@ -77,11 +91,6 @@ def discover_pulse_tickers(reg_file, output_file):
     sorted_list = sorted(raw_scores, key=lambda x: x['activityScore'], reverse=True)
     top_10 = sorted_list[:10]
 
-    print(f"\nTop 10 most active:")
-    for i, item in enumerate(top_10, 1):
-        print(f"  {i:>2}. {item['symbol']:<8}  score={item['activityScore']:>7.3f}  vol_surge={item['volumeSurge']:>6.2f}x  range={item['rangeIntensity']*100:>5.2f}%")
-
-    # Airflow Compatibility: Ensure output directory exists before saving
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     tickers = {
@@ -92,84 +101,91 @@ def discover_pulse_tickers(reg_file, output_file):
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(tickers, f, indent=4, ensure_ascii=False)
-    print(f"\nSuccess: Saved pulse tickers to {output_file}")
+
+    log_info(logger, "Discovery complete", step="fetch", kind="pulse_discover",
+             symbols_ranked=len(raw_scores), top_10=[t['symbol'] for t in top_10],
+             duration_ms=timer.duration_ms)
 
 
 def fetch_pulse(ticker_file, output_file, index_name):
     """Fetches a lightweight quote snapshot for the pre-discovered tickers.
-    Intended to run every minute (e.g., via Airflow minute-level DAG)."""
+    Intended to run every minute."""
     try:
         with open(ticker_file, 'r', encoding='utf-8') as f:
             tickers = json.load(f)
     except FileNotFoundError:
-        print(f"Error: {ticker_file} not found. Run with --discover first.")
+        log_error(logger, "Ticker file not found", step="fetch",
+                  ticker_file=str(ticker_file))
         return
 
     symbols = tickers.get('symbols', [])
     if not symbols:
-        print(f"No tickers in {ticker_file}, skipping.")
+        log_warning(logger, "No tickers in file", step="fetch",
+                    ticker_file=str(ticker_file))
         return
 
-    print(f"\n--- Pulse: {index_name} ({len(symbols)} symbols, discovered {tickers['discovered_at']}) ---")
+    log_info(logger, "Pulse fetch started", step="fetch", kind="pulse",
+             index=index_name, symbols=len(symbols))
 
-    # Airflow Compatibility: Ensure output directory exists before saving
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     pulse_records = []
 
-    for symbol in symbols:
-        print(f"Pulse: {symbol:<8}", end="\r")
+    with StepTimer() as timer:
+        for symbol in symbols:
+            try:
+                tkr = yf.Ticker(symbol)
+                info = tkr.info
 
-        try:
-            tkr = yf.Ticker(symbol)
-            info = tkr.info
+                current_price = info.get("currentPrice")
+                prev_close = info.get("regularMarketPreviousClose")
+                bid = info.get("bid")
+                ask = info.get("ask")
+                volume = info.get("volume")
+                avg_vol = info.get("averageDailyVolume10Day")
 
-            current_price = info.get("currentPrice")
-            prev_close = info.get("regularMarketPreviousClose")
-            bid = info.get("bid")
-            ask = info.get("ask")
-            volume = info.get("volume")
-            avg_vol = info.get("averageDailyVolume10Day")
-
-            record = {
-                "symbol": symbol,
-                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "price": {
-                    "current": current_price,
-                    "open": info.get("regularMarketOpen"),
-                    "dayHigh": info.get("regularMarketDayHigh"),
-                    "dayLow": info.get("regularMarketDayLow"),
-                    "previousClose": prev_close,
-                    "change": round(current_price - prev_close, 4) if (current_price and prev_close) else None,
-                    "changePct": round((current_price / prev_close - 1) * 100, 4) if (current_price and prev_close) else None
-                },
-                "book": {
-                    "bid": bid,
-                    "ask": ask,
-                    "bidSize": info.get("bidSize"),
-                    "askSize": info.get("askSize"),
-                    "spread": round(ask - bid, 4) if (ask and bid) else None
-                },
-                "volume": {
-                    "current": volume,
-                    "average10Day": avg_vol,
-                    "ratio": round(volume / avg_vol, 4) if (volume and avg_vol) else None
+                record = {
+                    "symbol": symbol,
+                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "price": {
+                        "current": current_price,
+                        "open": info.get("regularMarketOpen"),
+                        "dayHigh": info.get("regularMarketDayHigh"),
+                        "dayLow": info.get("regularMarketDayLow"),
+                        "previousClose": prev_close,
+                        "change": round(current_price - prev_close, 4) if (current_price and prev_close) else None,
+                        "changePct": round((current_price / prev_close - 1) * 100, 4) if (current_price and prev_close) else None
+                    },
+                    "book": {
+                        "bid": bid,
+                        "ask": ask,
+                        "bidSize": info.get("bidSize"),
+                        "askSize": info.get("askSize"),
+                        "spread": round(ask - bid, 4) if (ask and bid) else None
+                    },
+                    "volume": {
+                        "current": volume,
+                        "average10Day": avg_vol,
+                        "ratio": round(volume / avg_vol, 4) if (volume and avg_vol) else None
+                    }
                 }
-            }
-            pulse_records.append(record)
-        except Exception as e:
-            print(f"\nError fetching {symbol}: {e}")
+                pulse_records.append(record)
+            except Exception as e:
+                log_error(logger, "Symbol fetch failed", step="fetch",
+                          symbol=symbol, error=str(e))
 
-        time.sleep(0.1)
+            time.sleep(0.1)
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(pulse_records, f, indent=4, ensure_ascii=False)
-    print(f"\nSuccess: Saved {len(pulse_records)} pulse records to {output_file}")
+
+    log_info(logger, "Pulse fetch complete", step="fetch", kind="pulse",
+             index=index_name, records_fetched=len(pulse_records),
+             duration_ms=timer.duration_ms)
 
 
 if __name__ == "__main__":
     if "--discover" in sys.argv:
-        # Run hourly: ranks all 50 per index by activity, saves top 10 each
         for idx in INDICES:
             key = idx["key"]
             discover_pulse_tickers(
@@ -177,7 +193,6 @@ if __name__ == "__main__":
                 output_file=data_path(key, "tickers")
             )
     else:
-        # Run every minute: fetches pulse for the pre-discovered tickers
         for idx in INDICES:
             key = idx["key"]
             fetch_pulse(
