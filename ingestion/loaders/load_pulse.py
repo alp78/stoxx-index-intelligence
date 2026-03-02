@@ -1,4 +1,4 @@
-"""Loads pulse JSON into bronze.pulse. Idempotent: skips existing rows."""
+"""Loads pulse JSON into bronze.pulse. Strategy: truncate & reload per index."""
 
 import json
 import sys
@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 
 
 def load(json_file, index_name):
-    log_info(logger, "Loading pulse snapshots into bronze (merge — skip existing timestamps)",
+    log_info(logger, "Loading pulse snapshots into bronze (truncate & reload per index)",
              step="load", index=index_name, table="bronze.pulse")
 
     try:
@@ -30,22 +30,12 @@ def load(json_file, index_name):
 
     try:
         with StepTimer() as timer:
-            cursor.execute(
-                "SELECT symbol, CONVERT(VARCHAR(19), timestamp, 120) FROM bronze.pulse WHERE _index = ?",
-                index_name
-            )
-            existing = {(r[0], r[1]) for r in cursor.fetchall()}
+            cursor.execute("DELETE FROM bronze.pulse WHERE _index = ?", index_name)
 
             inserted = 0
-            skipped = 0
             for rec in records:
                 symbol = rec.get("symbol")
                 if not symbol:
-                    continue
-
-                ts = rec.get("timestamp")
-                if (symbol, ts) in existing:
-                    skipped += 1
                     continue
 
                 p = rec.get("price", {})
@@ -61,7 +51,7 @@ def load(json_file, index_name):
                         current_volume, average_volume_10day, volume_ratio
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                    index_name, symbol, ts,
+                    index_name, symbol, rec.get("timestamp"),
                     p.get("current"), p.get("open"), p.get("dayHigh"), p.get("dayLow"),
                     p.get("previousClose"), p.get("change"), p.get("changePct"),
                     b.get("bid"), b.get("ask"), b.get("bidSize"), b.get("askSize"),
@@ -72,9 +62,8 @@ def load(json_file, index_name):
 
             conn.commit()
 
-        log_info(logger, "Pulse load complete — new snapshots merged into bronze",
+        log_info(logger, "Pulse load complete — replaced snapshots in bronze",
                  step="load", index=index_name, records_inserted=inserted,
-                 records_skipped=skipped, records_total=len(records),
                  duration_ms=timer.duration_ms)
     except Exception:
         conn.rollback()

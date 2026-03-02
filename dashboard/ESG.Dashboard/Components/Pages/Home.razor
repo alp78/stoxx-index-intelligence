@@ -1,0 +1,1194 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IndexPerformanceRepository PerfRepo
+@inject ScoresRepository ScoresRepo
+@inject StockRepository StockRepo
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+@using LightweightCharts.Blazor.Charts
+@using LightweightCharts.Blazor.Customization
+@using LightweightCharts.Blazor.Customization.Chart
+@using LightweightCharts.Blazor.Customization.Series
+@using LightweightCharts.Blazor.Customization.Enums
+@using LightweightCharts.Blazor.DataItems
+@using LightweightCharts.Blazor.Series
+
+<PageTitle>ESG Analytics Dashboard</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <!-- Exchange clocks -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 4px 0;">
+        @foreach (var ex in _exchanges)
+        {
+            var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, ex.Tz);
+            var open = IsMarketOpen(now, ex);
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1; justify-content: center;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: @(open ? "#26A69A" : "#444"); flex-shrink: 0;"></span>
+                <div style="line-height: 1.1;">
+                    <span style="font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px; color: @(open ? "#E0E0E0" : "#666");">@ex.Symbol</span>
+                    <div style="font-size: 0.6rem; opacity: 0.4;">@ex.City</div>
+                </div>
+                <span style="font-size: 0.85rem; font-weight: 500; font-family: 'Inter', monospace; color: @(open ? "#E0E0E0" : "#555");">@now.ToString("HH:mm")</span>
+                @if (open)
+                {
+                    <span style="font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px; color: #26A69A; font-weight: 600;">open</span>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Rolling 30d Return (full width) -->
+    <MudPaper Class="pa-3 mb-4" Elevation="2">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                <ChildContent>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Rolling 30d Return (%)</MudText>
+                </ChildContent>
+                <TooltipContent>
+                    <div style="@_tipStyle">
+                        <div style="@_tipHead">Rolling 30-Day Return</div>
+                        <div style="@_tipDesc">Trailing 30-day cumulative return for each index, recalculated daily.</div>
+                        <ul style="@_tipList">
+                            <li>Rising lines signal recent strength</li>
+                            <li>Divergence between indices highlights relative outperformance</li>
+                            <li>Use period buttons to compare across different time horizons</li>
+                        </ul>
+                        <div style="@_tipNote">Each line represents one index — compare slopes to spot rotation between regions.</div>
+                    </div>
+                </TooltipContent>
+            </MudTooltip>
+            <MudButtonGroup OverrideStyles="false" Size="Size.Small">
+                @foreach (var p in _periods)
+                {
+                    var period = p;
+                    <MudButton Variant="@(_selectedPeriod == period.Key ? Variant.Filled : Variant.Text)"
+                               Color="MudBlazor.Color.Default"
+                               Style="min-width: 32px; padding: 2px 6px; font-size: 0.7rem;"
+                               OnClick="@(() => SetPeriod(period.Key))">@period.Key</MudButton>
+                }
+            </MudButtonGroup>
+        </div>
+        <div style="display: flex; gap: 16px; margin-bottom: 6px;">
+            @foreach (var idx in _indexKeys)
+            {
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <span style="display: inline-block; width: 10px; height: 3px; background: @IndexColor(idx); border-radius: 1px;"></span>
+                    <span style="font-size: 0.7rem; opacity: 0.6;">@FormatIndexName(idx)</span>
+                </div>
+            }
+        </div>
+        <div @ref="_rollContainer" style="position: relative; height: 260px; overflow: hidden; background: #1E1E2D; opacity: @(_rollReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+            <ChartShell @ref="_rollShell" />
+            <div class="chart-tooltip"></div>
+        </div>
+    </MudPaper>
+
+    <!-- Synthetic portfolio return + Volatility -->
+    <MudGrid Spacing="3" Class="mb-4">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-3" Elevation="2">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">Synthetic portfolio return (%)</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Synthetic Portfolio Return</div>
+                            <div style="@_tipDesc">Cumulative return of an equal-weight portfolio holding all index constituents, rebased to 0% at period start.</div>
+                            <ul style="@_tipList">
+                                <li>Simulates a naive buy-and-hold across each universe</li>
+                                <li>Positive slope = portfolio gaining value</li>
+                                <li>Compare lines to see which region performed best</li>
+                            </ul>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <div @ref="_chartContainer" style="position: relative; height: 180px; overflow: hidden; background: #1E1E2D; opacity: @(_chartReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                    <ChartShell @ref="_chartShell" />
+                    <div class="chart-tooltip"></div>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-3" Elevation="2">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">30d Annualized Volatility (%)</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">30-Day Annualized Volatility</div>
+                            <div style="@_tipDesc">Std deviation of daily returns over 30 trading days, annualized (&times; &radic;252).</div>
+                            <ul style="@_tipColorList">
+                                <li><span style="color: #26A69A;">&lt; 15%</span> &mdash; low volatility, calm market</li>
+                                <li><span style="color: #FFA726;">15–25%</span> &mdash; moderate uncertainty</li>
+                                <li><span style="color: #EF5350;">&gt; 25%</span> &mdash; high volatility, risk elevated</li>
+                            </ul>
+                            <div style="@_tipNote">Spikes often precede or accompany drawdowns. Compare across indices to gauge relative risk.</div>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <div @ref="_volContainer" style="position: relative; height: 180px; overflow: hidden; background: #1E1E2D; opacity: @(_volReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                    <ChartShell @ref="_volShell" />
+                    <div class="chart-tooltip"></div>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Signals section -->
+    <div class="d-flex align-center mb-3" style="gap: 12px;">
+        <MudSelect T="string" Value="_selectedSignalIndex" ValueChanged="OnSignalIndexChanged"
+                   Variant="Variant.Outlined" Dense="true" Style="max-width: 300px;" Margin="Margin.Dense">
+            @foreach (var idx in _indexKeys)
+            {
+                <MudSelectItem Value="@idx">@FormatIndexName(idx)</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+
+    @if (SelectedSnap is not null)
+    {
+        <MudPaper Class="pa-2 px-3 mb-3" Elevation="1">
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; flex-wrap: wrap; gap: 4px 0;">
+                <span><span style="opacity: 0.4;">YTD</span> <span style="font-weight: 600; color: @ReturnHex(SelectedSnap.YtdReturn);">@FormatPct(SelectedSnap.YtdReturn)</span></span>
+                <span style="opacity: 0.3;">|</span>
+                <span><span style="opacity: 0.4;">30d Ret</span> <span style="font-weight: 600; color: @ReturnHex(SelectedSnap.Rolling30dReturn);">@FormatPct(SelectedSnap.Rolling30dReturn)</span></span>
+                <span style="opacity: 0.3;">|</span>
+                <span><span style="opacity: 0.4;">90d Ret</span> <span style="font-weight: 600; color: @ReturnHex(SelectedSnap.Rolling90dReturn);">@FormatPct(SelectedSnap.Rolling90dReturn)</span></span>
+                <span style="opacity: 0.3;">|</span>
+                <span><span style="opacity: 0.4;">30d Vol</span> <span style="font-weight: 600;">@FormatPct(SelectedSnap.Rolling30dVolatility)</span></span>
+                <span style="opacity: 0.3;">|</span>
+                <span><span style="opacity: 0.4;">PE</span> @FormatNum(SelectedSnap.AvgPe)</span>
+                <span style="opacity: 0.3;">|</span>
+                <span><span style="opacity: 0.4;">PB</span> @FormatNum(SelectedSnap.AvgPb)</span>
+                <span style="opacity: 0.3;">|</span>
+                <span><span style="opacity: 0.4;">Yield</span> @FormatPct(SelectedSnap.AvgDividendYield)</span>
+                <span style="opacity: 0.3;">|</span>
+                <span style="opacity: 0.4;">@SelectedSnap.PerfDate.ToString("yyyy-MM-dd") &middot; @SelectedSnap.StocksCount stocks</span>
+            </div>
+        </MudPaper>
+    }
+
+    <MudGrid>
+        <!-- Strongest Momentum -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <div>
+                        <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                            <ChildContent>
+                                <MudText Typo="Typo.h6" Style="margin: 0; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Strongest Momentum</MudText>
+                            </ChildContent>
+                            <TooltipContent>
+                                <div style="@_tipStyle">
+                                    <div style="@_tipHead">Momentum Score</div>
+                                    <div style="@_tipDesc">Composite of cross-sectional z-scores, averaged across four dimensions:</div>
+                                    <ul style="@_tipList">
+                                        <li><b>Relative Strength</b> &mdash; 6-month return vs index</li>
+                                        <li><b>SMA-50 Ratio</b> &mdash; price / 50-day moving average</li>
+                                        <li><b>SMA-200 Ratio</b> &mdash; price / 200-day moving average</li>
+                                        <li><b>52-Week High Proximity</b> &mdash; distance from peak</li>
+                                    </ul>
+                                    <div style="@_tipNote">Higher score = sustained uptrend across all dimensions. Rank #1 is the strongest in the index.</div>
+                                </div>
+                            </TooltipContent>
+                        </MudTooltip>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
+                    </div>
+                    <MudButtonGroup OverrideStyles="false" Size="Size.Small">
+                        @foreach (var p in _momPeriods)
+                        {
+                            var period = p;
+                            <MudButton Variant="@(_selectedMomPeriod == period.Key ? Variant.Filled : Variant.Text)"
+                                       Color="MudBlazor.Color.Default"
+                                       Style="min-width: 32px; padding: 2px 6px; font-size: 0.7rem;"
+                                       OnClick="@(() => SetMomPeriod(period.Key))">@period.Key</MudButton>
+                        }
+                    </MudButtonGroup>
+                </div>
+                <MudText Typo="Typo.caption" Style="opacity: 0.4;" Class="mb-2">Normalized close — top 5</MudText>
+                <div style="display: flex; gap: 12px; margin-bottom: 6px; flex-wrap: wrap;">
+                    @{ var momTop5 = TopMomentum.Take(5).ToList(); }
+                    @for (var i = 0; i < momTop5.Count; i++)
+                    {
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span style="display: inline-block; width: 10px; height: 3px; background: @MomSeriesColors[i]; border-radius: 1px;"></span>
+                            <span style="font-size: 0.7rem; opacity: 0.6;">@momTop5[i].Symbol</span>
+                        </div>
+                    }
+                </div>
+                <div @ref="_momContainer" style="position: relative; height: 160px; overflow: hidden; background: #1E1E2D; opacity: @(_momReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                    <ChartShell @ref="_momShell" />
+                    <div class="chart-tooltip"></div>
+                </div>
+                <MudSimpleTable Dense="true" Hover="true" Class="mt-2 compact-table">
+                    <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 80px;"></th></tr></thead>
+                    <tbody>
+                        @foreach (var s in TopMomentum.Take(5))
+                        {
+                            <tr>
+                                <td>@s.MomentumRank</td>
+                                <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
+                                <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                <td>@F(s.MomentumScore)</td>
+                                <td><span class="score-bar" style="width: @ScoreBarWidth(s.MomentumScore, TopMomentum.Select(x => x.MomentumScore)); background: #26A69A;"></span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Best Relative Value -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Best Relative Value</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Relative Value Score</div>
+                            <div style="@_tipDesc">Cross-sectional z-scores of valuation ratios vs index peers (inverted — lower multiples score higher):</div>
+                            <ul style="@_tipList">
+                                <li><b>P/E</b> &mdash; price-to-earnings</li>
+                                <li><b>P/B</b> &mdash; price-to-book</li>
+                                <li><b>EV/EBITDA</b> &mdash; enterprise value vs cash earnings</li>
+                                <li><b>Dividend Yield</b> &mdash; higher yield = higher score</li>
+                            </ul>
+                            <div style="@_tipNote">Top-ranked stocks trade at the deepest discount to the index median. Verify fundamentals — cheap can mean value trap.</div>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@DailyAsOf</MudText>
+                <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                    <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
+                    <tbody>
+                        @foreach (var s in TopValue)
+                        {
+                            <tr>
+                                <td>@s.RelativeValueRank</td>
+                                <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
+                                <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                <td>@F(s.RelativeValueScore)</td>
+                                <td><span class="score-bar" style="width: @ScoreBarWidth(s.RelativeValueScore, TopValue.Select(x => x.RelativeValueScore)); background: #42A5F5;"></span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Strongest Fundamentals (Quality) -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Strongest Fundamentals</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Quality / Moat Score</div>
+                            <div style="@_tipDesc">Z-scored quarterly financial metrics vs index peers:</div>
+                            <ul style="@_tipList">
+                                <li><b>Gross Margin</b> &mdash; pricing power</li>
+                                <li><b>ROE</b> &mdash; capital efficiency</li>
+                                <li><b>Operating Margin</b> &mdash; operational leverage</li>
+                                <li><b>Leverage</b> &mdash; inverted (low debt = high score)</li>
+                                <li><b>FCF Yield</b> &mdash; free cash flow / market cap</li>
+                            </ul>
+                            <div style="@_tipNote">Updated quarterly with earnings. High scores = superior profitability, low debt, strong cash generation.</div>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@QuarterlyAsOf</MudText>
+                <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                    <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
+                    <tbody>
+                        @foreach (var s in TopQuality)
+                        {
+                            <tr>
+                                <td>@s.QualityRank</td>
+                                <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(QuarterlyCountry(s))"></span></td>
+                                <td><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></td>
+                                <td>@F(s.QualityScore)</td>
+                                <td><span class="score-bar" style="width: @ScoreBarWidth(s.QualityScore, TopQuality.Select(x => x.QualityScore)); background: #26A69A;"></span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Most Bullish Sentiment -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Most Bullish Sentiment</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Analyst Sentiment Score</div>
+                            <div style="@_tipDesc">Combines implied upside and consensus recommendation:</div>
+                            <ul style="@_tipList">
+                                <li><b>Implied Upside</b> &mdash; (target price / current) &minus; 1</li>
+                                <li><b>Recommendation</b> &mdash; consensus analyst rating</li>
+                            </ul>
+                            <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Recommendation scale:</div>
+                            <ul style="@_tipColorList">
+                                <li><span style="color: #26A69A;">1.0</span> Strong Buy &rarr; <span style="color: #FFA726;">3.0</span> Hold &rarr; <span style="color: #EF5350;">5.0</span> Strong Sell</li>
+                            </ul>
+                            <div style="@_tipNote">Large positive upside = market may be underpricing the stock relative to analyst targets.</div>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@DailyAsOf</MudText>
+                <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                    <thead><tr><th>#</th><th></th><th>Symbol</th><th>Upside</th><th style="width: 70px;"></th><th>Score</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in TopSentiment)
+                        {
+                            <tr>
+                                <td>@s.SentimentRank</td>
+                                <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
+                                <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                <td style="color: @ReturnHex(s.ImpliedUpside);">@Pct(s.ImpliedUpside)</td>
+                                <td><span class="upside-bar" style="width: @UpsideBarWidth(s.ImpliedUpside, TopSentiment.Select(x => x.ImpliedUpside)); background: @(s.ImpliedUpside >= 0 ? "#26A69A" : "#EF5350");"></span></td>
+                                <td>@F(s.SentimentScore)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Divergence Alerts -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Divergence Alerts</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Price vs Analyst Divergence</div>
+                            <div style="@_tipDesc">Stocks where market action conflicts with analyst consensus:</div>
+                            <ul style="@_tipColorList">
+                                <li><span style="color: #EF5350;">&#9660;</span> Price falling (negative short-term return)</li>
+                                <li><span style="color: #26A69A;">&#9650;</span> Analysts bullish (rec &le; 2.5, positive upside)</li>
+                            </ul>
+                            <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Columns:</div>
+                            <ul style="@_tipList">
+                                <li><b>Upside</b> &mdash; analyst target vs current price</li>
+                                <li><b>Rec</b> &mdash; consensus (closer to <span style="color: #26A69A;">1.0</span> = stronger buy)</li>
+                            </ul>
+                            <div style="@_tipNote">Contrarian signal — market is selling while analysts still see value. Verify fundamentals before acting.</div>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@DailyAsOf</MudText>
+                @if (DivergenceAlerts.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                        <thead><tr><th></th><th>Symbol</th><th></th><th>Upside</th><th>Rec</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in DivergenceAlerts)
+                            {
+                                <tr>
+                                    <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
+                                    <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                    <td>
+                                        <span style="color: #EF5350; font-size: 0.75rem; font-weight: 600;">&#9660;</span>
+                                        <span style="color: #26A69A; font-size: 0.75rem; font-weight: 600;">&#9650;</span>
+                                    </td>
+                                    <td style="color: @ReturnHex(s.ImpliedUpside);">@Pct(s.ImpliedUpside)</td>
+                                    <td>@F(s.RecommendationMean)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Style="opacity: 0.5;">No divergence signals</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- Health Warnings -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Health Warnings</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Financial Health Flags</div>
+                            <div style="@_tipDesc">Stocks with 2+ flags from quarterly balance sheet data:</div>
+                            <ul style="@_tipColorList">
+                                <li><span style="color: #42A5F5;">&#9679;</span> <b>Liq</b> &mdash; current ratio &lt; 1 (liquidity risk)</li>
+                                <li><span style="color: #FFA726;">&#9679;</span> <b>Lev</b> &mdash; debt-to-equity &gt; 200% (high leverage)</li>
+                                <li><span style="color: #EF5350;">&#9679;</span> <b>Cash</b> &mdash; negative free cash flow (cash burn)</li>
+                                <li><span style="color: #AB47BC;">&#9679;</span> <b>Decl</b> &mdash; revenue &amp; margin both declining QoQ</li>
+                            </ul>
+                            <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Risk levels:</div>
+                            <ul style="@_tipColorList">
+                                <li><span style="color: #42A5F5;">0 flags</span> = healthy &bull; <span style="color: #2196F3;">1</span> = watch &bull; <span style="color: #FFA726;">2</span> = warning &bull; <span style="color: #EF5350;">3+</span> = critical</li>
+                            </ul>
+                            <div style="@_tipNote">Low quality score + many flags = strong caution signal.</div>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@QuarterlyAsOf</MudText>
+                <div style="display: flex; gap: 8px; font-size: 0.6rem; opacity: 0.5; margin-bottom: 4px;">
+                    <span><span class="flag-dot" style="background: #42A5F5;"></span>Liq</span>
+                    <span><span class="flag-dot" style="background: #FFA726;"></span>Lev</span>
+                    <span><span class="flag-dot" style="background: #EF5350;"></span>Cash</span>
+                    <span><span class="flag-dot" style="background: #AB47BC;"></span>Decl</span>
+                </div>
+                @if (HealthWarnings.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                        <thead><tr><th></th><th>Symbol</th><th>Flags</th><th>Level</th><th>Quality</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in HealthWarnings)
+                            {
+                                <tr>
+                                    <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(QuarterlyCountry(s))"></span></td>
+                                    <td><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></td>
+                                    <td>
+                                        <span class="flag-dot" style="background: @(s.FlagLiquidity == true ? "#42A5F5" : "#333");"></span>
+                                        <span class="flag-dot" style="background: @(s.FlagLeverage == true ? "#FFA726" : "#333");"></span>
+                                        <span class="flag-dot" style="background: @(s.FlagCashburn == true ? "#EF5350" : "#333");"></span>
+                                        <span class="flag-dot" style="background: @(s.FlagDoublDecline == true ? "#AB47BC" : "#333");"></span>
+                                    </td>
+                                    <td>
+                                        <MudChip T="string" Size="Size.Small"
+                                                 Color="@HealthColor(s.HealthRiskLevel)">
+                                            @s.HealthRiskLevel
+                                        </MudChip>
+                                    </td>
+                                    <td>@F(s.QualityScore)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Style="opacity: 0.5;">No warnings</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private List<IndexPerformance> _snapshots = [];
+    private Dictionary<string, List<IndexPerformance>> _perfByIndex = [];
+    private string[] _indexKeys = [];
+
+    // Exchange clocks
+    private System.Threading.Timer? _clockTimer;
+
+    private record ExchangeInfo(string Symbol, string City, TimeZoneInfo Tz, TimeSpan Open, TimeSpan Close);
+
+    private static readonly ExchangeInfo[] _exchanges =
+    [
+        new("TSE", "Tokyo", TimeZoneInfo.FindSystemTimeZoneById("Tokyo Standard Time"), new(9, 0, 0), new(15, 0, 0)),
+        new("HKEX", "Hong Kong", TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"), new(9, 30, 0), new(16, 0, 0)),
+        new("ASX", "Sydney", TimeZoneInfo.FindSystemTimeZoneById("AUS Eastern Standard Time"), new(10, 0, 0), new(16, 0, 0)),
+        new("XETRA", "Frankfurt", TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time"), new(9, 0, 0), new(17, 30, 0)),
+        new("NYSE", "New York", TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"), new(9, 30, 0), new(16, 0, 0)),
+    ];
+
+    private static bool IsMarketOpen(DateTime localNow, ExchangeInfo ex)
+        => localNow.DayOfWeek is >= DayOfWeek.Monday and <= DayOfWeek.Friday
+           && localNow.TimeOfDay >= ex.Open && localNow.TimeOfDay < ex.Close;
+
+    // Main chart
+    private ChartShell? _chartShell;
+    private ChartComponent? _chartRef => _chartShell?.Chart;
+    private ElementReference _chartContainer;
+    private Dictionary<string, ISeriesApi<long>?> _seriesRefs = new();
+    private bool _chartReady;
+    private string _selectedPeriod = "3Y";
+    private IJSObjectReference? _jsModule;
+    private bool _disposed;
+
+    // Rolling 30d return chart
+    private ChartShell? _rollShell;
+    private ChartComponent? _rollRef => _rollShell?.Chart;
+    private ElementReference _rollContainer;
+    private Dictionary<string, ISeriesApi<long>?> _rollSeriesRefs = new();
+    private bool _rollReady;
+
+    // Volatility chart
+    private ChartShell? _volShell;
+    private ChartComponent? _volRef => _volShell?.Chart;
+    private ElementReference _volContainer;
+    private Dictionary<string, ISeriesApi<long>?> _volSeriesRefs = new();
+    private bool _volReady;
+
+    // Tooltip state
+    private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _tsLookup = new();
+    private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _rollLookup = new();
+    private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _volLookup = new();
+    private long? _lastHoverTime;
+    private long? _rollLastHover;
+    private long? _volLastHover;
+
+    // Signals
+    private string _selectedSignalIndex = "euro_stoxx_50";
+    private List<ScoreDaily> _daily = [];
+    private List<ScoreQuarterly> _quarterly = [];
+
+    // Momentum sparkline chart
+    private ChartShell? _momShell;
+    private ChartComponent? _momRef => _momShell?.Chart;
+    private ElementReference _momContainer;
+    private bool _momReady;
+    private Dictionary<string, List<SymbolClose>> _momClosesData = new();
+    private ISeriesApi<long>?[] _momSeriesRefs = new ISeriesApi<long>?[5];
+    private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _momLookup = new();
+    private long? _momLastHover;
+
+    private static readonly string[] MomSeriesColors = ["#42A5F5", "#26A69A", "#AB47BC", "#FFA726", "#EF5350"];
+    private string _selectedMomPeriod = "1M";
+
+    private static readonly (string Key, int Days)[] _momPeriods =
+    [
+        ("1W", 5), ("2W", 10), ("1M", 22), ("3M", 66), ("6M", 132), ("1Y", 252),
+    ];
+
+    private IndexPerformance? SelectedSnap => _snapshots.FirstOrDefault(s => s.Index == _selectedSignalIndex);
+
+    private string DailyAsOf => _daily
+        .Where(d => d.Index == _selectedSignalIndex)
+        .Select(d => d.ScoreDate).DefaultIfEmpty()
+        .Max() is var dt && dt != default ? $"Updated {dt:yyyy-MM-dd}" : "";
+
+    private string QuarterlyAsOf => _quarterly
+        .Where(q => q.Index == _selectedSignalIndex)
+        .Select(q => q.AsOfDate).DefaultIfEmpty()
+        .Max() is var dt && dt != default ? $"Updated {dt:yyyy-MM-dd}" : "";
+
+    private IEnumerable<ScoreDaily> TopValue => _daily
+        .Where(d => d.Index == _selectedSignalIndex)
+        .OrderBy(d => d.RelativeValueRank).Take(10);
+
+    private IEnumerable<ScoreDaily> TopMomentum => _daily
+        .Where(d => d.Index == _selectedSignalIndex)
+        .OrderBy(d => d.MomentumRank).Take(10);
+
+    private IEnumerable<ScoreDaily> TopSentiment => _daily
+        .Where(d => d.Index == _selectedSignalIndex)
+        .OrderBy(d => d.SentimentRank).Take(10);
+
+    private IEnumerable<ScoreDaily> DivergenceAlerts => _daily
+        .Where(d => d.Index == _selectedSignalIndex && d.PriceFallingAnalystsBullish == true)
+        .OrderByDescending(d => d.ImpliedUpside);
+
+    private IEnumerable<ScoreQuarterly> HealthWarnings => _quarterly
+        .Where(q => q.Index == _selectedSignalIndex && q.HealthFlagsCount >= 2)
+        .OrderByDescending(q => q.HealthFlagsCount);
+
+    private IEnumerable<ScoreQuarterly> TopQuality => _quarterly
+        .Where(q => q.Index == _selectedSignalIndex)
+        .OrderBy(q => q.QualityRank).Take(10);
+
+    private static readonly (string Key, Func<DateTime, DateTime?> GetStart)[] _periods =
+    [
+        ("1M", now => now.AddMonths(-1)),
+        ("3M", now => now.AddMonths(-3)),
+        ("6M", now => now.AddMonths(-6)),
+        ("1Y", now => now.AddYears(-1)),
+        ("3Y", now => now.AddYears(-3)),
+        ("YTD", now => new DateTime(now.Year, 1, 1)),
+        ("ALL", _ => null),
+    ];
+
+    private static readonly Dictionary<string, string> _indexColors = new()
+    {
+        ["euro_stoxx_50"] = "#4285F4",
+        ["stoxx_usa_50"] = "#FFFFFF",
+        ["stoxx_asia_50"] = "#EF5350",
+    };
+
+    private static string IndexColor(string key) => _indexColors.GetValueOrDefault(key, "#A0AEC0");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var snapshotsTask = PerfRepo.GetLatestSnapshotAsync();
+        var perfTask = PerfRepo.GetPerformanceAsync();
+        var dailyTask = ScoresRepo.GetDailyScoresAsync();
+        var quarterlyTask = ScoresRepo.GetQuarterlyScoresAsync();
+        var keysTask = StockRepo.GetIndexKeysAsync();
+
+        await Task.WhenAll(snapshotsTask, perfTask, dailyTask, quarterlyTask, keysTask);
+
+        _snapshots = (await snapshotsTask).ToList();
+        _daily = (await dailyTask).ToList();
+        _quarterly = (await quarterlyTask).ToList();
+
+        var keys = (await keysTask).ToList();
+        if (keys.Count != 0)
+            _selectedSignalIndex = keys.First();
+
+        var perf = (await perfTask).ToList();
+        _perfByIndex = perf
+            .GroupBy(p => p.Index)
+            .ToDictionary(g => g.Key, g =>
+            {
+                var ordered = g.OrderBy(p => p.PerfDate).ToList();
+                while (ordered.Count > 1 && Math.Abs(ordered[^1].DailyReturn ?? 0) < 0.0001)
+                    ordered.RemoveAt(ordered.Count - 1);
+                return ordered;
+            });
+
+        _indexKeys = _snapshots.Select(s => s.Index).OrderBy(k => k).ToArray();
+
+        foreach (var key in _indexKeys)
+        {
+            _seriesRefs[key] = null;
+            _rollSeriesRefs[key] = null;
+            _volSeriesRefs[key] = null;
+        }
+
+        await LoadMomentumCloses();
+        _loading = false;
+
+        _clockTimer = new System.Threading.Timer(_ =>
+            InvokeAsync(StateHasChanged), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+    }
+
+    private int MomTradingDays => _momPeriods.FirstOrDefault(p => p.Key == _selectedMomPeriod).Days;
+
+    private async Task LoadMomentumCloses()
+    {
+        var indexDaily = _daily.Where(d => d.Index == _selectedSignalIndex).ToList();
+        var top5 = indexDaily
+            .OrderBy(d => d.MomentumRank).Take(5)
+            .Select(d => d.Symbol).ToArray();
+        if (top5.Length == 0) { _momClosesData.Clear(); return; }
+
+        // Use latest score date as anchor (data may lag behind today)
+        // Fetch extra calendar days to cover trading day gaps
+        var latestDate = indexDaily.Max(d => d.ScoreDate);
+        var calendarDays = (int)(MomTradingDays * 1.6) + 10;
+        var from = latestDate.AddDays(-calendarDays);
+        var closes = (await StockRepo.GetBatchClosesAsync(_selectedSignalIndex, top5, from)).ToList();
+        _momClosesData = closes.GroupBy(c => c.Symbol)
+            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Date).ToList());
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import",
+                "./Components/Pages/Home.razor.js");
+        }
+
+        var revealed = false;
+
+        if (!_chartReady && _chartRef is not null)
+        {
+            await InitChartOptions(_chartRef);
+            _chartRef.CrosshairMoved += OnMainCrosshair;
+            await UpdateAllSeries();
+            _chartReady = true;
+            revealed = true;
+        }
+
+        if (!_rollReady && _rollRef is not null)
+        {
+            await InitChartOptions(_rollRef);
+            _rollRef.CrosshairMoved += OnRollCrosshair;
+            await UpdateSimpleSeries(_rollRef, _rollSeriesRefs, _rollLookup, _rollContainer,
+                p => p.Rolling30dReturn, true);
+            _rollReady = true;
+            revealed = true;
+        }
+
+        if (!_volReady && _volRef is not null)
+        {
+            await InitChartOptions(_volRef);
+            _volRef.CrosshairMoved += OnVolCrosshair;
+            await UpdateSimpleSeries(_volRef, _volSeriesRefs, _volLookup, _volContainer,
+                p => p.Rolling30dVolatility, false);
+            _volReady = true;
+            revealed = true;
+        }
+
+        if (!_momReady && _momRef is not null)
+        {
+            await InitSparklineOptions(_momRef);
+            _momRef.CrosshairMoved += OnMomCrosshair;
+            await UpdateMomentumSeries();
+            _momReady = true;
+            revealed = true;
+        }
+
+        if (revealed)
+            StateHasChanged();
+    }
+
+    private async Task InitSparklineOptions(ChartComponent chart)
+    {
+        await chart.InitializationCompleted;
+        await chart.ApplyOptions(new LightweightCharts.Blazor.Customization.Chart.ChartOptions
+        {
+            AutoSize = true,
+            Layout = new LayoutOptions
+            {
+                Background = new SolidColor { Color = Clr("#1E1E2D") },
+                TextColor = Clr("#A0AEC0"),
+                FontFamily = "Inter",
+                FontSize = 10
+            },
+            Grid = new GridOptions
+            {
+                VerticalLines = new GridLineOptions { Color = Clr(255, 255, 255, 4) },
+                HorizontalLines = new GridLineOptions { Color = Clr(255, 255, 255, 4) }
+            },
+            RightPriceScale = new PriceScaleOptions
+            {
+                BorderVisible = false,
+            },
+            TimeScale = new TimeScaleOptions
+            {
+                BorderVisible = false,
+                FixLeftEdge = true,
+                FixRightEdge = true,
+            },
+            Crosshair = new CrosshairOptions { Mode = CrosshairMode.Magnet }
+        });
+    }
+
+    private async Task UpdateMomentumSeries()
+    {
+        if (_momRef is null) return;
+
+        // Remove existing series
+        foreach (var s in _momSeriesRefs)
+        {
+            if (s is not null) await _momRef.RemoveSeries(s);
+        }
+        _momSeriesRefs = new ISeriesApi<long>?[5];
+        _momLastHover = null;
+        _momLookup.Clear();
+
+        var top5 = TopMomentum.Take(5).ToList();
+        for (var i = 0; i < top5.Count; i++)
+        {
+            var sym = top5[i].Symbol;
+            if (!_momClosesData.TryGetValue(sym, out var closes) || closes.Count == 0) continue;
+
+            var recent = closes.TakeLast(MomTradingDays).ToList();
+            var baseClose = recent[0].Close;
+            if (baseClose == 0) continue;
+
+            var series = await _momRef.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr(MomSeriesColors[i]),
+                    LineWidth = 2,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+            _momSeriesRefs[i] = series;
+
+            var data = recent.Select(c => new LineData<long>
+            {
+                Time = new DateTimeOffset(c.Date, TimeSpan.Zero).ToUnixTimeSeconds(),
+                Value = (c.Close / baseClose - 1) * 100
+            }).ToArray();
+            await series.SetData(data);
+
+            foreach (var d in data)
+            {
+                if (!_momLookup.ContainsKey(d.Time))
+                    _momLookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
+                _momLookup[d.Time].Values[sym] = d.Value;
+            }
+        }
+
+        var ts = await _momRef.TimeScale();
+        await ts.FitContent();
+        await SendMomTooltipData();
+    }
+
+    private async Task SendMomTooltipData()
+    {
+        if (_jsModule is null) return;
+        var top5 = TopMomentum.Take(5).ToList();
+        var jsLookup = _momLookup.ToDictionary(
+            k => k.Key.ToString(),
+            k => new { date = k.Value.Date.ToString("dd MMM yyyy"), values = k.Value.Values });
+        var symbols = top5.Select((s, i) => new { key = s.Symbol, name = s.Symbol, color = MomSeriesColors[i] }).ToArray();
+        await _jsModule.InvokeVoidAsync("setTooltipData", _momContainer, jsLookup, symbols, new { colorBySign = true });
+    }
+
+    private async Task InitChartOptions(ChartComponent chart)
+    {
+        await chart.InitializationCompleted;
+        await chart.ApplyOptions(new LightweightCharts.Blazor.Customization.Chart.ChartOptions
+        {
+            AutoSize = true,
+            Layout = new LayoutOptions
+            {
+                Background = new SolidColor { Color = Clr("#1E1E2D") },
+                TextColor = Clr("#A0AEC0"),
+                FontFamily = "Inter",
+                FontSize = 11
+            },
+            Grid = new GridOptions
+            {
+                VerticalLines = new GridLineOptions { Color = Clr(255, 255, 255, 6) },
+                HorizontalLines = new GridLineOptions { Color = Clr(255, 255, 255, 6) }
+            },
+            RightPriceScale = new PriceScaleOptions { BorderVisible = false },
+            TimeScale = new TimeScaleOptions
+            {
+                BorderVisible = false,
+                FixLeftEdge = true,
+                FixRightEdge = true,
+                RightOffset = 0,
+                LockVisibleTimeRangeOnResize = true
+            },
+            Crosshair = new CrosshairOptions { Mode = CrosshairMode.Magnet }
+        });
+    }
+
+    // ── Main chart series (rebased cumulative return) ──
+
+    private async Task UpdateAllSeries()
+    {
+        if (_chartRef is null) return;
+        _lastHoverTime = null;
+        _tsLookup.Clear();
+
+        var cutoff = GetPeriodCutoff();
+
+        foreach (var key in _indexKeys)
+        {
+            if (_seriesRefs.TryGetValue(key, out var old) && old is not null)
+            {
+                await _chartRef.RemoveSeries(old);
+                _seriesRefs[key] = null;
+            }
+        }
+
+        foreach (var key in _indexKeys)
+        {
+            var allData = _perfByIndex.GetValueOrDefault(key) ?? [];
+            if (allData.Count == 0) continue;
+
+            var filtered = cutoff.HasValue
+                ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
+                : allData;
+            if (filtered.Count == 0) continue;
+
+            var baseVal = filtered[0].CumulativeFactor ?? 1;
+
+            var series = await _chartRef.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr(IndexColor(key)),
+                    LineWidth = 1,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+            _seriesRefs[key] = series;
+
+            var data = filtered.Select(p => new LineData<long>
+            {
+                Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
+                Value = ((p.CumulativeFactor ?? 1) / baseVal - 1) * 100
+            }).ToArray();
+
+            await series.SetData(data);
+
+            foreach (var d in data)
+            {
+                if (!_tsLookup.ContainsKey(d.Time))
+                    _tsLookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
+                _tsLookup[d.Time].Values[key] = d.Value;
+            }
+        }
+
+        var timeScale = await _chartRef.TimeScale();
+        await timeScale.FitContent();
+        await SendTooltipData(_chartContainer, _tsLookup, true);
+    }
+
+    // ── Shared helper for rolling return / volatility charts ──
+
+    private async Task UpdateSimpleSeries(
+        ChartComponent chart,
+        Dictionary<string, ISeriesApi<long>?> seriesRefs,
+        Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> lookup,
+        ElementReference container,
+        Func<IndexPerformance, double?> valueSelector,
+        bool colorBySign)
+    {
+        var cutoff = GetPeriodCutoff();
+        lookup.Clear();
+
+        foreach (var key in _indexKeys)
+        {
+            if (seriesRefs.TryGetValue(key, out var old) && old is not null)
+            {
+                await chart.RemoveSeries(old);
+                seriesRefs[key] = null;
+            }
+        }
+
+        foreach (var key in _indexKeys)
+        {
+            var allData = _perfByIndex.GetValueOrDefault(key) ?? [];
+            if (allData.Count == 0) continue;
+
+            var filtered = cutoff.HasValue
+                ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
+                : allData.ToList();
+
+            var points = filtered
+                .Where(p => valueSelector(p).HasValue)
+                .Select(p => new LineData<long>
+                {
+                    Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
+                    Value = (valueSelector(p) ?? 0) * 100
+                }).ToArray();
+            if (points.Length == 0) continue;
+
+            var series = await chart.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr(IndexColor(key)),
+                    LineWidth = 1,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+            seriesRefs[key] = series;
+            await series.SetData(points);
+
+            foreach (var d in points)
+            {
+                if (!lookup.ContainsKey(d.Time))
+                    lookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
+                lookup[d.Time].Values[key] = d.Value;
+            }
+        }
+
+        var ts = await chart.TimeScale();
+        await ts.FitContent();
+        await SendTooltipData(container, lookup, colorBySign);
+    }
+
+    // ── Period & tooltip helpers ──
+
+    private DateTime? GetPeriodCutoff()
+    {
+        var p = _periods.FirstOrDefault(p => p.Key == _selectedPeriod);
+        return p.GetStart?.Invoke(DateTime.UtcNow);
+    }
+
+    private async Task SendTooltipData(ElementReference container,
+        Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> lookup, bool colorBySign)
+    {
+        if (_jsModule is null) return;
+        var jsLookup = lookup.ToDictionary(
+            k => k.Key.ToString(),
+            k => new { date = k.Value.Date.ToString("dd MMM yyyy"), values = k.Value.Values });
+        var indices = _indexKeys.Select(k => new { key = k, name = FormatIndexName(k), color = IndexColor(k) }).ToArray();
+        await _jsModule.InvokeVoidAsync("setTooltipData", container, jsLookup, indices, new { colorBySign });
+    }
+
+    private async Task OnSignalIndexChanged(string newIndex)
+    {
+        _selectedSignalIndex = newIndex;
+        await LoadMomentumCloses();
+        if (_momReady && _momRef is not null)
+            await UpdateMomentumSeries();
+    }
+
+    private async Task SetMomPeriod(string period)
+    {
+        _selectedMomPeriod = period;
+        await LoadMomentumCloses();
+        if (_momReady && _momRef is not null)
+            await UpdateMomentumSeries();
+    }
+
+    private async Task SetPeriod(string period)
+    {
+        _selectedPeriod = period;
+        await UpdateAllSeries();
+        if (_rollRef is not null)
+            await UpdateSimpleSeries(_rollRef, _rollSeriesRefs, _rollLookup, _rollContainer,
+                p => p.Rolling30dReturn, true);
+        if (_volRef is not null)
+            await UpdateSimpleSeries(_volRef, _volSeriesRefs, _volLookup, _volContainer,
+                p => p.Rolling30dVolatility, false);
+    }
+
+    // ── Crosshair handlers ──
+
+    private void OnMainCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
+        => HandleCrosshair(e, ref _lastHoverTime, _chartContainer);
+
+    private void OnRollCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
+        => HandleCrosshair(e, ref _rollLastHover, _rollContainer);
+
+    private void OnVolCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
+        => HandleCrosshair(e, ref _volLastHover, _volContainer);
+
+    private void OnMomCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
+        => HandleCrosshair(e, ref _momLastHover, _momContainer);
+
+    private void HandleCrosshair(LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e,
+        ref long? lastHover, ElementReference container)
+    {
+        if (_disposed) return;
+        if (e.Time is null)
+        {
+            if (lastHover is not null)
+            {
+                lastHover = null;
+                _ = InvokeAsync(() => _jsModule?.InvokeVoidAsync("hideTooltip", container));
+            }
+            return;
+        }
+        if (e.Time == lastHover) return;
+        lastHover = e.Time;
+        if (e.Point is not null)
+            _ = InvokeAsync(() => _jsModule?.InvokeVoidAsync("showTooltip", container, e.Point.X, e.Point.Y, e.Time.Value));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_clockTimer is not null) await _clockTimer.DisposeAsync();
+
+        // Unsubscribe crosshair events before chart components dispose themselves
+        if (_chartRef is not null) _chartRef.CrosshairMoved -= OnMainCrosshair;
+        if (_rollRef is not null) _rollRef.CrosshairMoved -= OnRollCrosshair;
+        if (_volRef is not null) _volRef.CrosshairMoved -= OnVolCrosshair;
+        if (_momRef is not null) _momRef.CrosshairMoved -= OnMomCrosshair;
+
+        if (_jsModule is not null)
+        {
+            try { await _jsModule.DisposeAsync(); }
+            catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        }
+    }
+
+    // ── Tooltip styles ──
+    private const string _tipStyle = "text-align: left; background: #1A1A2E; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; max-width: 340px; font-size: 0.75rem; line-height: 1.6; color: #E0E0E0; box-shadow: 0 4px 20px rgba(0,0,0,0.5);";
+    private const string _tipHead = "font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: #fff;";
+    private const string _tipDesc = "opacity: 0.6; margin-bottom: 8px;";
+    private const string _tipList = "margin: 0 0 6px 0; padding-left: 16px; opacity: 0.85;";
+    private const string _tipColorList = "margin: 0 0 6px 0; padding-left: 8px; list-style: none; opacity: 0.85;";
+    private const string _tipNote = "opacity: 0.45; font-size: 0.7rem; font-style: italic; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 4px;";
+
+    // ── Formatting helpers ──
+
+    private static System.Drawing.Color Clr(string hex) => System.Drawing.ColorTranslator.FromHtml(hex);
+    private static System.Drawing.Color Clr(int r, int g, int b, int a) => System.Drawing.Color.FromArgb(a, r, g, b);
+
+    private static string FormatIndexName(string key) => key switch
+    {
+        "euro_stoxx_50" => "Euro STOXX 50",
+        "stoxx_usa_50" => "STOXX USA 50",
+        "stoxx_asia_50" => "STOXX Asia/Pacific 50",
+        _ => key.Replace("_", " ").ToUpperInvariant()
+    };
+
+    private static string FormatPct(double? val) => val.HasValue ? $"{val.Value:P1}" : "--";
+    private static string FormatNum(double? val) => val.HasValue ? $"{val.Value:F1}" : "--";
+    private static string ReturnHex(double? val) => val switch { > 0 => "#26A69A", < 0 => "#EF5350", _ => "inherit" };
+    private static MudBlazor.Color ReturnColor(double? val) => val switch
+    {
+        > 0 => MudBlazor.Color.Success,
+        < 0 => MudBlazor.Color.Error,
+        _ => MudBlazor.Color.Default
+    };
+
+    // Signals helpers
+    private static string F(double? v) => v.HasValue ? $"{v.Value:F2}" : "--";
+    private static string Pct(double? v) => v.HasValue ? $"{v.Value:P1}" : "--";
+    private static string StockLink(ScoreDaily s) => $"/stocks/{s.Index}/{s.Symbol}";
+    private static string QuarterlyStockLink(ScoreQuarterly s) => $"/stocks/{s.Index}/{s.Symbol}";
+    private static string TruncSector(string? s) => s is null ? "--" :
+        s.Length > 15 ? s[..12] + "..." : s;
+    // Country flags
+    private static readonly Dictionary<string, string> CountryCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Germany"] = "DE", ["France"] = "FR", ["Netherlands"] = "NL",
+        ["Spain"] = "ES", ["Italy"] = "IT", ["Belgium"] = "BE",
+        ["Finland"] = "FI", ["Ireland"] = "IE", ["Austria"] = "AT",
+        ["Luxembourg"] = "LU", ["Portugal"] = "PT", ["Greece"] = "GR",
+        ["United States"] = "US",
+        ["Japan"] = "JP", ["China"] = "CN", ["South Korea"] = "KR",
+        ["Australia"] = "AU", ["Hong Kong"] = "HK", ["Taiwan"] = "TW",
+        ["India"] = "IN", ["Singapore"] = "SG", ["Thailand"] = "TH",
+        ["Indonesia"] = "ID", ["Malaysia"] = "MY", ["Philippines"] = "PH",
+        ["United Kingdom"] = "GB", ["Switzerland"] = "CH", ["Sweden"] = "SE",
+        ["Denmark"] = "DK", ["Norway"] = "NO", ["New Zealand"] = "NZ",
+    };
+
+    private static string CountryFlagCode(string? country)
+    {
+        if (country is null || !CountryCodes.TryGetValue(country, out var code))
+            return "";
+        return code.ToLowerInvariant();
+    }
+
+    private string QuarterlyCountry(ScoreQuarterly q) =>
+        _daily.FirstOrDefault(d => d.Index == q.Index && d.Symbol == q.Symbol)?.Country ?? "";
+
+    private static Color HealthColor(string? level) => level switch
+    {
+        "critical" => Color.Error,
+        "warning" => Color.Warning,
+        "watch" => Color.Info,
+        _ => Color.Success
+    };
+
+    private static string ScoreBarWidth(double? score, IEnumerable<double?> allScores)
+    {
+        var vals = allScores.Where(s => s.HasValue).Select(s => s!.Value).ToList();
+        if (!score.HasValue || vals.Count == 0) return "0%";
+        var min = vals.Min();
+        var max = vals.Max();
+        if (Math.Abs(max - min) < 0.001) return "50%";
+        return $"{(score.Value - min) / (max - min) * 100:F0}%";
+    }
+
+    private static string UpsideBarWidth(double? upside, IEnumerable<double?> allUpsides)
+    {
+        var vals = allUpsides.Where(u => u.HasValue).Select(u => Math.Abs(u!.Value)).ToList();
+        if (!upside.HasValue || vals.Count == 0) return "0%";
+        var maxAbs = vals.Max();
+        if (maxAbs < 0.001) return "0%";
+        return $"{Math.Abs(upside.Value) / maxAbs * 100:F0}%";
+    }
+}

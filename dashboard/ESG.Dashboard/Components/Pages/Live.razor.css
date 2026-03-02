@@ -1,0 +1,61 @@
+.live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #26A69A;
+    animation: live-pulse 2s ease-in-out infinite;
+    vertical-align: middle;
+}
+
+@@keyframes live-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(38, 166, 154, 0.7); }
+    50% { opacity: 0.6; box-shadow: 0 0 8px 4px rgba(38, 166, 154, 0.3); }
+}
+
+.closed-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #EF5350;
+    animation: closed-pulse 2s ease-in-out infinite;
+    vertical-align: middle;
+}
+
+@@keyframes closed-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 83, 80, 0.7); }
+    50% { opacity: 0.6; box-shadow: 0 0 8px 4px rgba(239, 83, 80, 0.3); }
+}
+
+.activity-bar {
+    height: 6px;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    min-width: 2px;
+}
+
+::deep .pulse-table .mud-table-cell,
+::deep .pulse-table .mud-table-head .mud-table-cell {
+    padding: 4px 6px;
+}
+
+::deep .pulse-table .mud-table-head .mud-table-cell {
+    font-size: 0.7em;
+}
+
+.range-bar-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    position: relative;
+    width: 100%;
+}
+
+.range-bar-marker {
+    position: absolute;
+    width: 2px;
+    height: 10px;
+    top: -3px;
+    border-radius: 1px;
+}

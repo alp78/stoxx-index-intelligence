@@ -1,0 +1,12 @@
+::deep .tv-lightweight-charts {
+    max-width: 100% !important;
+}
+
+::deep .compact-table .mud-table-cell,
+::deep .compact-table .mud-table-head .mud-table-cell {
+    padding: 4px 4px;
+}
+
+::deep .compact-table .mud-table-head .mud-table-cell {
+    font-size: 0.7em;
+}

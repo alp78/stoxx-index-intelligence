@@ -347,15 +347,21 @@ def _populate_data(targets):
 
 
 def _run_transforms():
-    """Run cross-index transforms: OHLCV gap-fill, signals upsert."""
+    """Run cross-index transforms: silver (OHLCV, signals) then gold (scores, performance)."""
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ingestion"))
     from transforms.transform_ohlcv import run as transform_ohlcv  # type: ignore[import-not-found]
     from transforms.transform_signals_daily import run as transform_sd  # type: ignore[import-not-found]
     from transforms.transform_signals_quarterly import run as transform_sq  # type: ignore[import-not-found]
+    from transforms.transform_scores_daily import run as gold_sd  # type: ignore[import-not-found]
+    from transforms.transform_scores_quarterly import run as gold_sq  # type: ignore[import-not-found]
+    from transforms.transform_index_performance import run as gold_perf  # type: ignore[import-not-found]
 
     for name, fn in [("OHLCV", transform_ohlcv),
                      ("signals_daily", transform_sd),
-                     ("signals_quarterly", transform_sq)]:
+                     ("signals_quarterly", transform_sq),
+                     ("scores_daily (gold)", gold_sd),
+                     ("scores_quarterly (gold)", gold_sq),
+                     ("index_performance (gold)", gold_perf)]:
         try:
             fn()
         except Exception as e:
@@ -384,7 +390,7 @@ def setup(key=None):
         _populate_data(targets)
         _run_transforms()
 
-    log_info(logger, "Index setup complete — all bronze and silver layers populated",
+    log_info(logger, "Index setup complete — all bronze, silver, and gold layers populated",
              step="setup", indices=len(targets), duration_ms=timer.duration_ms)
 
 

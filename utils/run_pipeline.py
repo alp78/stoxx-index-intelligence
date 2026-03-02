@@ -215,7 +215,7 @@ def step_09_transform_signals_quarterly():
 
 
 # ---------------------------------------------------------------------------
-# Steps 10-14: Pulse  (discover tickers -> load -> fetch pulse -> load -> trim)
+# Steps 10-13: Pulse  (discover tickers -> load -> fetch pulse -> load)
 # ---------------------------------------------------------------------------
 
 def step_10_fetch_pulse_tickers():
@@ -284,63 +284,26 @@ def step_13_load_pulse():
             _skip(key, f"pulse load failed: {e}")
 
 
-def step_14_trim_pulse():
-    """Trim bronze.pulse to 7 trading days per exchange timezone."""
-    conn = get_connection()
-    cursor = conn.cursor()
+# ---------------------------------------------------------------------------
+# Steps 14-16: Gold  (daily scores -> quarterly scores -> index performance)
+# ---------------------------------------------------------------------------
 
-    # Get distinct (index, exchange, timezone) groups that have pulse data
-    cursor.execute("""
-        SELECT DISTINCT d._index, d.exchange, d.exchange_timezone_name
-        FROM bronze.index_dim d
-        WHERE EXISTS (SELECT 1 FROM bronze.pulse p WHERE p._index = d._index)
-    """)
-    groups = cursor.fetchall()
+def step_14_transform_scores_daily():
+    """Compute daily analytics scores (relative value, momentum, sentiment)."""
+    from transforms.transform_scores_daily import run
+    run()
 
-    total_trimmed = 0
 
-    for (_index, exchange, tz_name) in groups:
-        # "today" in exchange timezone
-        try:
-            today = datetime.now(ZoneInfo(tz_name)).strftime('%Y-%m-%d')
-        except Exception:
-            today = datetime.now(ZoneInfo('UTC')).strftime('%Y-%m-%d')
+def step_15_transform_scores_quarterly():
+    """Compute quarterly analytics scores (quality, health flags, governance)."""
+    from transforms.transform_scores_quarterly import run
+    run()
 
-        # Find cutoff: 7th most recent trading day
-        cursor.execute("""
-            SELECT MIN(date) FROM (
-                SELECT TOP 7 date FROM bronze.trading_calendar
-                WHERE exchange_code = ? AND is_trading_day = 1 AND date <= ?
-                ORDER BY date DESC
-            ) sub
-        """, exchange, today)
-        row = cursor.fetchone()
-        if not row or not row[0]:
-            continue
-        cutoff = str(row[0])
 
-        # Get symbols for this exchange+index
-        cursor.execute("""
-            SELECT symbol FROM bronze.index_dim
-            WHERE _index = ? AND exchange = ?
-        """, _index, exchange)
-        symbols = [r[0] for r in cursor.fetchall()]
-
-        # Trim old pulse records
-        for symbol in symbols:
-            cursor.execute("""
-                DELETE FROM bronze.pulse
-                WHERE _index = ? AND symbol = ? AND CAST(timestamp AS DATE) < ?
-            """, _index, symbol, cutoff)
-            total_trimmed += cursor.rowcount
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    if total_trimmed > 0:
-        log_info(logger, "Trimmed old pulse records — kept only last 7 trading days per exchange timezone",
-                 step="pipeline", records_trimmed=total_trimmed)
+def step_16_transform_index_performance():
+    """Compute index-level daily returns and cross-sectional aggregates."""
+    from transforms.transform_index_performance import run
+    run()
 
 
 # ---------------------------------------------------------------------------
@@ -348,20 +311,22 @@ def step_14_trim_pulse():
 # ---------------------------------------------------------------------------
 
 STEPS = [
-    (1,  "fetch_ohlcv",               step_01_fetch_ohlcv),
-    (2,  "load_ohlcv",                step_02_load_ohlcv),
-    (3,  "transform_ohlcv",           step_03_transform_ohlcv),
-    (4,  "fetch_signals_daily",        step_04_fetch_signals_daily),
-    (5,  "load_signals_daily",         step_05_load_signals_daily),
-    (6,  "fetch_signals_quarterly",    step_06_fetch_signals_quarterly),
-    (7,  "load_signals_quarterly",     step_07_load_signals_quarterly),
-    (8,  "transform_signals_daily",    step_08_transform_signals_daily),
+    (1,  "fetch_ohlcv",                step_01_fetch_ohlcv),
+    (2,  "load_ohlcv",                 step_02_load_ohlcv),
+    (3,  "transform_ohlcv",            step_03_transform_ohlcv),
+    (4,  "fetch_signals_daily",         step_04_fetch_signals_daily),
+    (5,  "load_signals_daily",          step_05_load_signals_daily),
+    (6,  "fetch_signals_quarterly",     step_06_fetch_signals_quarterly),
+    (7,  "load_signals_quarterly",      step_07_load_signals_quarterly),
+    (8,  "transform_signals_daily",     step_08_transform_signals_daily),
     (9,  "transform_signals_quarterly", step_09_transform_signals_quarterly),
-    (10, "fetch_pulse_tickers",        step_10_fetch_pulse_tickers),
-    (11, "load_pulse_tickers",         step_11_load_pulse_tickers),
-    (12, "fetch_pulse",                step_12_fetch_pulse),
-    (13, "load_pulse",                 step_13_load_pulse),
-    (14, "trim_pulse",                 step_14_trim_pulse),
+    (10, "fetch_pulse_tickers",         step_10_fetch_pulse_tickers),
+    (11, "load_pulse_tickers",          step_11_load_pulse_tickers),
+    (12, "fetch_pulse",                 step_12_fetch_pulse),
+    (13, "load_pulse",                  step_13_load_pulse),
+    (14, "transform_scores_daily",      step_14_transform_scores_daily),
+    (15, "transform_scores_quarterly",  step_15_transform_scores_quarterly),
+    (16, "transform_index_performance", step_16_transform_index_performance),
 ]
 
 

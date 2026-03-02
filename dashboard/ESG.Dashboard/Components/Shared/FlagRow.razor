@@ -1,0 +1,18 @@
+<tr>
+    <td>@Label</td>
+    <td>
+        @if (Flag == true)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" />
+        }
+        else
+        {
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+        }
+    </td>
+</tr>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public bool? Flag { get; set; }
+}

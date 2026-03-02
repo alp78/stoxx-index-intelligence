@@ -1,0 +1,26 @@
+@if (Rank.HasValue)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <MudChip T="string" Size="Size.Small" Color="@GetColor(Rank.Value)" Variant="Variant.Filled">
+            #@Rank
+        </MudChip>
+        <MudText Typo="Typo.caption">@(Score.HasValue ? $"{Score.Value:F2}" : "")</MudText>
+    </MudStack>
+}
+else
+{
+    <MudText Typo="Typo.caption" Style="opacity: 0.4;">--</MudText>
+}
+
+@code {
+    [Parameter] public short? Rank { get; set; }
+    [Parameter] public double? Score { get; set; }
+
+    private static Color GetColor(int rank) => rank switch
+    {
+        <= 5 => Color.Success,
+        <= 15 => Color.Info,
+        <= 35 => Color.Default,
+        _ => Color.Warning
+    };
+}

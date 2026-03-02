@@ -1,0 +1,26 @@
+<tr>
+    <td><strong>@Label</strong></td>
+    <td>@(Score.HasValue ? $"{Score.Value:F2}" : "--")</td>
+    <td>
+        @if (Rank.HasValue)
+        {
+            <MudChip T="string" Size="Size.Small" Color="@GetColor(Rank.Value)" Variant="Variant.Filled">
+                #@Rank
+            </MudChip>
+        }
+    </td>
+</tr>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public double? Score { get; set; }
+    [Parameter] public short? Rank { get; set; }
+
+    private static Color GetColor(int rank) => rank switch
+    {
+        <= 5 => Color.Success,
+        <= 15 => Color.Info,
+        <= 35 => Color.Default,
+        _ => Color.Warning
+    };
+}

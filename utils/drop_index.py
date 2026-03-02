@@ -45,6 +45,16 @@ def drop_index(key):
 
     try:
         with StepTimer() as timer:
+            # Gold layer
+            for table in ["scores_quarterly", "scores_daily", "index_performance"]:
+                cursor.execute(f"DELETE FROM gold.{table} WHERE _index = ?", key)
+                if cursor.rowcount > 0:
+                    log_info(logger, f"Purged gold.{table} rows for this index",
+                             index=key, rows_deleted=cursor.rowcount)
+                else:
+                    log_info(logger, f"No rows in gold.{table} for this index — already clean",
+                             index=key)
+
             # Silver layer
             for table in ["signals_quarterly", "signals_daily", "index_dim"]:
                 cursor.execute(f"DELETE FROM silver.{table} WHERE _index = ?", key)

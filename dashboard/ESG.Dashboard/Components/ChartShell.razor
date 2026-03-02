@@ -1,0 +1,15 @@
+@using LightweightCharts.Blazor.Charts
+
+<ChartComponent @ref="Chart" CssStyle="width: 100%; height: 100%;" />
+
+@code {
+    public ChartComponent? Chart { get; private set; }
+    private bool _rendered;
+
+    protected override bool ShouldRender() => !_rendered;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) _rendered = true;
+    }
+}

@@ -1,0 +1,414 @@
+@page "/live"
+@rendermode InteractiveServer
+@inject PulseRepository PulseRepo
+@implements IAsyncDisposable
+
+<PageTitle>Live Pulse - ESG Analytics</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <!-- Index header bar -->
+    <MudGrid Spacing="3" Class="mb-0">
+        @for (int idxPos = 0; idxPos < _indices.Length; idxPos++)
+        {
+            var idx = _indices[idxPos];
+            var live = IsMarketOpen(idx);
+            var exchange = ExchangeInfo(idx);
+
+            <MudItem xs="12" md="4">
+                <div class="d-flex align-center" style="gap: 6px; padding: 4px 0;">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700; font-size: 0.95rem;">@FormatIndexName(idx)</MudText>
+                    @if (live)
+                    {
+                        <span class="live-dot" style="margin-left: 2px;"></span>
+                        <span style="font-size: 0.55rem; font-weight: 700; color: #26A69A; letter-spacing: 1px;">LIVE</span>
+                    }
+                    else
+                    {
+                        <span class="closed-dot" style="margin-left: 2px;"></span>
+                        <span style="font-size: 0.55rem; font-weight: 700; color: #EF5350; letter-spacing: 1px;">CLOSED</span>
+                    }
+                    <span style="margin-left: auto; font-size: 0.6rem; opacity: 0.35;">
+                        @exchange.Name &middot; @exchange.City &middot; @exchange.LocalTime
+                    </span>
+                </div>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <!-- Market Pulse -->
+    <div style="margin-bottom: 24px;">
+        <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+            <ChildContent>
+                <span style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">
+                    <MudText Typo="Typo.subtitle2" Style="opacity: 0.5; font-weight: 700; margin-bottom: 10px; font-size: 0.85rem;">Market Pulse</MudText>
+                </span>
+            </ChildContent>
+            <TooltipContent>
+                <div style="@_tipStyle">
+                    <div style="@_tipHead">Market Pulse</div>
+                    <div style="@_tipDesc">Real-time snapshot of the most active tickers per index:</div>
+                    <ul style="@_tipList">
+                        <li><b>Price</b> &mdash; last traded price</li>
+                        <li><b>Change</b> &mdash; % change from previous close</li>
+                        <li><b>Day Range</b> &mdash; current price position within today's high/low</li>
+                        <li><b>Vol Ratio</b> &mdash; current volume / 10-day average (&gt;1.5x = elevated)</li>
+                    </ul>
+                    <div style="@_tipNote">Updated every 60 seconds from live market data.</div>
+                </div>
+            </TooltipContent>
+        </MudTooltip>
+
+        <MudGrid Spacing="3">
+            @for (int idxPos = 0; idxPos < _indices.Length; idxPos++)
+            {
+                var idx = _indices[idxPos];
+                var pulseList = _pulseByIndex.GetValueOrDefault(idx) ?? [];
+                var currency = CurrencySymbol(idx);
+
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-3" Elevation="2">
+                        @if (pulseList.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Style="opacity: 0.3; text-align: center; padding: 16px 0;">No data</MudText>
+                        }
+                        else
+                        {
+                            <MudSimpleTable Dense="true" Class="pulse-table" Style="white-space: nowrap; font-size: 0.75rem;">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>Name</th>
+                                        <th style="text-align: right;">Price</th>
+                                        <th style="text-align: right;">Chg</th>
+                                        <th>Range</th>
+                                        <th style="text-align: right;">Vol</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in pulseList)
+                                    {
+                                        var range = (p.DayHigh ?? 1) - (p.DayLow ?? 0);
+                                        var pctCurrent = range > 0
+                                            ? ((p.CurrentPrice ?? 0) - (p.DayLow ?? 0)) / range * 100
+                                            : 50;
+                                        var markerColor = pctCurrent > 50 ? "#26A69A" : "#EF5350";
+
+                                        <tr>
+                                            <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(p.Country)" style="font-size: 0.7rem;"></span></td>
+                                            <td>
+                                                <a href="@StockLink(idx, p.Symbol)" style="font-weight: 600; font-size: 0.75rem; color: inherit; text-decoration: none; cursor: pointer;">@p.Symbol</a>
+                                                <div style="font-size: 0.55em; opacity: 0.35; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">@p.ShortName</div>
+                                            </td>
+                                            <td style="text-align: right; font-weight: 600; font-size: 0.75rem;">@($"{currency}{p.CurrentPrice:N2}")</td>
+                                            <td style="text-align: right; color: @ChgColor(p.PriceChangePct); font-size: 0.7rem;">
+                                                @ChgArrow(p.PriceChangePct) @FormatChgPct(p.PriceChangePct)
+                                            </td>
+                                            <td>
+                                                <div style="width: 50px;">
+                                                    <div class="range-bar-track">
+                                                        <div class="range-bar-marker" style="left: @($"{pctCurrent:F0}%"); background: @markerColor;"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td style="text-align: right; font-size: 0.7rem;">
+                                                <div>@FmtVol(p.CurrentVolume)</div>
+                                                @if (p.VolumeRatio is not null)
+                                                {
+                                                    var vrColor = p.VolumeRatio switch
+                                                    {
+                                                        > 2.0 => Color.Error,
+                                                        > 1.5 => Color.Warning,
+                                                        > 1.0 => Color.Info,
+                                                        _ => Color.Default
+                                                    };
+                                                    <MudChip T="string" Size="Size.Small" Color="vrColor"
+                                                             Style="font-size: 0.55rem; height: 14px; margin: 0; padding: 0 3px;">
+                                                        @($"{p.VolumeRatio:F1}x")
+                                                    </MudChip>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </div>
+
+    <!-- Activity Ranking -->
+    <div>
+        <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+            <ChildContent>
+                <span style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">
+                    <MudText Typo="Typo.subtitle2" Style="opacity: 0.5; font-weight: 700; margin-bottom: 10px; font-size: 0.85rem;">Activity Ranking</MudText>
+                </span>
+            </ChildContent>
+            <TooltipContent>
+                <div style="@_tipStyle">
+                    <div style="@_tipHead">Activity Ranking</div>
+                    <div style="@_tipDesc">Top 10 most dynamic tickers ranked by composite activity score:</div>
+                    <ul style="@_tipList">
+                        <li><b>Volume Surge</b> &mdash; current volume / 10-day average</li>
+                        <li><b>Range Intensity</b> &mdash; (day high &minus; day low) / prev close</li>
+                        <li>Score = 0.5 &times; z(volume) + 0.5 &times; z(range)</li>
+                    </ul>
+                    <div style="@_tipNote">Recalculated hourly. Higher score = more unusual market activity.</div>
+                </div>
+            </TooltipContent>
+        </MudTooltip>
+
+        <MudGrid Spacing="3">
+            @for (int idxPos = 0; idxPos < _indices.Length; idxPos++)
+            {
+                var idx = _indices[idxPos];
+                var tickerList = _tickersByIndex.GetValueOrDefault(idx) ?? [];
+                var maxActivity = tickerList.Count > 0
+                    ? tickerList.Max(t => t.ActivityScore ?? 0)
+                    : 1.0;
+                if (maxActivity == 0) maxActivity = 1;
+
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-3" Elevation="2">
+                        @if (tickerList.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Style="opacity: 0.3; text-align: center; padding: 16px 0;">No data</MudText>
+                        }
+                        else
+                        {
+                            <div style="display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 2px;">
+                                @foreach (var ticker in tickerList)
+                                {
+                                    var barWidth = maxActivity > 0 ? (ticker.ActivityScore ?? 0) / maxActivity * 100 : 0;
+                                    var barColor = RankBarColor(ticker.Rank);
+
+                                    <div style="display: flex; align-items: center; gap: 6px; padding: 2px 0;">
+                                        <span style="font-size: 0.7rem; width: 14px; text-align: right; opacity: 0.35; font-weight: 600;">
+                                            @ticker.Rank
+                                        </span>
+                                        <span class="fi fi-@CountryFlagCode(ticker.Country)" style="font-size: 0.7rem;"></span>
+                                        <div style="flex: 0 0 auto; min-width: 50px;">
+                                            <a href="@StockLink(idx, ticker.Symbol)" style="font-weight: 600; font-size: 0.75rem; color: inherit; text-decoration: none; cursor: pointer;">@ticker.Symbol</a>
+                                        </div>
+                                        <div style="flex: 1; min-width: 20px;">
+                                            <div style="background: rgba(255,255,255,0.04); border-radius: 3px; height: 5px;">
+                                                <div class="activity-bar" style="width: @($"{barWidth:F0}%"); background: @barColor; height: 5px;"></div>
+                                            </div>
+                                        </div>
+                                        <span style="font-size: 0.7rem; opacity: 0.4; min-width: 22px; text-align: right; font-family: 'Inter', monospace;">
+                                            @($"{ticker.ActivityScore:F1}")
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private DateTime? _lastRefresh;
+    private CancellationTokenSource? _refreshCts;
+
+    // Data
+    private Dictionary<string, List<PulseSnapshot>> _pulseByIndex = new();
+    private Dictionary<string, List<PulseTicker>> _tickersByIndex = new();
+
+    // Fixed index order
+    private static readonly string[] _indices =
+        ["euro_stoxx_50", "stoxx_usa_50", "stoxx_asia_50"];
+
+    // --- Data loading ---
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        await LoadAllData();
+        _loading = false;
+
+        _refreshCts = new CancellationTokenSource();
+        _ = AutoRefreshLoop(_refreshCts.Token);
+    }
+
+    private async Task LoadAllData()
+    {
+        var pulseTask = PulseRepo.GetLatestPulseAsync();
+        var tickersTask = PulseRepo.GetActiveTickersAsync();
+        await Task.WhenAll(pulseTask, tickersTask);
+
+        var pulse = (await pulseTask).ToList();
+        var tickers = (await tickersTask).ToList();
+
+        _pulseByIndex = pulse.GroupBy(p => p.Index)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        _tickersByIndex = tickers.GroupBy(t => t.Index)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        _lastRefresh = DateTime.Now;
+    }
+
+    private async Task AutoRefreshLoop(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
+        {
+            try
+            {
+                await LoadAllData();
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (OperationCanceledException) { break; }
+            catch { /* swallow transient DB errors, retry next tick */ }
+        }
+    }
+
+    // --- Cleanup ---
+
+    public async ValueTask DisposeAsync()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+    }
+
+    // --- Market hours (approximate exchange sessions in UTC) ---
+
+    private static bool IsMarketOpen(string index)
+    {
+        var utcNow = DateTime.UtcNow;
+        var dow = utcNow.DayOfWeek;
+        if (dow is DayOfWeek.Saturday or DayOfWeek.Sunday) return false;
+
+        var t = utcNow.TimeOfDay;
+        return index switch
+        {
+            // Xetra / Euronext: 08:00–16:30 UTC (approx CET -1)
+            "euro_stoxx_50" => t >= new TimeSpan(8, 0, 0) && t <= new TimeSpan(16, 30, 0),
+            // NYSE / NASDAQ: 14:30–21:00 UTC (approx ET +5)
+            "stoxx_usa_50" => t >= new TimeSpan(14, 30, 0) && t <= new TimeSpan(21, 0, 0),
+            // Tokyo / HK / Sydney: ~00:00–08:00 UTC (covers JST/HKT/AEST overlap)
+            "stoxx_asia_50" => t >= new TimeSpan(0, 0, 0) && t <= new TimeSpan(8, 0, 0),
+            _ => false
+        };
+    }
+
+    // --- Exchange info ---
+
+    private record ExchangeData(string Name, string City, string LocalTime);
+
+    private static ExchangeData ExchangeInfo(string index)
+    {
+        var utcNow = DateTimeOffset.UtcNow;
+        return index switch
+        {
+            "euro_stoxx_50" => new("Xetra", "Frankfurt",
+                utcNow.ToOffset(TimeSpan.FromHours(1)).ToString("HH:mm") + " CET"),
+            "stoxx_usa_50" => new("NYSE", "New York",
+                utcNow.ToOffset(TimeSpan.FromHours(-5)).ToString("HH:mm") + " EST"),
+            "stoxx_asia_50" => new("TSE", "Tokyo",
+                utcNow.ToOffset(TimeSpan.FromHours(9)).ToString("HH:mm") + " JST"),
+            _ => new("--", "--", "--")
+        };
+    }
+
+    // --- Tooltip styles ---
+    private const string _tipStyle = "text-align: left; background: #1A1A2E; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; max-width: 340px; font-size: 0.75rem; line-height: 1.6; color: #E0E0E0; box-shadow: 0 4px 20px rgba(0,0,0,0.5);";
+    private const string _tipHead = "font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: #fff;";
+    private const string _tipDesc = "opacity: 0.6; margin-bottom: 8px;";
+    private const string _tipList = "margin: 0 0 6px 0; padding-left: 16px; opacity: 0.85;";
+    private const string _tipNote = "opacity: 0.45; font-size: 0.7rem; font-style: italic; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 4px;";
+
+    // --- Helpers ---
+
+    private static readonly Dictionary<string, string> _indexColors = new()
+    {
+        ["euro_stoxx_50"] = "#4285F4",
+        ["stoxx_usa_50"] = "#FFFFFF",
+        ["stoxx_asia_50"] = "#EF5350",
+    };
+
+    private static string IndexColor(string key) => _indexColors.GetValueOrDefault(key, "#A0AEC0");
+
+    private static string FormatIndexName(string key) => key switch
+    {
+        "euro_stoxx_50" => "Euro STOXX 50",
+        "stoxx_usa_50" => "STOXX USA 50",
+        "stoxx_asia_50" => "STOXX Asia/Pacific 50",
+        _ => key
+    };
+
+    private static readonly Dictionary<string, string> CountryCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Germany"] = "DE", ["France"] = "FR", ["Netherlands"] = "NL",
+        ["Spain"] = "ES", ["Italy"] = "IT", ["Belgium"] = "BE",
+        ["Finland"] = "FI", ["Ireland"] = "IE", ["Austria"] = "AT",
+        ["Luxembourg"] = "LU", ["Portugal"] = "PT", ["Greece"] = "GR",
+        ["United States"] = "US",
+        ["Japan"] = "JP", ["China"] = "CN", ["South Korea"] = "KR",
+        ["Australia"] = "AU", ["Hong Kong"] = "HK", ["Taiwan"] = "TW",
+        ["India"] = "IN", ["Singapore"] = "SG", ["Thailand"] = "TH",
+        ["Indonesia"] = "ID", ["Malaysia"] = "MY", ["Philippines"] = "PH",
+        ["United Kingdom"] = "GB", ["Switzerland"] = "CH", ["Sweden"] = "SE",
+        ["Denmark"] = "DK", ["Norway"] = "NO", ["New Zealand"] = "NZ",
+    };
+
+    private static string CountryFlagCode(string? country)
+    {
+        if (country is null || !CountryCodes.TryGetValue(country, out var code))
+            return "";
+        return code.ToLowerInvariant();
+    }
+
+    private static string CurrencySymbol(string index) => index switch
+    {
+        "euro_stoxx_50" => "\u20AC",
+        "stoxx_usa_50" => "$",
+        _ => ""
+    };
+
+    private static string ChgColor(double? val) => val switch
+    {
+        > 0 => "#26A69A",
+        < 0 => "#EF5350",
+        _ => "inherit"
+    };
+
+    private static string ChgArrow(double? val) => val switch
+    {
+        > 0 => "\u25B2",
+        < 0 => "\u25BC",
+        _ => ""
+    };
+
+    private static string FormatChgPct(double? val) =>
+        val.HasValue ? $"{val.Value:+0.00;-0.00}%" : "--";
+
+    private static string FmtVol(long? vol) => vol switch
+    {
+        null => "--",
+        >= 1_000_000_000 => $"{vol / 1_000_000_000.0:F1}B",
+        >= 1_000_000 => $"{vol / 1_000_000.0:F1}M",
+        >= 1_000 => $"{vol / 1_000.0:F1}K",
+        _ => vol.Value.ToString("N0")
+    };
+
+    private static string StockLink(string index, string symbol) => $"/stocks/{index}/{symbol}";
+
+    private static string RankBarColor(int rank) => rank switch
+    {
+        <= 2 => "#42A5F5",
+        <= 5 => "#26A69A",
+        <= 7 => "#AB47BC",
+        _ => "#A0A0B0"
+    };
+}

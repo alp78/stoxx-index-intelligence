@@ -1,0 +1,20 @@
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+    <MudChip T="string" Size="Size.Medium" Color="@GetColor(Level)" Variant="Variant.Filled">
+        @(Level ?? "unknown")
+    </MudChip>
+    <MudText Typo="Typo.body2">@FlagsCount / 4 flags triggered</MudText>
+</MudStack>
+
+@code {
+    [Parameter] public string? Level { get; set; }
+    [Parameter] public byte? FlagsCount { get; set; }
+
+    private static Color GetColor(string? level) => level switch
+    {
+        "healthy" => Color.Success,
+        "watch" => Color.Info,
+        "warning" => Color.Warning,
+        "critical" => Color.Error,
+        _ => Color.Default
+    };
+}

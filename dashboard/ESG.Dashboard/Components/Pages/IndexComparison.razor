@@ -1,0 +1,247 @@
+@page "/indices"
+@rendermode InteractiveServer
+@inject IndexPerformanceRepository PerfRepo
+
+<PageTitle>Index Comparison - ESG Analytics</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4" Style="font-weight: 600;">Index Comparison</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <!-- Time range selector -->
+    <MudPaper Class="pa-3 mb-4" Elevation="1">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudText Typo="Typo.subtitle2">Period:</MudText>
+            @foreach (var (label, months) in _ranges)
+            {
+                <MudButton Variant="@(months == _selectedMonths ? Variant.Filled : Variant.Outlined)"
+                           Size="Size.Small" Color="Color.Primary"
+                           OnClick="@(() => SetRange(months))">@label</MudButton>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <!-- Cumulative Performance -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-3">Cumulative Return (Rebased to 100)</MudText>
+        @if (_perfLabels.Length > 0)
+        {
+            <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_perfSeries"
+                      ChartLabels="@_perfLabels" Width="100%" Height="400px"
+                      ChartOptions="@_lineOptions" />
+        }
+    </MudPaper>
+
+    <!-- Rolling Returns Comparison -->
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">Rolling 30d Return</MudText>
+                @if (_roll30Labels.Length > 0)
+                {
+                    <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_roll30Series"
+                              ChartLabels="@_roll30Labels" Width="100%" Height="300px"
+                              ChartOptions="@_lineOptions" />
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">30d Annualized Volatility</MudText>
+                @if (_volLabels.Length > 0)
+                {
+                    <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_volSeries"
+                              ChartLabels="@_volLabels" Width="100%" Height="300px"
+                              ChartOptions="@_lineOptions" />
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Valuation Comparison -->
+    <MudPaper Class="pa-4 mt-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-3">Current Valuation Snapshot</MudText>
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead>
+                <tr>
+                    <th>Index</th>
+                    <th>YTD Return</th>
+                    <th>30d Return</th>
+                    <th>90d Return</th>
+                    <th>30d Vol</th>
+                    <th>Avg PE</th>
+                    <th>Avg PB</th>
+                    <th>Avg Yield</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var snap in _latest)
+                {
+                    <tr>
+                        <td><strong>@FormatIndexName(snap.Index)</strong></td>
+                        <td style="color: @PctColor(snap.YtdReturn)">@Pct(snap.YtdReturn)</td>
+                        <td style="color: @PctColor(snap.Rolling30dReturn)">@Pct(snap.Rolling30dReturn)</td>
+                        <td style="color: @PctColor(snap.Rolling90dReturn)">@Pct(snap.Rolling90dReturn)</td>
+                        <td>@Pct(snap.Rolling30dVolatility)</td>
+                        <td>@Num(snap.AvgPe)</td>
+                        <td>@Num(snap.AvgPb)</td>
+                        <td>@Pct(snap.AvgDividendYield)</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private List<IndexPerformance> _allPerf = [];
+    private List<IndexPerformance> _latest = [];
+    private int _selectedMonths = 0; // 0 = all
+
+    private List<ChartSeries<double>> _perfSeries = [];
+    private string[] _perfLabels = [];
+    private List<ChartSeries<double>> _roll30Series = [];
+    private string[] _roll30Labels = [];
+    private List<ChartSeries<double>> _volSeries = [];
+    private string[] _volLabels = [];
+    private readonly LineChartOptions _lineOptions = new() { LineStrokeWidth = 2 };
+
+    private static readonly (string Label, int Months)[] _ranges =
+    [
+        ("1M", 1), ("3M", 3), ("6M", 6), ("1Y", 12), ("3Y", 36), ("All", 0)
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var perfTask = PerfRepo.GetPerformanceAsync();
+        var latestTask = PerfRepo.GetLatestSnapshotAsync();
+        await Task.WhenAll(perfTask, latestTask);
+
+        _allPerf = (await perfTask).ToList();
+        // Trim trailing rows with no actual trading (daily_return = 0)
+        var maxValid = _allPerf
+            .Where(p => p.DailyReturn.HasValue && Math.Abs(p.DailyReturn.Value) > 0.0001)
+            .Max(p => (DateTime?)p.PerfDate);
+        if (maxValid.HasValue)
+            _allPerf = _allPerf.Where(p => p.PerfDate <= maxValid.Value).ToList();
+        _latest = (await latestTask).ToList();
+        BuildCharts();
+        _loading = false;
+    }
+
+    private void SetRange(int months)
+    {
+        _selectedMonths = months;
+        BuildCharts();
+    }
+
+    private void BuildCharts()
+    {
+        var data = _allPerf.ToList();
+        if (_selectedMonths > 0)
+        {
+            var cutoff = DateTime.Today.AddMonths(-_selectedMonths);
+            data = data.Where(p => p.PerfDate >= cutoff).ToList();
+        }
+
+        var maxPoints = 200;
+
+        // Cumulative performance — rebase to 100 at start of selected range
+        BuildLineSeries(data, maxPoints, p => p.CumulativeFactor ?? 1.0,
+            out _perfSeries, out _perfLabels, rebase: true);
+
+        // Rolling 30d return
+        BuildLineSeries(data, maxPoints, p => (p.Rolling30dReturn ?? 0) * 100,
+            out _roll30Series, out _roll30Labels);
+
+        // Volatility
+        BuildLineSeries(data, maxPoints, p => (p.Rolling30dVolatility ?? 0) * 100,
+            out _volSeries, out _volLabels);
+    }
+
+    private static void BuildLineSeries(
+        List<IndexPerformance> data, int maxPoints,
+        Func<IndexPerformance, double> valueSelector,
+        out List<ChartSeries<double>> series, out string[] labels,
+        bool rebase = false)
+    {
+        series = [];
+        labels = [];
+        if (data.Count == 0) return;
+
+        // Per-index sorted lookup
+        var byIndex = new Dictionary<string, SortedList<DateTime, double>>();
+        foreach (var g in data.GroupBy(p => p.Index))
+        {
+            var sl = new SortedList<DateTime, double>();
+            foreach (var p in g) sl[p.PerfDate] = valueSelector(p);
+            byIndex[g.Key] = sl;
+        }
+
+        // Union of all dates
+        var allDates = byIndex.Values.SelectMany(sl => sl.Keys).Distinct().OrderBy(d => d).ToList();
+        var step = Math.Max(1, allDates.Count / maxPoints);
+
+        // Forward-fill per index across all dates
+        var filled = new Dictionary<string, double[]>();
+        foreach (var (key, sl) in byIndex)
+        {
+            var arr = new double[allDates.Count];
+            double last = sl.Count > 0 ? sl.Values[0] : 0;
+            for (int i = 0; i < allDates.Count; i++)
+            {
+                if (sl.TryGetValue(allDates[i], out var v)) last = v;
+                arr[i] = last;
+            }
+            filled[key] = arr;
+        }
+
+        // Rebase: normalize each series so first value = 100
+        if (rebase)
+        {
+            foreach (var (key, arr) in filled)
+            {
+                var first = arr[0];
+                if (Math.Abs(first) > 0.0001)
+                {
+                    for (int i = arr.Length - 1; i >= 0; i--)
+                        arr[i] = arr[i] / first * 100;
+                }
+            }
+        }
+
+        // Sample at step intervals
+        var sampledIdx = Enumerable.Range(0, allDates.Count).Where(i => i % step == 0).ToList();
+        var sampledDates = sampledIdx.Select(i => allDates[i]).ToList();
+
+        // Sparse labels (~12 visible)
+        var labelStep = Math.Max(1, sampledDates.Count / 12);
+        labels = sampledDates.Select((d, i) => i % labelStep == 0 ? d.ToString("MMM yy") : "").ToArray();
+
+        // Build series — all same length
+        var result = new List<ChartSeries<double>>();
+        foreach (var (key, arr) in filled)
+        {
+            var vals = sampledIdx.Select(i => arr[i]).ToArray();
+            result.Add(new ChartSeries<double> { Name = FormatIndexName(key), Data = vals });
+        }
+        series = result;
+    }
+
+    private static string FormatIndexName(string key) => key switch
+    {
+        "euro_stoxx_50" => "Euro STOXX 50",
+        "stoxx_usa_50" => "STOXX USA 50",
+        "stoxx_asia_50" => "STOXX Asia/Pacific 50",
+        _ => key
+    };
+
+    private static string Pct(double? v) => v.HasValue ? $"{v.Value:P1}" : "--";
+    private static string Num(double? v) => v.HasValue ? $"{v.Value:F1}" : "--";
+    private static string PctColor(double? v) => v switch { > 0 => "#4CAF50", < 0 => "#EF5350", _ => "inherit" };
+}
