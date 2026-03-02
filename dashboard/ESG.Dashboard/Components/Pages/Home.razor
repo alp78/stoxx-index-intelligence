@@ -11,6 +11,7 @@
 @using LightweightCharts.Blazor.Customization.Series
 @using LightweightCharts.Blazor.Customization.Enums
 @using LightweightCharts.Blazor.DataItems
+@using LightweightCharts.Blazor.Models
 @using LightweightCharts.Blazor.Series
 
 <PageTitle>STOXX Index Intelligence</PageTitle>
@@ -845,7 +846,23 @@ else
         var top5 = TopMomentum.Take(5).ToList();
         var tradingDays = MomTradingDays; // capture once — stable across awaits
 
-        // Phase 1: prepare all data arrays (pure C#, no JS interop)
+        // Step 1: determine canonical date window from the stock with the most data.
+        // That stock's TakeLast(N) gives the tightest calendar range for N trading days.
+        // Stocks with sparse data (volume gaps) or short history get clipped to this window.
+        DateTime windowStart = DateTime.MaxValue, windowEnd = DateTime.MinValue;
+        int bestCount = 0;
+        for (var i = 0; i < 5 && i < top5.Count; i++)
+        {
+            if (!_momClosesData.TryGetValue(top5[i].Symbol, out var cl) || cl.Count == 0) continue;
+            if (cl.Count <= bestCount) continue;
+            bestCount = cl.Count;
+            var slice = cl.TakeLast(tradingDays);
+            windowStart = slice.First().Date;
+            windowEnd = slice.Last().Date;
+        }
+        if (windowStart == DateTime.MaxValue) return; // no data at all
+
+        // Phase 1: prepare all data arrays — filtered to canonical window
         var prepared = new LineData<long>[5][];
         for (var i = 0; i < 5; i++)
         {
@@ -858,10 +875,14 @@ else
             }
 
             var sym = top5[i].Symbol;
-            var recent = closes.TakeLast(tradingDays).ToList();
-            var baseClose = recent[0].Close;
-            if (baseClose == 0) { prepared[i] = Array.Empty<LineData<long>>(); continue; }
+            var recent = closes.Where(c => c.Date >= windowStart && c.Date <= windowEnd).ToList();
+            if (recent.Count == 0 || recent[0].Close == 0)
+            {
+                prepared[i] = Array.Empty<LineData<long>>();
+                continue;
+            }
 
+            var baseClose = recent[0].Close;
             var data = recent.Select(c => new LineData<long>
             {
                 Time = new DateTimeOffset(c.Date, TimeSpan.Zero).ToUnixTimeSeconds(),
@@ -886,8 +907,11 @@ else
         }
         await Task.WhenAll(setTasks);
 
+        // Lock viewport to the canonical window (no FitContent drift)
+        var fromUnix = new DateTimeOffset(windowStart, TimeSpan.Zero).ToUnixTimeSeconds();
+        var toUnix = new DateTimeOffset(windowEnd, TimeSpan.Zero).ToUnixTimeSeconds();
         var ts = await _momRef.TimeScale();
-        await ts.FitContent();
+        await ts.SetVisibleRange(new TimeRange { From = fromUnix, To = toUnix });
         await SendMomTooltipData();
     }
 
