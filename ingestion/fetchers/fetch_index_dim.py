@@ -1,89 +1,34 @@
-"""Fetches index dimension data from Wikipedia + yfinance.
+"""Fetches index dimension data from definition files + yfinance.
 
-This is a UTILITY script, not part of the automated pipeline.
-The pipeline starts from a well-formed {prefix}_dim.json in data/stage/.
-This script is one way to produce that file -- the user can use any source.
-
-Each record in the output JSON must have at minimum:
-  symbol, exchange, exchangeTimezoneName, _price_data_start
-See data/stage/eurostoxx50_dim.json for the full schema.
+Reads the stock list from ingestion/definitions/{key}.json,
+enriches each symbol via yfinance, and outputs data/stage/{prefix}_dim.json.
 """
 
-import pandas as pd
-import requests
-import yfinance as yf
 import json
 import sys
 import time
 import re
-from io import StringIO
-from datetime import datetime, timedelta
 from pathlib import Path
 
+import yfinance as yf
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import INDICES, data_path
-from logger import get_logger, log_info, log_warning, log_error, StepTimer
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from utils.config import INDICES, get_index, data_path, definition_path, safe_write_json, format_epoch
+from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger(__name__)
 
-# Wiki sources -- only indices with a known Wikipedia table go here.
-# Indices without a wiki source must have their dim.json provided manually.
-WIKI_SOURCES = {
-    "euro_stoxx": {
-        "url": "https://en.wikipedia.org/wiki/EURO_STOXX_50",
-        "match_col": "Ticker",
-        "dot_to_dash": False,
-    },
-    "stoxx_usa": {
-        "url": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-        "match_col": "Symbol",
-        "dot_to_dash": True,
-    },
-}
-
-def fetch_html_safely(url):
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.text
 
 def clean_company_name(raw_name):
-    if not raw_name: return None
+    if not raw_name:
+        return None
     cleaned = re.sub(r'\s{2,}.*', '', str(raw_name))
     return cleaned.strip()
 
-def format_epoch(epoch_val, is_ms=False):
-    if epoch_val is None: return None
-    try:
-        sec = epoch_val / 1000.0 if is_ms else float(epoch_val)
-        epoch_dt = datetime(1970, 1, 1)
-        return (epoch_dt + timedelta(seconds=sec)).strftime('%Y-%m-%d')
-    except Exception:
-        return None
-
-def get_top_50_symbols(url, match_col, index_name, dot_to_dash=False):
-    """Ranks the source list by Market Cap to find the top 50 candidates."""
-    log_info(logger, "Ranking symbols", step="fetch", index=index_name)
-    html = fetch_html_safely(url)
-    df = pd.read_html(StringIO(html), match=match_col)[0]
-    raw_tickers = df[match_col].unique().tolist()
-
-    ticker_mcap_map = []
-    for raw_tkr in raw_tickers:
-        clean_tkr = str(raw_tkr).strip().replace(".", "-") if dot_to_dash else str(raw_tkr).strip()
-        try:
-            tkr = yf.Ticker(clean_tkr)
-            mcap = tkr.fast_info.market_cap
-            if mcap: ticker_mcap_map.append({"symbol": clean_tkr, "mcap": mcap})
-        except Exception as e:
-            log_warning(logger, "Ranking failed for ticker", step="fetch",
-                        symbol=clean_tkr, error=str(e))
-
-    sorted_list = sorted(ticker_mcap_map, key=lambda x: x['mcap'], reverse=True)
-    return [item['symbol'] for item in sorted_list[:50]]
 
 def extract_full_identity(symbol, history_start="2021-01-01"):
-    """Extracts exactly the fields you requested into a flat dictionary."""
+    """Extracts identity fields from yfinance into a flat dictionary."""
     try:
         tkr = yf.Ticker(symbol)
         info = tkr.info
@@ -117,40 +62,58 @@ def extract_full_identity(symbol, history_start="2021-01-01"):
             "_price_data_start": history_start
         }
     except Exception as e:
-        log_error(logger, "Identity extraction failed", step="fetch",
-                  symbol=symbol, error=str(e))
+        log_error(logger, "Failed to extract identity fields from yfinance for symbol",
+                  step="fetch", symbol=symbol, error=str(e))
         return None
 
+
+def build_registry(key):
+    """Build dim registry for a single index."""
+    idx = get_index(key)
+    def_file = definition_path(key)
+
+    if not def_file.exists():
+        log_warning(logger, "Cannot build registry — no definition file found",
+                    step="fetch", index=key, expected=str(def_file))
+        return
+
+    with open(def_file, "r", encoding="utf-8") as f:
+        defn = json.load(f)
+
+    symbols = defn.get("symbols", [])
+    if not symbols:
+        log_warning(logger, "Cannot build registry — definition file has no symbols",
+                    step="fetch", index=key)
+        return
+
+    output_file = data_path(key, "dim")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    log_info(logger, "Enriching stock list via yfinance to build dimension registry",
+             step="fetch", index=key, symbols_count=len(symbols))
+
+    with StepTimer() as timer:
+        final_records = []
+        for sym in symbols:
+            record = extract_full_identity(sym, idx["history_start"])
+            if record:
+                final_records.append(record)
+            else:
+                log_warning(logger, "Symbol skipped — yfinance enrichment failed or stock too recent",
+                            step="fetch", index=key, symbol=sym)
+            time.sleep(0.1)
+
+    safe_write_json(output_file, final_records)
+
+    log_info(logger, "Dimension registry built — enriched stock identities written to JSON",
+             step="fetch", index=key, symbols_input=len(symbols),
+             records_fetched=len(final_records), duration_ms=timer.duration_ms)
+
+
 def build_registries():
+    """Build dim registries for all indices."""
     for idx in INDICES:
-        key = idx["key"]
-        source = WIKI_SOURCES.get(key)
-        if not source:
-            log_info(logger, "Skipping index (no wiki source)", step="fetch",
-                     index=key)
-            continue
-
-        output_file = data_path(key, "dim")
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-
-        with StepTimer() as timer:
-            top_50_list = get_top_50_symbols(
-                source["url"], source["match_col"],
-                idx["name"], source.get("dot_to_dash", False)
-            )
-
-            final_records = []
-            for sym in top_50_list:
-                record = extract_full_identity(sym, idx["history_start"])
-                if record:
-                    final_records.append(record)
-                time.sleep(0.1)
-
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(final_records, f, indent=4, ensure_ascii=False)
-
-        log_info(logger, "Registry built", step="fetch", index=key,
-                 records_fetched=len(final_records), duration_ms=timer.duration_ms)
+        build_registry(idx["key"])
 
 
 if __name__ == "__main__":

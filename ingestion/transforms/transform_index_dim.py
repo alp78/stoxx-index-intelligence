@@ -9,8 +9,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from db import get_connection
-from logger import get_logger, log_info, log_error, StepTimer
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from utils.db import get_connection
+from utils.logger import get_logger, log_info, log_error, StepTimer
 
 logger = get_logger(__name__)
 
@@ -27,8 +28,8 @@ ALL_COLS = ["_index", "symbol"] + COMPARE_COLS
 
 
 def run():
-    log_info(logger, "Transform started", step="transform",
-             target="silver.index_dim", type="SCD2")
+    log_info(logger, "Running SCD Type 2 merge — tracking new, changed, and removed symbols in silver",
+             step="transform", target="silver.index_dim", type="SCD2")
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -82,13 +83,13 @@ def run():
 
             conn.commit()
 
-        log_info(logger, "Transform complete", step="transform",
-                 target="silver.index_dim", records_inserted=inserted,
-                 records_updated=updated, records_closed=closed,
-                 duration_ms=timer.duration_ms)
+        log_info(logger, "Index dimension SCD2 merge complete — new/changed/removed symbols tracked in silver",
+                 step="transform", target="silver.index_dim",
+                 records_inserted=inserted, records_updated=updated,
+                 records_closed=closed, duration_ms=timer.duration_ms)
     except Exception:
         conn.rollback()
-        log_error(logger, "Transform failed", exc_info=True,
+        log_error(logger, "Index dimension SCD2 merge failed", exc_info=True,
                   step="transform", target="silver.index_dim")
         raise
     finally:
@@ -97,13 +98,23 @@ def run():
 
 
 def _has_changed(b_row, s_row):
-    """Compare attribute columns (skip _index, symbol at positions 0,1)."""
+    """Compare attribute columns (skip _index, symbol at positions 0,1).
+
+    Normalizes types before comparing to avoid false positives from
+    driver type differences (e.g. datetime.date vs str, Decimal vs float).
+    """
     for i in range(2, len(b_row)):
         bv = b_row[i]
         sv = s_row[i]
         if bv is None and sv is None:
             continue
-        if str(bv) != str(sv):
+        if bv is None or sv is None:
+            return True
+        # Normalize: compare as strings with consistent formatting
+        # Strip trailing zeros from numeric-like values to avoid 1.0 != 1 issues
+        bs = str(bv).rstrip('0').rstrip('.') if isinstance(bv, (int, float)) else str(bv)
+        ss = str(sv).rstrip('0').rstrip('.') if isinstance(sv, (int, float)) else str(sv)
+        if bs != ss:
             return True
     return False
 

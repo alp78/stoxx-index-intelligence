@@ -5,19 +5,25 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from db import get_connection
-from config import INDICES, data_path, get_all_keys
-from logger import get_logger, log_info, log_error, StepTimer
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from utils.db import get_connection
+from utils.config import data_path, get_all_keys
+from utils.logger import get_logger, log_info, log_error, StepTimer
 
 logger = get_logger(__name__)
 
 
 def load(json_file, index_name):
-    log_info(logger, "Load started", step="load", index=index_name,
-             table="bronze.pulse_tickers")
+    log_info(logger, "Loading pulse tickers into bronze (truncate & reload for this index)",
+             step="load", index=index_name, table="bronze.pulse_tickers")
 
-    with open(json_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    try:
+        with open(json_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        log_error(logger, "Cannot load pulse tickers — JSON file missing or corrupt",
+                  step="load", index=index_name, file=str(json_file), error=str(e))
+        return
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -29,26 +35,33 @@ def load(json_file, index_name):
             discovered_at = data.get("discovered_at")
             ranking = data.get("ranking", [])
 
+            inserted = 0
             for i, item in enumerate(ranking):
+                symbol = item.get("symbol")
+                if not symbol:
+                    continue
+
                 cursor.execute("""
                     INSERT INTO bronze.pulse_tickers (
                         _index, discovered_at, symbol, rank,
                         volume_surge, range_intensity, vol_z, rng_z, activity_score
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                    index_name, discovered_at, item.get("symbol"), i + 1,
+                    index_name, discovered_at, symbol, i + 1,
                     item.get("volumeSurge"), item.get("rangeIntensity"),
                     item.get("volZ"), item.get("rngZ"), item.get("activityScore")
                 )
+                inserted += 1
 
             conn.commit()
 
-        log_info(logger, "Load complete", step="load", index=index_name,
-                 records_inserted=len(ranking), duration_ms=timer.duration_ms)
+        log_info(logger, "Pulse tickers load complete — bronze refreshed with latest ranking",
+                 step="load", index=index_name, records_inserted=inserted,
+                 duration_ms=timer.duration_ms)
     except Exception:
         conn.rollback()
-        log_error(logger, "Load failed", exc_info=True, step="load",
-                  index=index_name, table="bronze.pulse_tickers")
+        log_error(logger, "Pulse tickers load failed — rolling back", exc_info=True,
+                  step="load", index=index_name, table="bronze.pulse_tickers")
         raise
     finally:
         cursor.close()

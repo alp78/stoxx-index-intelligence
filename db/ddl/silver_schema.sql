@@ -51,9 +51,14 @@ CREATE TABLE silver.index_dim (
 );
 GO
 
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_silver_index_dim_current')
-CREATE INDEX IX_silver_index_dim_current
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_silver_index_dim_current')
+CREATE UNIQUE INDEX UX_silver_index_dim_current
     ON silver.index_dim (_index, symbol) WHERE is_current = 1;
+GO
+
+-- Drop old non-unique index if it exists (replaced by UX_silver_index_dim_current)
+IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_silver_index_dim_current')
+DROP INDEX IX_silver_index_dim_current ON silver.index_dim;
 GO
 
 -- ============================================================================

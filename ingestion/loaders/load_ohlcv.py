@@ -1,22 +1,29 @@
-"""Loads price history JSON into per-index bronze OHLCV tables. Strategy: merge (insert missing only)."""
+"""Loads OHLCV JSON into per-index bronze OHLCV tables. Strategy: merge (insert missing only)."""
 
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from db import get_connection
-from config import INDICES, data_path, bronze_ohlcv
-from logger import get_logger, log_info, log_error, StepTimer
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from utils.db import get_connection
+from utils.config import INDICES, data_path, bronze_ohlcv
+from utils.logger import get_logger, log_info, log_error, StepTimer
 
 logger = get_logger(__name__)
 
 
 def load(json_file, table):
-    log_info(logger, "Load started", step="load", table=table)
+    log_info(logger, "Loading OHLCV prices from JSON into bronze (merge — insert missing rows only)",
+             step="load", table=table)
 
-    with open(json_file, 'r', encoding='utf-8') as f:
-        records = json.load(f)
+    try:
+        with open(json_file, 'r', encoding='utf-8') as f:
+            records = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        log_error(logger, "Cannot load OHLCV — JSON file missing or corrupt",
+                  step="load", table=table, file=str(json_file), error=str(e))
+        return
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -60,11 +67,13 @@ def load(json_file, table):
 
             conn.commit()
 
-        log_info(logger, "Load complete", step="load", table=table,
-                 records_inserted=inserted, records_skipped=skipped,
-                 records_total=len(records), duration_ms=timer.duration_ms)
+        log_info(logger, "OHLCV load complete — merged new rows into bronze, skipped existing",
+                 step="load", table=table, records_inserted=inserted,
+                 records_skipped=skipped, records_total=len(records),
+                 duration_ms=timer.duration_ms)
     except Exception:
-        log_error(logger, "Load failed", exc_info=True, step="load", table=table)
+        conn.rollback()
+        log_error(logger, "OHLCV load failed — rolling back", exc_info=True, step="load", table=table)
         raise
     finally:
         cursor.close()
@@ -74,4 +83,4 @@ def load(json_file, table):
 if __name__ == "__main__":
     for idx in INDICES:
         key = idx["key"]
-        load(data_path(key, "ohlcv_history"), bronze_ohlcv(key))
+        load(data_path(key, "ohlcv"), bronze_ohlcv(key))

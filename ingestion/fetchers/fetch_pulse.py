@@ -9,12 +9,12 @@ import json
 import sys
 import yfinance as yf
 import time
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import INDICES, data_path
-from logger import get_logger, log_info, log_warning, log_error, StepTimer
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from utils.config import INDICES, data_path, safe_write_json, utcnow_str
+from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger(__name__)
 
@@ -23,15 +23,15 @@ def discover_pulse_tickers(reg_file, output_file):
     """Ranks registered stocks by activity score to find the 10 most dynamic.
     Activity = 0.5 * volume_surge + 0.5 * price_range_intensity (z-scored).
     Intended to run hourly."""
-    log_info(logger, "Discovery started", step="fetch", kind="pulse_discover",
-             reg_file=str(reg_file))
+    log_info(logger, "Ranking all stocks by activity score to find top 10 most dynamic tickers",
+             step="fetch", kind="pulse_discover", reg_file=str(reg_file))
 
     try:
         with open(reg_file, 'r', encoding='utf-8') as f:
             registry = json.load(f)
     except FileNotFoundError:
-        log_error(logger, "Registry file not found", step="fetch",
-                  reg_file=str(reg_file))
+        log_error(logger, "Cannot discover pulse tickers — registry file not found",
+                  step="fetch", reg_file=str(reg_file))
         return
 
     valid_symbols = [c.get('symbol') for c in registry if c.get('symbol')]
@@ -49,8 +49,8 @@ def discover_pulse_tickers(reg_file, output_file):
                 day_low = info.get("regularMarketDayLow")
                 prev_close = info.get("regularMarketPreviousClose")
 
-                vol_surge = (last_vol / avg_vol) if (last_vol and avg_vol) else 0.0
-                range_intensity = ((day_high - day_low) / prev_close) if (day_high and day_low and prev_close) else 0.0
+                vol_surge = (last_vol / avg_vol) if (last_vol is not None and avg_vol) else 0.0
+                range_intensity = ((day_high - day_low) / prev_close) if (day_high is not None and day_low is not None and prev_close) else 0.0
 
                 raw_scores.append({
                     "symbol": symbol,
@@ -58,14 +58,14 @@ def discover_pulse_tickers(reg_file, output_file):
                     "rangeIntensity": round(range_intensity, 4)
                 })
             except Exception as e:
-                log_error(logger, "Symbol ranking failed", step="fetch",
-                          symbol=symbol, error=str(e))
+                log_error(logger, "Failed to compute activity score for symbol",
+                          step="fetch", symbol=symbol, error=str(e))
 
             time.sleep(0.1)
 
     if not raw_scores:
-        log_warning(logger, "No scores collected", step="fetch",
-                    kind="pulse_discover")
+        log_warning(logger, "No activity scores collected — all symbols failed or returned no data",
+                    step="fetch", kind="pulse_discover")
         return
 
     # Z-score both metrics across the index, then composite
@@ -94,15 +94,15 @@ def discover_pulse_tickers(reg_file, output_file):
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     tickers = {
-        "discovered_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        "discovered_at": utcnow_str(),
         "symbols": [item['symbol'] for item in top_10],
         "ranking": top_10
     }
 
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(tickers, f, indent=4, ensure_ascii=False)
+    safe_write_json(output_file, tickers)
 
-    log_info(logger, "Discovery complete", step="fetch", kind="pulse_discover",
+    log_info(logger, "Pulse ticker discovery complete — top 10 tickers ranked by activity score",
+             step="fetch", kind="pulse_discover",
              symbols_ranked=len(raw_scores), top_10=[t['symbol'] for t in top_10],
              duration_ms=timer.duration_ms)
 
@@ -114,18 +114,18 @@ def fetch_pulse(ticker_file, output_file, index_name):
         with open(ticker_file, 'r', encoding='utf-8') as f:
             tickers = json.load(f)
     except FileNotFoundError:
-        log_error(logger, "Ticker file not found", step="fetch",
-                  ticker_file=str(ticker_file))
+        log_error(logger, "Cannot fetch pulse — ticker file not found",
+                  step="fetch", ticker_file=str(ticker_file))
         return
 
     symbols = tickers.get('symbols', [])
     if not symbols:
-        log_warning(logger, "No tickers in file", step="fetch",
-                    ticker_file=str(ticker_file))
+        log_warning(logger, "Cannot fetch pulse — ticker file has no symbols",
+                    step="fetch", ticker_file=str(ticker_file))
         return
 
-    log_info(logger, "Pulse fetch started", step="fetch", kind="pulse",
-             index=index_name, symbols=len(symbols))
+    log_info(logger, "Fetching real-time price/book/volume snapshots for pulse tickers",
+             step="fetch", kind="pulse", index=index_name, symbols=len(symbols))
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
@@ -146,42 +146,41 @@ def fetch_pulse(ticker_file, output_file, index_name):
 
                 record = {
                     "symbol": symbol,
-                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "timestamp": utcnow_str(),
                     "price": {
                         "current": current_price,
                         "open": info.get("regularMarketOpen"),
                         "dayHigh": info.get("regularMarketDayHigh"),
                         "dayLow": info.get("regularMarketDayLow"),
                         "previousClose": prev_close,
-                        "change": round(current_price - prev_close, 4) if (current_price and prev_close) else None,
-                        "changePct": round((current_price / prev_close - 1) * 100, 4) if (current_price and prev_close) else None
+                        "change": round(current_price - prev_close, 4) if (current_price is not None and prev_close is not None) else None,
+                        "changePct": round((current_price / prev_close - 1) * 100, 4) if (current_price is not None and prev_close) else None
                     },
                     "book": {
                         "bid": bid,
                         "ask": ask,
                         "bidSize": info.get("bidSize"),
                         "askSize": info.get("askSize"),
-                        "spread": round(ask - bid, 4) if (ask and bid) else None
+                        "spread": round(ask - bid, 4) if (ask is not None and bid is not None) else None
                     },
                     "volume": {
                         "current": volume,
                         "average10Day": avg_vol,
-                        "ratio": round(volume / avg_vol, 4) if (volume and avg_vol) else None
+                        "ratio": round(volume / avg_vol, 4) if (volume is not None and avg_vol) else None
                     }
                 }
                 pulse_records.append(record)
             except Exception as e:
-                log_error(logger, "Symbol fetch failed", step="fetch",
-                          symbol=symbol, error=str(e))
+                log_error(logger, "Failed to fetch pulse snapshot for symbol",
+                          step="fetch", symbol=symbol, error=str(e))
 
             time.sleep(0.1)
 
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(pulse_records, f, indent=4, ensure_ascii=False)
+    safe_write_json(output_file, pulse_records)
 
-    log_info(logger, "Pulse fetch complete", step="fetch", kind="pulse",
-             index=index_name, records_fetched=len(pulse_records),
-             duration_ms=timer.duration_ms)
+    log_info(logger, "Pulse snapshot fetch complete — wrote real-time quotes to JSON",
+             step="fetch", kind="pulse", index=index_name,
+             records_fetched=len(pulse_records), duration_ms=timer.duration_ms)
 
 
 if __name__ == "__main__":

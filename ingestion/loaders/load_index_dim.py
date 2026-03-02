@@ -5,19 +5,25 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from db import get_connection
-from config import INDICES, data_path, get_all_keys
-from logger import get_logger, log_info, log_error, StepTimer
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from utils.db import get_connection
+from utils.config import data_path, get_all_keys
+from utils.logger import get_logger, log_info, log_error, StepTimer
 
 logger = get_logger(__name__)
 
 
 def load(json_file, index_name):
-    log_info(logger, "Load started", step="load", index=index_name,
-             table="bronze.index_dim")
+    log_info(logger, "Loading index dimensions into bronze (truncate & reload for this index)",
+             step="load", index=index_name, table="bronze.index_dim")
 
-    with open(json_file, 'r', encoding='utf-8') as f:
-        records = json.load(f)
+    try:
+        with open(json_file, 'r', encoding='utf-8') as f:
+            records = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        log_error(logger, "Cannot load index dimensions — JSON file missing or corrupt",
+                  step="load", index=index_name, file=str(json_file), error=str(e))
+        return
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -26,6 +32,7 @@ def load(json_file, index_name):
         with StepTimer() as timer:
             cursor.execute("DELETE FROM bronze.index_dim WHERE _index = ?", index_name)
 
+            inserted = 0
             for rec in records:
                 symbol = rec.get("symbol")
                 if not symbol:
@@ -52,15 +59,17 @@ def load(json_file, index_name):
                     rec.get("quoteType"), rec.get("market"),
                     rec.get("_range_start"), rec.get("_price_data_start")
                 )
+                inserted += 1
 
             conn.commit()
 
-        log_info(logger, "Load complete", step="load", index=index_name,
-                 records_inserted=len(records), duration_ms=timer.duration_ms)
+        log_info(logger, "Index dimensions load complete — bronze refreshed with latest identities",
+                 step="load", index=index_name, records_inserted=inserted,
+                 duration_ms=timer.duration_ms)
     except Exception:
         conn.rollback()
-        log_error(logger, "Load failed", exc_info=True, step="load",
-                  index=index_name, table="bronze.index_dim")
+        log_error(logger, "Index dimensions load failed — rolling back", exc_info=True,
+                  step="load", index=index_name, table="bronze.index_dim")
         raise
     finally:
         cursor.close()

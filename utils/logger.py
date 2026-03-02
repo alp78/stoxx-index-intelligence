@@ -1,11 +1,16 @@
-"""Datadog-compatible structured JSON logging for the ESG ingestion pipeline.
+"""Structured logging for the ESG ingestion pipeline.
+
+Console output is human-readable. Datadog gets JSON in logs/pipeline.jsonl.
 
 Usage:
     from logger import get_logger, log_info, log_warning, log_error
     logger = get_logger(__name__)
     log_info(logger, "Load complete", step="load", index="euro_stoxx", records_inserted=50)
 
-Output (one JSON object per line, Datadog auto-parses):
+Console:
+    INFO  | Load complete | step=load index=euro_stoxx records_inserted=50
+
+Datadog (logs/pipeline.jsonl):
     {"timestamp":"...","level":"INFO","logger":"loaders.load_index_dim",
      "message":"Load complete","service":"esg-ingestion",
      "step":"load","index":"euro_stoxx","records_inserted":50}
@@ -13,9 +18,40 @@ Output (one JSON object per line, Datadog auto-parses):
 
 import logging
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_LOG_DIR = _PROJECT_ROOT / "logs"
+_LOG_FILE = _LOG_DIR / "pipeline.jsonl"
+
+_LEVEL_TAG = {
+    "DEBUG": "DEBUG",
+    "INFO": "INFO ",
+    "WARNING": "WARN ",
+    "ERROR": "ERROR",
+    "CRITICAL": "CRIT ",
+}
+
+
+class ConsoleFormatter(logging.Formatter):
+    """Human-readable single-line format for terminal output."""
+
+    def format(self, record):
+        tag = _LEVEL_TAG.get(record.levelname, record.levelname)
+        parts = [f"{tag} | {record.getMessage()}"]
+        if hasattr(record, "_fields") and record._fields:
+            attrs = " ".join(f"{k}={v}" for k, v in record._fields.items())
+            parts.append(attrs)
+        line = " | ".join(parts)
+        if record.exc_info and not record.exc_text:
+            record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            line += "\n" + record.exc_text
+        return line
 
 
 class DatadogJsonFormatter(logging.Formatter):
@@ -29,7 +65,6 @@ class DatadogJsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "service": "esg-ingestion",
         }
-        # Merge structured fields passed via extra
         if hasattr(record, "_fields"):
             log.update(record._fields)
         if record.exc_info and not record.exc_text:
@@ -40,12 +75,26 @@ class DatadogJsonFormatter(logging.Formatter):
 
 
 def get_logger(name, level=logging.INFO):
-    """Returns a logger configured with Datadog JSON output."""
+    """Returns a logger with readable console output + JSON file for Datadog.
+
+    Set LOG_FORMAT=json to get JSON on stdout instead (e.g. in containers).
+    """
     logger = logging.getLogger(name)
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(DatadogJsonFormatter())
-        logger.addHandler(handler)
+        # JSON file for Datadog
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
+        file_handler.setFormatter(DatadogJsonFormatter())
+        logger.addHandler(file_handler)
+
+        # Console for the developer
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        if os.environ.get("LOG_FORMAT", "").strip().lower() == "json":
+            stdout_handler.setFormatter(DatadogJsonFormatter())
+        else:
+            stdout_handler.setFormatter(ConsoleFormatter())
+        logger.addHandler(stdout_handler)
+
         logger.setLevel(level)
         logger.propagate = False
     return logger

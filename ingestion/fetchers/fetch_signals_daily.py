@@ -4,19 +4,20 @@ import json
 import sys
 import yfinance as yf
 import time
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import INDICES, data_path
-from logger import get_logger, log_info, log_warning, log_error, StepTimer
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from utils.config import INDICES, data_path, safe_write_json, utcnow_str
+from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger(__name__)
 
 
 def fetch_daily_signals(reg_file, output_file):
-    log_info(logger, "Fetch started", step="fetch", source="yfinance",
-             kind="signals_daily", reg_file=str(reg_file))
+    log_info(logger, "Fetching daily trading signals (PE, yield, momentum) from yfinance",
+             step="fetch", source="yfinance", kind="signals_daily",
+             reg_file=str(reg_file))
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
@@ -26,8 +27,8 @@ def fetch_daily_signals(reg_file, output_file):
         with open(reg_file, 'r', encoding='utf-8') as f:
             registry = json.load(f)
     except FileNotFoundError:
-        log_error(logger, "Registry file not found", step="fetch",
-                  reg_file=str(reg_file))
+        log_error(logger, "Cannot fetch daily signals — registry file not found",
+                  step="fetch", reg_file=str(reg_file))
         return
 
     with StepTimer() as timer:
@@ -47,7 +48,7 @@ def fetch_daily_signals(reg_file, output_file):
 
                 record = {
                     "symbol": symbol,
-                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "timestamp": utcnow_str(),
                     "price_metrics": {
                         "currentPrice": current_price,
                         "forwardPE": info.get("forwardPE"),
@@ -64,25 +65,25 @@ def fetch_daily_signals(reg_file, output_file):
                     "momentum_signals": {
                         "fiftyDayAverage": info.get("fiftyDayAverage"),
                         "twoHundredDayAverage": info.get("twoHundredDayAverage"),
-                        "distFrom52WeekHigh": (1 - (current_price / high_52w)) if (current_price and high_52w) else None
+                        "distFrom52WeekHigh": (1 - (current_price / high_52w)) if (current_price is not None and high_52w) else None
                     },
                     "sentiment_signals": {
                         "targetMedianPrice": target_price,
                         "recommendationMean": info.get("recommendationMean"),
-                        "upsidePotential": (target_price / current_price - 1) if (current_price and target_price) else None
+                        "upsidePotential": (target_price / current_price - 1) if (current_price and target_price is not None) else None
                     }
                 }
                 daily_signals.append(record)
             except Exception as e:
-                log_error(logger, "Symbol fetch failed", step="fetch",
-                          symbol=symbol, error=str(e))
+                log_error(logger, "Failed to fetch daily signals for symbol",
+                          step="fetch", symbol=symbol, error=str(e))
 
             time.sleep(0.15)
 
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(daily_signals, f, indent=4, ensure_ascii=False)
+    safe_write_json(output_file, daily_signals)
 
-    log_info(logger, "Fetch complete", step="fetch", kind="signals_daily",
+    log_info(logger, "Daily signals fetch complete — wrote JSON snapshot",
+             step="fetch", kind="signals_daily",
              records_fetched=len(daily_signals), duration_ms=timer.duration_ms)
 
 
