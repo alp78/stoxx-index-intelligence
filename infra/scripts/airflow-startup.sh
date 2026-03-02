@@ -68,6 +68,7 @@ if [ -n "${DD_API_KEY}" ] && ! docker ps --format '{{.Names}}' | grep -qx 'dd-ag
     --restart unless-stopped \
     --cgroupns host \
     --pid host \
+    -p 8126:8126 \
     -e DD_API_KEY="${DD_API_KEY}" \
     -e DD_SITE="datadoghq.eu" \
     -e DD_HOSTNAME="stoxx-airflow" \

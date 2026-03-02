@@ -118,7 +118,7 @@ resource "google_cloud_run_v2_job" "pipeline" {
         }
         env {
           name  = "DD_TRACE_AGENT_URL"
-          value = "https://trace.agent.datadoghq.eu/api/v0.2/traces"
+          value = "http://${google_compute_instance.airflow.network_interface[0].network_ip}:8126"
         }
         env {
           name  = "DD_API_KEY"

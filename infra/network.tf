@@ -59,6 +59,20 @@ resource "google_compute_firewall" "allow_airflow_ui" {
   target_tags   = ["airflow"]
 }
 
+resource "google_compute_firewall" "allow_apm" {
+  name    = "stoxx-allow-apm"
+  network = google_compute_network.main.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["8126"]
+  }
+
+  # Allow Cloud Run (VPC connector) to reach dd-agent APM port
+  source_ranges = ["10.0.0.0/24"]
+  target_tags   = ["airflow"]
+}
+
 resource "google_compute_firewall" "allow_iap" {
   name    = "stoxx-allow-iap"
   network = google_compute_network.main.name
