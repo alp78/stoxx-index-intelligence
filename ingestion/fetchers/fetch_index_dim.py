@@ -103,14 +103,14 @@ def build_registries():
             "match": "Symbol", 
             "col": "Symbol", 
             "name": "STOXX USA 500", 
-            "file": stage_dir / "stoxx_usa_50.json"
+            "file": stage_dir / "stoxxusa50_dim.json"
         },
         {
             "url": "https://en.wikipedia.org/wiki/EURO_STOXX_50",
             "match": "Ticker", 
             "col": "Ticker", 
             "name": "EURO STOXX 50", 
-            "file": stage_dir / "euro_stoxx_50.json"
+            "file": stage_dir / "eurostoxx50_dim.json"
         }
     ]
 

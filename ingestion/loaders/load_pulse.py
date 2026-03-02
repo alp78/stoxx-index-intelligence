@@ -52,5 +52,5 @@ def load(json_file, index_name):
 if __name__ == "__main__":
     pulse_dir = Path(__file__).resolve().parent.parent.parent / "data" / "pulse"
 
-    load(pulse_dir / "euro_stoxx_10_pulse.json", "euro_stoxx")
-    load(pulse_dir / "stoxx_usa_10_pulse.json", "stoxx_usa")
+    load(pulse_dir / "eurostoxx50_pulse.json", "euro_stoxx")
+    load(pulse_dir / "stoxxusa50_pulse.json", "stoxx_usa")
