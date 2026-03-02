@@ -1,5 +1,6 @@
 .esg/
-.env
+.env/
+.claude/
 data/
 logs/
 __pycache__/
