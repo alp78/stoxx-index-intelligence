@@ -1,8 +1,12 @@
 import json
+import sys
 import yfinance as yf
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import INDICES, data_path
 
 def fetch_daily_signals(reg_file, output_file):
     print(f"\n--- Processing {reg_file} ---")
@@ -75,20 +79,9 @@ def fetch_daily_signals(reg_file, output_file):
     print(f"\nSuccess: Saved {len(daily_signals)} signal records to {output_file}")
 
 if __name__ == "__main__":
-    # Resolve absolute paths based on this script's location
-    # Assumes script is in /ingestion/fetchers, going up two levels to /data
-    script_dir = Path(__file__).resolve().parent
-    stage_dir = script_dir.parent.parent / "data" / "stage"
-    signals_dir = script_dir.parent.parent / "data" / "signals"
-    
-    # Track 2: Market Signals - Euro Index
-    fetch_daily_signals(
-        reg_file=stage_dir / "eurostoxx50_dim.json",
-        output_file=signals_dir / "eurostoxx50_signals_daily.json"
-    )
-
-    # Track 2: Market Signals - USA Index
-    fetch_daily_signals(
-        reg_file=stage_dir / "stoxxusa50_dim.json",
-        output_file=signals_dir / "stoxxusa50_signals_daily.json"
-    )
+    for idx in INDICES:
+        key = idx["key"]
+        fetch_daily_signals(
+            reg_file=data_path(key, "dim"),
+            output_file=data_path(key, "signals_daily")
+        )

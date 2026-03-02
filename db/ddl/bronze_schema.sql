@@ -1,6 +1,7 @@
 -- ============================================================================
 -- Bronze schema: Create ESG database and bronze layer
 -- Bronze = raw data, 1:1 with source JSON
+-- Fully idempotent: safe to run multiple times.
 -- ============================================================================
 
 -- Create database
@@ -19,9 +20,11 @@ GO
 -- ============================================================================
 -- 1. Index Dimensions (source: data/stage/*_dim.json, refreshed yearly)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'index_dim')
 CREATE TABLE bronze.index_dim (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
-    _index                  VARCHAR(20)     NOT NULL,   -- euro_stoxx / stoxx_usa
+    _index                  VARCHAR(20)     NOT NULL,
     _ingested_at            DATETIME2       NOT NULL DEFAULT SYSUTCDATETIME(),
 
     symbol                  VARCHAR(20)     NOT NULL,
@@ -49,56 +52,15 @@ CREATE TABLE bronze.index_dim (
 GO
 
 -- ============================================================================
--- 2. OHLCV - Euro Stoxx 50 (source: data/history/eurostoxx50_ohlcv_history.json)
+-- 2. Per-index OHLCV tables are created dynamically by setup_index.py
+--    from ingestion/indices.json. Do NOT add them here.
 -- ============================================================================
-CREATE TABLE bronze.eurostoxx50_ohlcv (
-    id                      INT IDENTITY(1,1) PRIMARY KEY,
-    _ingested_at            DATETIME2       NOT NULL DEFAULT SYSUTCDATETIME(),
-
-    symbol                  VARCHAR(20)     NOT NULL,
-    date                    DATE            NOT NULL,
-    [open]                  FLOAT,
-    high                    FLOAT,
-    low                     FLOAT,
-    [close]                 FLOAT,
-    adj_close               FLOAT,
-    volume                  BIGINT,
-    dividends               FLOAT,
-    stock_splits            FLOAT
-);
-GO
-
-CREATE INDEX IX_bronze_eurostoxx50_ohlcv_symbol_date
-    ON bronze.eurostoxx50_ohlcv (symbol, date);
-GO
 
 -- ============================================================================
--- 3. OHLCV - Stoxx USA 50 (source: data/history/stoxxusa50_ohlcv_history.json)
+-- 3. Daily Signals (source: data/stage/*_signals_daily.json, refreshed daily)
 -- ============================================================================
-CREATE TABLE bronze.stoxxusa50_ohlcv (
-    id                      INT IDENTITY(1,1) PRIMARY KEY,
-    _ingested_at            DATETIME2       NOT NULL DEFAULT SYSUTCDATETIME(),
-
-    symbol                  VARCHAR(20)     NOT NULL,
-    date                    DATE            NOT NULL,
-    [open]                  FLOAT,
-    high                    FLOAT,
-    low                     FLOAT,
-    [close]                 FLOAT,
-    adj_close               FLOAT,
-    volume                  BIGINT,
-    dividends               FLOAT,
-    stock_splits            FLOAT
-);
-GO
-
-CREATE INDEX IX_bronze_stoxxusa50_ohlcv_symbol_date
-    ON bronze.stoxxusa50_ohlcv (symbol, date);
-GO
-
--- ============================================================================
--- 4. Daily Signals (source: data/stage/*_signals_daily.json, refreshed daily)
--- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'signals_daily')
 CREATE TABLE bronze.signals_daily (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
     _index                  VARCHAR(20)     NOT NULL,
@@ -132,6 +94,7 @@ CREATE TABLE bronze.signals_daily (
 );
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_bronze_signals_daily_symbol_ts')
 CREATE INDEX IX_bronze_signals_daily_symbol_ts
     ON bronze.signals_daily (symbol, timestamp);
 GO
@@ -139,6 +102,8 @@ GO
 -- ============================================================================
 -- 5. Quarterly Signals (source: data/stage/*_signals_quarterly.json, refreshed quarterly)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'signals_quarterly')
 CREATE TABLE bronze.signals_quarterly (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
     _index                  VARCHAR(20)     NOT NULL,
@@ -175,6 +140,7 @@ CREATE TABLE bronze.signals_quarterly (
 );
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_bronze_signals_quarterly_symbol_date')
 CREATE INDEX IX_bronze_signals_quarterly_symbol_date
     ON bronze.signals_quarterly (symbol, as_of_date);
 GO
@@ -182,6 +148,8 @@ GO
 -- ============================================================================
 -- 6. Pulse (source: data/pulse/*_pulse.json, refreshed every minute)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'pulse')
 CREATE TABLE bronze.pulse (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
     _index                  VARCHAR(20)     NOT NULL,
@@ -213,6 +181,7 @@ CREATE TABLE bronze.pulse (
 );
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_bronze_pulse_symbol_ts')
 CREATE INDEX IX_bronze_pulse_symbol_ts
     ON bronze.pulse (symbol, timestamp);
 GO
@@ -220,6 +189,8 @@ GO
 -- ============================================================================
 -- 7. Pulse Tickers (source: data/pulse/*_tickers.json, refreshed hourly)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'pulse_tickers')
 CREATE TABLE bronze.pulse_tickers (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
     _index                  VARCHAR(20)     NOT NULL,
@@ -236,6 +207,7 @@ CREATE TABLE bronze.pulse_tickers (
 );
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_bronze_pulse_tickers_discovered')
 CREATE INDEX IX_bronze_pulse_tickers_discovered
     ON bronze.pulse_tickers (discovered_at, _index);
 GO
@@ -243,18 +215,20 @@ GO
 -- ============================================================================
 -- 8. Trading Calendar (source: exchange_calendars library, populated on seed)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'trading_calendar')
 CREATE TABLE bronze.trading_calendar (
     date                    DATE            NOT NULL,
-    exchange_code           VARCHAR(10)     NOT NULL,   -- yfinance code: AMS, PAR, NMS, etc.
-    xc_code                 VARCHAR(10)     NOT NULL,   -- exchange_calendars code: XAMS, XPAR, etc.
+    exchange_code           VARCHAR(10)     NOT NULL,
+    xc_code                 VARCHAR(10)     NOT NULL,
     year                    SMALLINT        NOT NULL,
-    quarter                 TINYINT         NOT NULL,   -- 1-4
-    month                   TINYINT         NOT NULL,   -- 1-12
+    quarter                 TINYINT         NOT NULL,
+    month                   TINYINT         NOT NULL,
     week_of_year            TINYINT         NOT NULL,
-    day_of_week             TINYINT         NOT NULL,   -- 0=Mon, 6=Sun
+    day_of_week             TINYINT         NOT NULL,
     is_trading_day          BIT             NOT NULL,
-    is_month_end            BIT             NOT NULL,   -- last trading day of the month
-    is_quarter_end          BIT             NOT NULL,   -- last trading day of the quarter
+    is_month_end            BIT             NOT NULL,
+    is_quarter_end          BIT             NOT NULL,
 
     CONSTRAINT PK_trading_calendar PRIMARY KEY (date, exchange_code)
 );

@@ -1,4 +1,4 @@
-"""Loads daily signals JSON into bronze.signals_daily. Strategy: append."""
+"""Loads daily signals JSON into bronze.signals_daily. Idempotent: skips existing rows."""
 
 import json
 import sys
@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
+from config import INDICES, data_path, get_all_keys
 
 
 def load(json_file, index_name):
@@ -17,9 +18,21 @@ def load(json_file, index_name):
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Load existing keys for this index
+    cursor.execute(
+        "SELECT symbol, timestamp FROM bronze.signals_daily WHERE _index = ?",
+        index_name
+    )
+    existing = {(r[0], str(r[1])) for r in cursor.fetchall()}
+
+    inserted = 0
     for rec in records:
         symbol = rec.get("symbol")
         if not symbol:
+            continue
+
+        ts = rec.get("timestamp")
+        if (symbol, ts) in existing:
             continue
 
         pm = rec.get("price_metrics", {})
@@ -37,7 +50,7 @@ def load(json_file, index_name):
                 target_median_price, recommendation_mean, upside_potential
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            index_name, symbol, rec.get("timestamp"),
+            index_name, symbol, ts,
             pm.get("currentPrice"), pm.get("forwardPE"),
             pm.get("priceToBook"), pm.get("evToEbitda"),
             pm.get("dividendYield"), pm.get("marketCap"), pm.get("beta"),
@@ -47,15 +60,14 @@ def load(json_file, index_name):
             ss.get("targetMedianPrice"), ss.get("recommendationMean"),
             ss.get("upsidePotential")
         )
+        inserted += 1
 
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"Done: {len(records)} records appended for {index_name}")
+    print(f"Done: {inserted} new / {len(records)} total for {index_name}")
 
 
 if __name__ == "__main__":
-    signals_dir = Path(__file__).resolve().parent.parent.parent / "data" / "stage"
-
-    load(signals_dir / "eurostoxx50_signals_daily.json", "euro_stoxx")
-    load(signals_dir / "stoxxusa50_signals_daily.json", "stoxx_usa")
+    for key in get_all_keys():
+        load(data_path(key, "signals_daily"), key)

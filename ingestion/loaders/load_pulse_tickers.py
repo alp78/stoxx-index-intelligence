@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
+from config import INDICES, data_path, get_all_keys
 
 
 def load(json_file, index_name):
@@ -41,7 +42,5 @@ def load(json_file, index_name):
 
 
 if __name__ == "__main__":
-    pulse_dir = Path(__file__).resolve().parent.parent.parent / "data" / "pulse"
-
-    load(pulse_dir / "eurostoxx50_tickers.json", "euro_stoxx")
-    load(pulse_dir / "stoxxusa50_tickers.json", "stoxx_usa")
+    for key in get_all_keys():
+        load(data_path(key, "tickers"), key)

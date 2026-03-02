@@ -1,8 +1,12 @@
 import json
+import sys
 import yfinance as yf
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import INDICES, data_path
 
 def format_epoch(epoch_val):
     """Safely converts Unix timestamps to YYYY-MM-DD, bypassing Windows OS limits."""
@@ -86,20 +90,9 @@ def fetch_quarterly_fundamentals(reg_file, output_file):
     print(f"\nSuccess: Saved {len(all_fundamentals)} records to {output_file}")
 
 if __name__ == "__main__":
-    # Resolve absolute paths based on this script's location
-    # Assumes script is in /ingestion/fetchers, going up two levels to /data
-    script_dir = Path(__file__).resolve().parent
-    stage_dir = script_dir.parent.parent / "data" / "stage"
-    signals_dir = script_dir.parent.parent / "data" / "signals"
-    
-    # Process Euro Stoxx
-    fetch_quarterly_fundamentals(
-        reg_file=stage_dir / "eurostoxx50_dim.json",
-        output_file=signals_dir / "eurostoxx50_signals_quarterly.json"
-    )
-
-    # Process USA Top 50
-    fetch_quarterly_fundamentals(
-        reg_file=stage_dir / "stoxxusa50_dim.json",
-        output_file=signals_dir / "stoxxusa50_signals_quarterly.json"
-    )
+    for idx in INDICES:
+        key = idx["key"]
+        fetch_quarterly_fundamentals(
+            reg_file=data_path(key, "dim"),
+            output_file=data_path(key, "signals_quarterly")
+        )

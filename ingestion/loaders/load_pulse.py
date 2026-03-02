@@ -1,4 +1,4 @@
-"""Loads pulse JSON into bronze.pulse. Strategy: append."""
+"""Loads pulse JSON into bronze.pulse. Idempotent: skips existing rows."""
 
 import json
 import sys
@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
+from config import INDICES, data_path, get_all_keys
 
 
 def load(json_file, index_name):
@@ -17,9 +18,21 @@ def load(json_file, index_name):
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Load existing keys for this index
+    cursor.execute(
+        "SELECT symbol, timestamp FROM bronze.pulse WHERE _index = ?",
+        index_name
+    )
+    existing = {(r[0], str(r[1])) for r in cursor.fetchall()}
+
+    inserted = 0
     for rec in records:
         symbol = rec.get("symbol")
         if not symbol:
+            continue
+
+        ts = rec.get("timestamp")
+        if (symbol, ts) in existing:
             continue
 
         p = rec.get("price", {})
@@ -35,22 +48,21 @@ def load(json_file, index_name):
                 current_volume, average_volume_10day, volume_ratio
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            index_name, symbol, rec.get("timestamp"),
+            index_name, symbol, ts,
             p.get("current"), p.get("open"), p.get("dayHigh"), p.get("dayLow"),
             p.get("previousClose"), p.get("change"), p.get("changePct"),
             b.get("bid"), b.get("ask"), b.get("bidSize"), b.get("askSize"),
             b.get("spread"),
             v.get("current"), v.get("average10Day"), v.get("ratio")
         )
+        inserted += 1
 
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"Done: {len(records)} records appended for {index_name}")
+    print(f"Done: {inserted} new / {len(records)} total for {index_name}")
 
 
 if __name__ == "__main__":
-    pulse_dir = Path(__file__).resolve().parent.parent.parent / "data" / "pulse"
-
-    load(pulse_dir / "eurostoxx50_pulse.json", "euro_stoxx")
-    load(pulse_dir / "stoxxusa50_pulse.json", "stoxx_usa")
+    for key in get_all_keys():
+        load(data_path(key, "pulse"), key)

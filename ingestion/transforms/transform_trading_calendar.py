@@ -10,18 +10,28 @@ import exchange_calendars as xcals
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
 
-# yfinance exchange code -> exchange_calendars code
-EXCHANGE_MAP = {
-    "AMS": "XAMS",
-    "BRU": "XBRU",
-    "GER": "XFRA",
-    "HEL": "XHEL",
-    "MCE": "XMAD",
-    "MIL": "XMIL",
-    "PAR": "XPAR",
-    "NMS": "XNYS",
-    "NYQ": "XNYS",
+# Non-obvious yfinance -> exchange_calendars mappings.
+# Most exchanges follow the X{code} pattern (e.g. AMS -> XAMS).
+# Only exceptions need to be listed here.
+_EXCEPTIONS = {
+    "GER": "XFRA",   # Germany -> Frankfurt
+    "MCE": "XMAD",   # Madrid
+    "NMS": "XNYS",   # NASDAQ -> NYSE calendar
+    "NYQ": "XNYS",   # NYSE
+    "JPX": "XTKS",   # Japan Exchange -> Tokyo
 }
+
+_VALID_CALENDARS = set(xcals.get_calendar_names())
+
+
+def _resolve_xc_code(yf_code):
+    """Auto-resolve yfinance exchange code to exchange_calendars code."""
+    if yf_code in _EXCEPTIONS:
+        return _EXCEPTIONS[yf_code]
+    candidate = f"X{yf_code}"
+    if candidate in _VALID_CALENDARS:
+        return candidate
+    return None
 
 # Range: from earliest price_data_start to 5 years from now
 START_FALLBACK = "2015-01-01"
@@ -54,9 +64,9 @@ def run():
     total = 0
 
     for yf_code in used_exchanges:
-        xc_code = EXCHANGE_MAP.get(yf_code)
+        xc_code = _resolve_xc_code(yf_code)
         if not xc_code:
-            print(f"  Warning: No mapping for exchange '{yf_code}', skipping")
+            print(f"  Warning: Cannot resolve exchange '{yf_code}' (tried X{yf_code}), skipping")
             continue
 
         print(f"  {yf_code} -> {xc_code}...", end=" ")

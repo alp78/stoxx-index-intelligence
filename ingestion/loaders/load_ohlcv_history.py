@@ -6,16 +6,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
-
-# Map index name to bronze table
-TABLES = {
-    "euro_stoxx": "bronze.eurostoxx50_ohlcv",
-    "stoxx_usa": "bronze.stoxxusa50_ohlcv"
-}
+from config import INDICES, data_path, bronze_ohlcv
 
 
-def load(json_file, index_name):
-    table = TABLES[index_name]
+def load(json_file, table):
     print(f"\n--- Loading OHLCV: {table} ---")
 
     with open(json_file, 'r', encoding='utf-8') as f:
@@ -68,7 +62,6 @@ def load(json_file, index_name):
 
 
 if __name__ == "__main__":
-    history_dir = Path(__file__).resolve().parent.parent.parent / "data" / "history"
-
-    load(history_dir / "eurostoxx50_ohlcv_history.json", "euro_stoxx")
-    load(history_dir / "stoxxusa50_ohlcv_history.json", "stoxx_usa")
+    for idx in INDICES:
+        key = idx["key"]
+        load(data_path(key, "ohlcv_history"), bronze_ohlcv(key))

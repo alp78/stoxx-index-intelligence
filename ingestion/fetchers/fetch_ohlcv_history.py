@@ -1,8 +1,12 @@
 import json
+import sys
 import yfinance as yf
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import INDICES, data_path
 
 def fetch_time_series_history(reg_file, output_file):
     print(f"\n--- Processing History for {reg_file} ---")
@@ -72,20 +76,9 @@ def fetch_time_series_history(reg_file, output_file):
     print(f"\nSuccess: Saved {len(all_history)} daily price rows to {output_file}")
 
 if __name__ == "__main__":
-    # Resolve absolute paths based on this script's location
-    # Assumes script is in /ingestion/fetchers, going up two levels to /data
-    script_dir = Path(__file__).resolve().parent
-    stage_dir = script_dir.parent.parent / "data" / "stage"
-    history_dir = script_dir.parent.parent / "data" / "history"
-    
-    # Process Euro Index
-    fetch_time_series_history(
-        reg_file=stage_dir / "eurostoxx50_dim.json",
-        output_file=history_dir / "eurostoxx50_ohlcv_history.json"
-    )
-
-    # Process USA Index
-    fetch_time_series_history(
-        reg_file=stage_dir / "stoxxusa50_dim.json",
-        output_file=history_dir / "stoxxusa50_ohlcv_history.json"
-    )
+    for idx in INDICES:
+        key = idx["key"]
+        fetch_time_series_history(
+            reg_file=data_path(key, "dim"),
+            output_file=data_path(key, "ohlcv_history")
+        )

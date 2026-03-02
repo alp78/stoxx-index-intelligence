@@ -1,4 +1,4 @@
-"""Loads quarterly signals JSON into bronze.signals_quarterly. Strategy: append."""
+"""Loads quarterly signals JSON into bronze.signals_quarterly. Idempotent: skips existing rows."""
 
 import json
 import sys
@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
+from config import INDICES, data_path, get_all_keys
 
 
 def load(json_file, index_name):
@@ -17,9 +18,21 @@ def load(json_file, index_name):
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Load existing keys for this index
+    cursor.execute(
+        "SELECT symbol, as_of_date FROM bronze.signals_quarterly WHERE _index = ?",
+        index_name
+    )
+    existing = {(r[0], str(r[1])) for r in cursor.fetchall()}
+
+    inserted = 0
     for rec in records:
         symbol = rec.get("symbol")
         if not symbol:
+            continue
+
+        as_of = rec.get("as_of_date")
+        if (symbol, as_of) in existing:
             continue
 
         qm = rec.get("quality_metrics", {})
@@ -39,7 +52,7 @@ def load(json_file, index_name):
                 compensation_risk, shareholder_rights_risk, esg_populated
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            index_name, symbol, rec.get("as_of_date"),
+            index_name, symbol, as_of,
             qm.get("grossMargins"), qm.get("operatingMargins"),
             qm.get("returnOnEquity"), qm.get("revenueGrowth"),
             qm.get("earningsGrowth"),
@@ -52,15 +65,14 @@ def load(json_file, index_name):
             gov.get("shareHolderRightsRisk"),
             1 if gov.get("esgPopulated") else 0
         )
+        inserted += 1
 
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"Done: {len(records)} records appended for {index_name}")
+    print(f"Done: {inserted} new / {len(records)} total for {index_name}")
 
 
 if __name__ == "__main__":
-    signals_dir = Path(__file__).resolve().parent.parent.parent / "data" / "stage"
-
-    load(signals_dir / "eurostoxx50_signals_quarterly.json", "euro_stoxx")
-    load(signals_dir / "stoxxusa50_signals_quarterly.json", "stoxx_usa")
+    for key in get_all_keys():
+        load(data_path(key, "signals_quarterly"), key)

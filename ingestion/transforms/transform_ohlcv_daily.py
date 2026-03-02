@@ -7,34 +7,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db import get_connection
-
-INDICES = {
-    "euro_stoxx": {
-        "bronze": "bronze.eurostoxx50_ohlcv",
-        "silver": "silver.eurostoxx50_ohlcv",
-    },
-    "stoxx_usa": {
-        "bronze": "bronze.stoxxusa50_ohlcv",
-        "silver": "silver.stoxxusa50_ohlcv",
-    },
-}
+from config import get_all_keys, bronze_ohlcv, silver_ohlcv
 
 
 def run():
     conn = get_connection()
     cursor = conn.cursor()
 
-    for index_name, cfg in INDICES.items():
-        print(f"\n--- {index_name} ---")
-        _transform_index(cursor, conn, index_name, cfg)
+    for key in get_all_keys():
+        print(f"\n--- {key} ---")
+        _transform_index(cursor, conn, key, bronze_ohlcv(key), silver_ohlcv(key))
 
     cursor.close()
     conn.close()
 
 
-def _transform_index(cursor, conn, index_name, cfg):
-    bronze_table = cfg["bronze"]
-    silver_table = cfg["silver"]
+def _transform_index(cursor, conn, index_name, bronze_table, silver_table):
 
     # Get symbol -> exchange mapping from bronze.index_dim
     cursor.execute("""

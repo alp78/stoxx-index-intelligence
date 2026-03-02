@@ -1,8 +1,12 @@
 import json
+import sys
 import yfinance as yf
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import INDICES, data_path
 
 def discover_pulse_tickers(reg_file, output_file):
     """Ranks registered stocks by activity score to find the 10 most dynamic.
@@ -164,32 +168,20 @@ def fetch_pulse(ticker_file, output_file, index_name):
 
 
 if __name__ == "__main__":
-    import sys
-
-    # Assumes script is in /ingestion/fetchers, going up two levels to /data
-    script_dir = Path(__file__).resolve().parent
-    stage_dir = script_dir.parent.parent / "data" / "stage"
-    pulse_dir = script_dir.parent.parent / "data" / "pulse"
-
     if "--discover" in sys.argv:
         # Run hourly: ranks all 50 per index by activity, saves top 10 each
-        discover_pulse_tickers(
-            reg_file=stage_dir / "eurostoxx50_dim.json",
-            output_file=pulse_dir / "eurostoxx50_tickers.json"
-        )
-        discover_pulse_tickers(
-            reg_file=stage_dir / "stoxxusa50_dim.json",
-            output_file=pulse_dir / "stoxxusa50_tickers.json"
-        )
+        for idx in INDICES:
+            key = idx["key"]
+            discover_pulse_tickers(
+                reg_file=data_path(key, "dim"),
+                output_file=data_path(key, "tickers")
+            )
     else:
-        # Run every minute: fetches pulse for the pre-discovered 20 tickers
-        fetch_pulse(
-            ticker_file=pulse_dir / "eurostoxx50_tickers.json",
-            output_file=pulse_dir / "eurostoxx50_pulse.json",
-            index_name="EURO STOXX 10"
-        )
-        fetch_pulse(
-            ticker_file=pulse_dir / "stoxxusa50_tickers.json",
-            output_file=pulse_dir / "stoxxusa50_pulse.json",
-            index_name="STOXX USA 10"
-        )
+        # Run every minute: fetches pulse for the pre-discovered tickers
+        for idx in INDICES:
+            key = idx["key"]
+            fetch_pulse(
+                ticker_file=data_path(key, "tickers"),
+                output_file=data_path(key, "pulse"),
+                index_name=idx["name"]
+            )

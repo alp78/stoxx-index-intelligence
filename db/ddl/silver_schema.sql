@@ -1,6 +1,7 @@
 -- ============================================================================
 -- Silver schema: Create silver layer
 -- Silver = cleaned, deduplicated, gap-filled (SCD2 on dimensions only)
+-- Fully idempotent: safe to run multiple times.
 -- ============================================================================
 
 USE ESG;
@@ -16,6 +17,8 @@ GO
 -- ============================================================================
 -- 1. Index Dimensions (SCD Type 2)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'silver' AND t.name = 'index_dim')
 CREATE TABLE silver.index_dim (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
     _index                  VARCHAR(20)     NOT NULL,
@@ -48,6 +51,7 @@ CREATE TABLE silver.index_dim (
 );
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_silver_index_dim_current')
 CREATE INDEX IX_silver_index_dim_current
     ON silver.index_dim (_index, symbol) WHERE is_current = 1;
 GO
@@ -55,6 +59,8 @@ GO
 -- ============================================================================
 -- 2. Daily Signals (deduplicated, one row per symbol per day)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'silver' AND t.name = 'signals_daily')
 CREATE TABLE silver.signals_daily (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
     _index                  VARCHAR(20)     NOT NULL,
@@ -79,6 +85,7 @@ CREATE TABLE silver.signals_daily (
 );
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_silver_signals_daily_symbol_date')
 CREATE UNIQUE INDEX IX_silver_signals_daily_symbol_date
     ON silver.signals_daily (_index, symbol, signal_date);
 GO
@@ -86,6 +93,8 @@ GO
 -- ============================================================================
 -- 3. Quarterly Signals (deduplicated, one row per symbol per quarter)
 -- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'silver' AND t.name = 'signals_quarterly')
 CREATE TABLE silver.signals_quarterly (
     id                      INT IDENTITY(1,1) PRIMARY KEY,
     _index                  VARCHAR(20)     NOT NULL,
@@ -113,55 +122,15 @@ CREATE TABLE silver.signals_quarterly (
 );
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_silver_signals_quarterly_symbol_date')
 CREATE UNIQUE INDEX IX_silver_signals_quarterly_symbol_date
     ON silver.signals_quarterly (_index, symbol, as_of_date);
 GO
 
 -- ============================================================================
--- 4. OHLCV - Euro Stoxx 50 (gap-filled from bronze + trading calendar)
+-- 4. Per-index OHLCV tables are created dynamically by setup_index.py
+--    from ingestion/indices.json. Do NOT add them here.
 -- ============================================================================
-CREATE TABLE silver.eurostoxx50_ohlcv (
-    id                      INT IDENTITY(1,1) PRIMARY KEY,
-    symbol                  VARCHAR(20)     NOT NULL,
-    date                    DATE            NOT NULL,
-    [open]                  FLOAT,
-    high                    FLOAT,
-    low                     FLOAT,
-    [close]                 FLOAT,
-    adj_close               FLOAT,
-    volume                  BIGINT,
-    dividends               FLOAT,
-    stock_splits            FLOAT,
-    is_filled               BIT             NOT NULL DEFAULT 0     -- 1 = forward-filled, not actual data
-);
-GO
-
-CREATE UNIQUE INDEX IX_silver_eurostoxx50_ohlcv_symbol_date
-    ON silver.eurostoxx50_ohlcv (symbol, date);
-GO
-
--- ============================================================================
--- 5. OHLCV - Stoxx USA 50 (gap-filled from bronze + trading calendar)
--- ============================================================================
-CREATE TABLE silver.stoxxusa50_ohlcv (
-    id                      INT IDENTITY(1,1) PRIMARY KEY,
-    symbol                  VARCHAR(20)     NOT NULL,
-    date                    DATE            NOT NULL,
-    [open]                  FLOAT,
-    high                    FLOAT,
-    low                     FLOAT,
-    [close]                 FLOAT,
-    adj_close               FLOAT,
-    volume                  BIGINT,
-    dividends               FLOAT,
-    stock_splits            FLOAT,
-    is_filled               BIT             NOT NULL DEFAULT 0
-);
-GO
-
-CREATE UNIQUE INDEX IX_silver_stoxxusa50_ohlcv_symbol_date
-    ON silver.stoxxusa50_ohlcv (symbol, date);
-GO
 
 PRINT 'Silver layer created successfully.';
 GO
