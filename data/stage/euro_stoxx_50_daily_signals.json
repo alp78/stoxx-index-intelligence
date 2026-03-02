@@ -1,0 +1,1325 @@
+[
+    {
+        "symbol": "ASML.AS",
+        "timestamp": "2026-02-28 19:09:58",
+        "price_metrics": {
+            "currentPrice": 1233.4,
+            "forwardPE": 33.041214,
+            "priceToBook": 24.238493,
+            "evToEbitda": 38.05,
+            "dividendYield": 0.88,
+            "marketCap": 478741364736,
+            "beta": 1.462
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.7867594,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 1120.858,
+            "twoHundredDayAverage": 848.1425,
+            "distFrom52WeekHigh": 0.06048141377209004
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 1450.0,
+            "recommendationMean": 1.52273,
+            "upsidePotential": 0.17561212907410395
+        }
+    },
+    {
+        "symbol": "MC.PA",
+        "timestamp": "2026-02-28 19:09:58",
+        "price_metrics": {
+            "currentPrice": 544.1,
+            "forwardPE": 20.218002,
+            "priceToBook": 4.0029426,
+            "evToEbitda": 14.321,
+            "dividendYield": 2.39,
+            "marketCap": 270026653696,
+            "beta": 0.864
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.21236247,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 583.938,
+            "twoHundredDayAverage": 543.2828,
+            "distFrom52WeekHigh": 0.2237123698102439
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 640.0,
+            "recommendationMean": 2.14815,
+            "upsidePotential": 0.17625436500643255
+        }
+    },
+    {
+        "symbol": "RMS.PA",
+        "timestamp": "2026-02-28 19:09:59",
+        "price_metrics": {
+            "currentPrice": 2049.0,
+            "forwardPE": 38.24655,
+            "priceToBook": 11.403352,
+            "evToEbitda": 27.341,
+            "dividendYield": 0.85,
+            "marketCap": 214809608192,
+            "beta": 0.957
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.25082266,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 2106.64,
+            "twoHundredDayAverage": 2169.65,
+            "distFrom52WeekHigh": 0.257070340826686
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 2355.0,
+            "recommendationMean": 2.18182,
+            "upsidePotential": 0.14934114202049775
+        }
+    },
+    {
+        "symbol": "OR.PA",
+        "timestamp": "2026-02-28 19:09:59",
+        "price_metrics": {
+            "currentPrice": 397.4,
+            "forwardPE": 27.07525,
+            "priceToBook": 6.068843,
+            "evToEbitda": 20.995,
+            "dividendYield": 1.81,
+            "marketCap": 212125384704,
+            "beta": 0.894
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.106809616,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 382.838,
+            "twoHundredDayAverage": 376.91776,
+            "distFrom52WeekHigh": 0.026815232031345726
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 410.0,
+            "recommendationMean": 2.23077,
+            "upsidePotential": 0.031706089582284935
+        }
+    },
+    {
+        "symbol": "SAP.DE",
+        "timestamp": "2026-02-28 19:10:00",
+        "price_metrics": {
+            "currentPrice": 170.96,
+            "forwardPE": 20.05189,
+            "priceToBook": 4.4542875,
+            "evToEbitda": 16.892,
+            "dividendYield": 1.46,
+            "marketCap": 199100760064,
+            "beta": 0.706
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.37042904,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 189.2294,
+            "twoHundredDayAverage": 224.42935,
+            "distFrom52WeekHigh": 0.3774217042971595
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 256.5,
+            "recommendationMean": 1.51724,
+            "upsidePotential": 0.5003509592887225
+        }
+    },
+    {
+        "symbol": "SIE.DE",
+        "timestamp": "2026-02-28 19:10:00",
+        "price_metrics": {
+            "currentPrice": 247.4,
+            "forwardPE": 19.394657,
+            "priceToBook": 2.9474134,
+            "evToEbitda": 20.078,
+            "dividendYield": 2.16,
+            "marketCap": 193767997440,
+            "beta": 1.177
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.094932556,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 248.846,
+            "twoHundredDayAverage": 233.907,
+            "distFrom52WeekHigh": 0.1028105167724388
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 277.0,
+            "recommendationMean": 1.95833,
+            "upsidePotential": 0.11964430072756671
+        }
+    },
+    {
+        "symbol": "ITX.MC",
+        "timestamp": "2026-02-28 19:10:01",
+        "price_metrics": {
+            "currentPrice": 56.82,
+            "forwardPE": 26.196648,
+            "priceToBook": 9.421323,
+            "evToEbitda": 18.731,
+            "dividendYield": 1.99,
+            "marketCap": 177071964160,
+            "beta": 0.909
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.110633254,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 56.3332,
+            "twoHundredDayAverage": 48.7396,
+            "distFrom52WeekHigh": 0.025051475634866205
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 59.25,
+            "recommendationMean": 1.875,
+            "upsidePotential": 0.042766631467793026
+        }
+    },
+    {
+        "symbol": "DTE.DE",
+        "timestamp": "2026-02-28 19:10:02",
+        "price_metrics": {
+            "currentPrice": 34.09,
+            "forwardPE": 13.788334,
+            "priceToBook": 2.7204533,
+            "evToEbitda": 8.025,
+            "dividendYield": 2.73,
+            "marketCap": 169721004032,
+            "beta": 0.283
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.049093425,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 29.2282,
+            "twoHundredDayAverage": 29.67765,
+            "distFrom52WeekHigh": 0.05068226120857677
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 37.0,
+            "recommendationMean": 1.33333,
+            "upsidePotential": 0.0853622763273687
+        }
+    },
+    {
+        "symbol": "SAN.MC",
+        "timestamp": "2026-02-28 19:10:02",
+        "price_metrics": {
+            "currentPrice": 10.79,
+            "forwardPE": 9.163094,
+            "priceToBook": 1.5816476,
+            "evToEbitda": null,
+            "dividendYield": 2.32,
+            "marketCap": 158483447808,
+            "beta": 0.941
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.7135143,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 10.467,
+            "twoHundredDayAverage": 8.73067,
+            "distFrom52WeekHigh": 0.04174067495559508
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 12.155,
+            "recommendationMean": 1.7,
+            "upsidePotential": 0.12650602409638556
+        }
+    },
+    {
+        "symbol": "SU.PA",
+        "timestamp": "2026-02-28 19:10:03",
+        "price_metrics": {
+            "currentPrice": 276.7,
+            "forwardPE": 24.148897,
+            "priceToBook": 6.428605,
+            "evToEbitda": 21.305,
+            "dividendYield": 1.52,
+            "marketCap": 155567079424,
+            "beta": 0.998
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.20487702,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 244.991,
+            "twoHundredDayAverage": 233.651,
+            "distFrom52WeekHigh": 0.011962149616140061
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 289.5,
+            "recommendationMean": 1.47826,
+            "upsidePotential": 0.046259486808818195
+        }
+    },
+    {
+        "symbol": "ALV.DE",
+        "timestamp": "2026-02-28 19:10:03",
+        "price_metrics": {
+            "currentPrice": 382.2,
+            "forwardPE": 11.271999,
+            "priceToBook": 2.5669959,
+            "evToEbitda": 3.307,
+            "dividendYield": 4.03,
+            "marketCap": 147357728768,
+            "beta": 0.661
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.123126626,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 379.958,
+            "twoHundredDayAverage": 362.262,
+            "distFrom52WeekHigh": 0.034848484848484906
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 394.33,
+            "recommendationMean": 2.44444,
+            "upsidePotential": 0.03173731030873883
+        }
+    },
+    {
+        "symbol": "AIR.PA",
+        "timestamp": "2026-02-28 19:10:04",
+        "price_metrics": {
+            "currentPrice": 184.24,
+            "forwardPE": 20.976696,
+            "priceToBook": 5.556259,
+            "evToEbitda": 17.794,
+            "dividendYield": 1.74,
+            "marketCap": 145435295744,
+            "beta": 0.867
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.05654323,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 198.857,
+            "twoHundredDayAverage": 190.52135,
+            "distFrom52WeekHigh": 0.16746497966561225
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 225.0,
+            "recommendationMean": 2.04545,
+            "upsidePotential": 0.22123317412071208
+        }
+    },
+    {
+        "symbol": "TTE.PA",
+        "timestamp": "2026-02-28 19:10:04",
+        "price_metrics": {
+            "currentPrice": 67.28,
+            "forwardPE": 10.601999,
+            "priceToBook": 1.4810861,
+            "evToEbitda": 5.435,
+            "dividendYield": 5.05,
+            "marketCap": 142895988736,
+            "beta": 0.253
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.1566099,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 59.7656,
+            "twoHundredDayAverage": 54.968575,
+            "distFrom52WeekHigh": 0.009422850412249661
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 67.48148,
+            "recommendationMean": 2.09091,
+            "upsidePotential": 0.0029946492271106795
+        }
+    },
+    {
+        "symbol": "ENR.DE",
+        "timestamp": "2026-02-28 19:10:05",
+        "price_metrics": {
+            "currentPrice": 166.45,
+            "forwardPE": 30.302479,
+            "priceToBook": 12.644333,
+            "evToEbitda": 41.766,
+            "dividendYield": 0.42,
+            "marketCap": 142372044800,
+            "beta": 1.807
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 2.0012622,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 141.584,
+            "twoHundredDayAverage": 109.6612,
+            "distFrom52WeekHigh": 0.030294203320710866
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 175.0,
+            "recommendationMean": 1.8,
+            "upsidePotential": 0.05136677680985291
+        }
+    },
+    {
+        "symbol": "SAF.PA",
+        "timestamp": "2026-02-28 19:10:05",
+        "price_metrics": {
+            "currentPrice": 340.0,
+            "forwardPE": 27.458815,
+            "priceToBook": 9.552709,
+            "evToEbitda": 23.853,
+            "dividendYield": 0.99,
+            "marketCap": 141612957696,
+            "beta": 0.894
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.31834042,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 315.866,
+            "twoHundredDayAverage": 293.508,
+            "distFrom52WeekHigh": 0.030786773090079822
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 350.0,
+            "recommendationMean": 1.85714,
+            "upsidePotential": 0.02941176470588225
+        }
+    },
+    {
+        "symbol": "IBE.MC",
+        "timestamp": "2026-02-28 19:10:06",
+        "price_metrics": {
+            "currentPrice": 20.05,
+            "forwardPE": 18.827705,
+            "priceToBook": 2.6754737,
+            "evToEbitda": 12.794,
+            "dividendYield": 3.3,
+            "marketCap": 135494795264,
+            "beta": 0.645
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.4550073,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 19.0047,
+            "twoHundredDayAverage": 17.1325,
+            "distFrom52WeekHigh": 0.01619234543670256
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 19.1,
+            "recommendationMean": 2.6087,
+            "upsidePotential": -0.04738154613466328
+        }
+    },
+    {
+        "symbol": "ABI.BR",
+        "timestamp": "2026-02-28 19:10:06",
+        "price_metrics": {
+            "currentPrice": 68.82,
+            "forwardPE": 16.648422,
+            "priceToBook": 1.8151746,
+            "evToEbitda": 10.611,
+            "dividendYield": 1.67,
+            "marketCap": 134017728512,
+            "beta": 0.706
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.17842472,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 60.4484,
+            "twoHundredDayAverage": 56.37015,
+            "distFrom52WeekHigh": 0.0
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 74.4656,
+            "recommendationMean": 1.69231,
+            "upsidePotential": 0.0820342923568731
+        }
+    },
+    {
+        "symbol": "BBVA.MC",
+        "timestamp": "2026-02-28 19:10:07",
+        "price_metrics": {
+            "currentPrice": 19.75,
+            "forwardPE": 8.949124,
+            "priceToBook": 1.9597142,
+            "evToEbitda": null,
+            "dividendYield": 4.66,
+            "marketCap": 112356614144,
+            "beta": 0.968
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.52745557,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 20.4296,
+            "twoHundredDayAverage": 16.864574,
+            "distFrom52WeekHigh": 0.11553963278101198
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 21.125,
+            "recommendationMean": 2.19048,
+            "upsidePotential": 0.06962025316455689
+        }
+    },
+    {
+        "symbol": "UCG.MI",
+        "timestamp": "2026-02-28 19:10:07",
+        "price_metrics": {
+            "currentPrice": 72.41,
+            "forwardPE": 8.86807,
+            "priceToBook": 1.6076465,
+            "evToEbitda": null,
+            "dividendYield": 4.35,
+            "marketCap": 108365201408,
+            "beta": 1.042
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.39330387,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 72.4058,
+            "twoHundredDayAverage": 65.1175,
+            "distFrom52WeekHigh": 0.09249279358315587
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 86.78,
+            "recommendationMean": 2.05556,
+            "upsidePotential": 0.19845325231321653
+        }
+    },
+    {
+        "symbol": "BNP.PA",
+        "timestamp": "2026-02-28 19:10:08",
+        "price_metrics": {
+            "currentPrice": 95.5,
+            "forwardPE": 7.446144,
+            "priceToBook": 0.9143656,
+            "evToEbitda": null,
+            "dividendYield": 7.73,
+            "marketCap": 106652942336,
+            "beta": 0.992
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.2901919,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 88.1246,
+            "twoHundredDayAverage": 78.88915,
+            "distFrom52WeekHigh": 0.01900359527478168
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 103.0,
+            "recommendationMean": 1.84211,
+            "upsidePotential": 0.07853403141361248
+        }
+    },
+    {
+        "symbol": "EL.PA",
+        "timestamp": "2026-02-28 19:10:08",
+        "price_metrics": {
+            "currentPrice": 225.2,
+            "forwardPE": 25.967466,
+            "priceToBook": 2.6822615,
+            "evToEbitda": 17.591,
+            "dividendYield": 1.75,
+            "marketCap": 104311226368,
+            "beta": 0.608
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.21587741,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 260.01,
+            "twoHundredDayAverage": 268.637,
+            "distFrom52WeekHigh": 0.304508956145769
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 328.0,
+            "recommendationMean": 1.63636,
+            "upsidePotential": 0.4564831261101243
+        }
+    },
+    {
+        "symbol": "AI.PA",
+        "timestamp": "2026-02-28 19:10:09",
+        "price_metrics": {
+            "currentPrice": 178.24,
+            "forwardPE": 22.54228,
+            "priceToBook": 3.9233124,
+            "evToEbitda": 14.524,
+            "dividendYield": 2.08,
+            "marketCap": 103012483072,
+            "beta": 0.702
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.008014262,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 163.1496,
+            "twoHundredDayAverage": 171.0069,
+            "distFrom52WeekHigh": 0.04745617785378364
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 200.0,
+            "recommendationMean": 1.71429,
+            "upsidePotential": 0.12208258527827653
+        }
+    },
+    {
+        "symbol": "ENEL.MI",
+        "timestamp": "2026-02-28 19:10:09",
+        "price_metrics": {
+            "currentPrice": 10.194,
+            "forwardPE": 14.199354,
+            "priceToBook": 3.793822,
+            "evToEbitda": 9.339,
+            "dividendYield": 4.76,
+            "marketCap": 102259957760,
+            "beta": 0.901
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.45941305,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 9.24346,
+            "twoHundredDayAverage": 8.47692,
+            "distFrom52WeekHigh": 0.01125121241513094
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 9.7,
+            "recommendationMean": 2.3913,
+            "upsidePotential": -0.048459878359819686
+        }
+    },
+    {
+        "symbol": "ISP.MI",
+        "timestamp": "2026-02-28 19:10:10",
+        "price_metrics": {
+            "currentPrice": 5.835,
+            "forwardPE": 9.364167,
+            "priceToBook": 1.5371444,
+            "evToEbitda": null,
+            "dividendYield": 6.51,
+            "marketCap": 101448843264,
+            "beta": 0.805
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.21436,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 5.89488,
+            "twoHundredDayAverage": 5.46577,
+            "distFrom52WeekHigh": 0.052605942523136884
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 6.8,
+            "recommendationMean": 2.0,
+            "upsidePotential": 0.16538131962296476
+        }
+    },
+    {
+        "symbol": "SAN.PA",
+        "timestamp": "2026-02-28 19:10:10",
+        "price_metrics": {
+            "currentPrice": 82.2,
+            "forwardPE": 9.222195,
+            "priceToBook": 1.3907688,
+            "evToEbitda": 8.882,
+            "dividendYield": 4.77,
+            "marketCap": 99259736064,
+            "beta": 0.368
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.23662704,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 80.6858,
+            "twoHundredDayAverage": 83.55785,
+            "distFrom52WeekHigh": 0.2586580086580086
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 100.0,
+            "recommendationMean": 2.0,
+            "upsidePotential": 0.2165450121654502
+        }
+    },
+    {
+        "symbol": "PRX.AS",
+        "timestamp": "2026-02-28 19:10:11",
+        "price_metrics": {
+            "currentPrice": 43.51,
+            "forwardPE": 11.308024,
+            "priceToBook": 2.0705495,
+            "evToEbitda": 223.048,
+            "dividendYield": 0.46,
+            "marketCap": 95141855232,
+            "beta": 0.791
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.031531572,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 49.3103,
+            "twoHundredDayAverage": 52.28155,
+            "distFrom52WeekHigh": 0.31951829840475443
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 70.0,
+            "recommendationMean": 1.63158,
+            "upsidePotential": 0.6088255573431396
+        }
+    },
+    {
+        "symbol": "CS.PA",
+        "timestamp": "2026-02-28 19:10:11",
+        "price_metrics": {
+            "currentPrice": 41.46,
+            "forwardPE": 9.3579235,
+            "priceToBook": 1.9442881,
+            "evToEbitda": null,
+            "dividendYield": 5.26,
+            "marketCap": 86677176320,
+            "beta": 0.603
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.086762786,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 39.54,
+            "twoHundredDayAverage": 40.22115,
+            "distFrom52WeekHigh": 0.049300619124054035
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 46.82,
+            "recommendationMean": 1.73684,
+            "upsidePotential": 0.12928123492522903
+        }
+    },
+    {
+        "symbol": "DG.PA",
+        "timestamp": "2026-02-28 19:10:12",
+        "price_metrics": {
+            "currentPrice": 140.75,
+            "forwardPE": 13.79303,
+            "priceToBook": 2.5446098,
+            "evToEbitda": 8.412,
+            "dividendYield": 3.55,
+            "marketCap": 78109089792,
+            "beta": 0.738
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.26063597,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 125.4,
+            "twoHundredDayAverage": 122.352,
+            "distFrom52WeekHigh": 0.016765630457562075
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 140.0,
+            "recommendationMean": 2.04762,
+            "upsidePotential": -0.005328596802841923
+        }
+    },
+    {
+        "symbol": "RHM.DE",
+        "timestamp": "2026-02-28 19:10:13",
+        "price_metrics": {
+            "currentPrice": 1663.5,
+            "forwardPE": 42.25954,
+            "priceToBook": 16.203815,
+            "evToEbitda": 40.697,
+            "dividendYield": 0.49,
+            "marketCap": 76120973312,
+            "beta": 0.396
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.4534731,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 1714.41,
+            "twoHundredDayAverage": 1733.9125,
+            "distFrom52WeekHigh": 0.17156374501992033
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 2115.0,
+            "recommendationMean": 1.7,
+            "upsidePotential": 0.2714156898106401
+        }
+    },
+    {
+        "symbol": "MUV2.DE",
+        "timestamp": "2026-02-28 19:10:13",
+        "price_metrics": {
+            "currentPrice": 555.6,
+            "forwardPE": 10.391034,
+            "priceToBook": 2.229785,
+            "evToEbitda": null,
+            "dividendYield": 3.65,
+            "marketCap": 73009397760,
+            "beta": 0.366
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.010683775,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 534.196,
+            "twoHundredDayAverage": 547.78,
+            "distFrom52WeekHigh": 0.09775901266645004
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 593.1,
+            "recommendationMean": 2.88235,
+            "upsidePotential": 0.06749460043196542
+        }
+    },
+    {
+        "symbol": "INGA.AS",
+        "timestamp": "2026-02-28 19:10:14",
+        "price_metrics": {
+            "currentPrice": 24.63,
+            "forwardPE": 9.151439,
+            "priceToBook": 1.4384162,
+            "evToEbitda": null,
+            "dividendYield": 4.41,
+            "marketCap": 71289479168,
+            "beta": 0.886
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.38823128,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 24.6509,
+            "twoHundredDayAverage": 21.718195,
+            "distFrom52WeekHigh": 0.0686330119115145
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 28.0,
+            "recommendationMean": 2.10526,
+            "upsidePotential": 0.1368250101502233
+        }
+    },
+    {
+        "symbol": "IFX.DE",
+        "timestamp": "2026-02-28 19:10:14",
+        "price_metrics": {
+            "currentPrice": 45.825,
+            "forwardPE": 20.572021,
+            "priceToBook": 3.5438097,
+            "evToEbitda": 16.007,
+            "dividendYield": 0.76,
+            "marketCap": 59670556672,
+            "beta": 1.673
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.2755741,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 41.6684,
+            "twoHundredDayAverage": 36.57605,
+            "distFrom52WeekHigh": 0.049865229110512055
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 49.5,
+            "recommendationMean": 1.375,
+            "upsidePotential": 0.0801963993453354
+        }
+    },
+    {
+        "symbol": "ENI.MI",
+        "timestamp": "2026-02-28 19:10:15",
+        "price_metrics": {
+            "currentPrice": 19.656,
+            "forwardPE": 10.825696,
+            "priceToBook": 1.2019813,
+            "evToEbitda": 6.234,
+            "dividendYield": 5.37,
+            "marketCap": 57878360064,
+            "beta": 0.535
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.41920578,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 17.12484,
+            "twoHundredDayAverage": 15.44731,
+            "distFrom52WeekHigh": 0.010072522159548902
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 17.2,
+            "recommendationMean": 2.6087,
+            "upsidePotential": -0.12494912494912491
+        }
+    },
+    {
+        "symbol": "DHL.DE",
+        "timestamp": "2026-02-28 19:10:15",
+        "price_metrics": {
+            "currentPrice": 50.1,
+            "forwardPE": 15.146979,
+            "priceToBook": 2.6054397,
+            "evToEbitda": 9.877,
+            "dividendYield": 3.69,
+            "marketCap": 57776140288,
+            "beta": 1.155
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.30536735,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 48.073,
+            "twoHundredDayAverage": 42.2621,
+            "distFrom52WeekHigh": 0.03132250580046403
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 44.5,
+            "recommendationMean": 2.8,
+            "upsidePotential": -0.11177644710578849
+        }
+    },
+    {
+        "symbol": "RACE.MI",
+        "timestamp": "2026-02-28 19:10:16",
+        "price_metrics": {
+            "currentPrice": 321.4,
+            "forwardPE": 30.80527,
+            "priceToBook": 14.5839,
+            "evToEbitda": 24.286,
+            "dividendYield": 1.12,
+            "marketCap": 56898256896,
+            "beta": 0.52
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.28704524,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 306.692,
+            "twoHundredDayAverage": 367.105,
+            "distFrom52WeekHigh": 0.2982532751091703
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 373.5,
+            "recommendationMean": 1.94444,
+            "upsidePotential": 0.16210329807093982
+        }
+    },
+    {
+        "symbol": "NDA-FI.HE",
+        "timestamp": "2026-02-28 19:10:16",
+        "price_metrics": {
+            "currentPrice": 16.45,
+            "forwardPE": 10.737948,
+            "priceToBook": 1.7352322,
+            "evToEbitda": null,
+            "dividendYield": 5.84,
+            "marketCap": 56047501312,
+            "beta": 0.565
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.27916014,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 16.4643,
+            "twoHundredDayAverage": 14.359025,
+            "distFrom52WeekHigh": 0.038573933372296865
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 17.5,
+            "recommendationMean": null,
+            "upsidePotential": 0.06382978723404253
+        }
+    },
+    {
+        "symbol": "BMW.DE",
+        "timestamp": "2026-02-28 19:10:17",
+        "price_metrics": {
+            "currentPrice": 89.46,
+            "forwardPE": 8.089654,
+            "priceToBook": 0.60301304,
+            "evToEbitda": 9.69,
+            "dividendYield": 4.81,
+            "marketCap": 54531813376,
+            "beta": 0.748
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.05346203,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 89.9616,
+            "twoHundredDayAverage": 85.6005,
+            "distFrom52WeekHigh": 0.08639705882352944
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 93.0,
+            "recommendationMean": 2.56522,
+            "upsidePotential": 0.039570757880617036
+        }
+    },
+    {
+        "symbol": "MBG.DE",
+        "timestamp": "2026-02-28 19:10:17",
+        "price_metrics": {
+            "currentPrice": 59.0,
+            "forwardPE": 7.4355907,
+            "priceToBook": 0.6185459,
+            "evToEbitda": 12.258,
+            "dividendYield": 5.93,
+            "marketCap": 52205608960,
+            "beta": 0.684
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.028486729,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 58.9878,
+            "twoHundredDayAverage": 55.125076,
+            "distFrom52WeekHigh": 0.06601234763337027
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 61.0,
+            "recommendationMean": 2.5,
+            "upsidePotential": 0.03389830508474567
+        }
+    },
+    {
+        "symbol": "VOW.DE",
+        "timestamp": "2026-02-28 19:10:18",
+        "price_metrics": {
+            "currentPrice": 101.8,
+            "forwardPE": 3.6452599,
+            "priceToBook": 0.30180132,
+            "evToEbitda": 12.684,
+            "dividendYield": 6.19,
+            "marketCap": 51031859200,
+            "beta": 1.019
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.06605506,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 103.223,
+            "twoHundredDayAverage": 98.60775,
+            "distFrom52WeekHigh": 0.12767780634104542
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 124.0,
+            "recommendationMean": null,
+            "upsidePotential": 0.2180746561886051
+        }
+    },
+    {
+        "symbol": "BN.PA",
+        "timestamp": "2026-02-28 19:10:19",
+        "price_metrics": {
+            "currentPrice": 72.64,
+            "forwardPE": 17.051403,
+            "priceToBook": 2.748808,
+            "evToEbitda": 12.327,
+            "dividendYield": 3.09,
+            "marketCap": 46502166528,
+            "beta": 0.18
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.05458772,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 72.972,
+            "twoHundredDayAverage": 73.4818,
+            "distFrom52WeekHigh": 0.09358622410781137
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 79.5,
+            "recommendationMean": 2.5,
+            "upsidePotential": 0.0944383259911894
+        }
+    },
+    {
+        "symbol": "BAS.DE",
+        "timestamp": "2026-02-28 19:10:19",
+        "price_metrics": {
+            "currentPrice": 48.7,
+            "forwardPE": 15.037966,
+            "priceToBook": 1.3267585,
+            "evToEbitda": 10.996,
+            "dividendYield": 4.53,
+            "marketCap": 43465830400,
+            "beta": 0.9
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.026194751,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 46.6668,
+            "twoHundredDayAverage": 44.32175,
+            "distFrom52WeekHigh": 0.11551035234289864
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 52.0,
+            "recommendationMean": 2.33333,
+            "upsidePotential": 0.06776180698151935
+        }
+    },
+    {
+        "symbol": "SGO.PA",
+        "timestamp": "2026-02-28 19:10:20",
+        "price_metrics": {
+            "currentPrice": 86.24,
+            "forwardPE": 11.590696,
+            "priceToBook": 1.8145093,
+            "evToEbitda": 8.059,
+            "dividendYield": 2.67,
+            "marketCap": 42758758400,
+            "beta": 1.16
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.10035467,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 86.0092,
+            "twoHundredDayAverage": 91.09565,
+            "distFrom52WeekHigh": 0.19137365213314594
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 105.0,
+            "recommendationMean": 1.94737,
+            "upsidePotential": 0.2175324675324677
+        }
+    },
+    {
+        "symbol": "DB1.DE",
+        "timestamp": "2026-02-28 19:10:20",
+        "price_metrics": {
+            "currentPrice": 232.4,
+            "forwardPE": 18.281836,
+            "priceToBook": 3.5973005,
+            "evToEbitda": 14.576,
+            "dividendYield": 1.81,
+            "marketCap": 42592731136,
+            "beta": 0.355
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.09677422,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 215.824,
+            "twoHundredDayAverage": 237.025,
+            "distFrom52WeekHigh": 0.21032959565069653
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 255.0,
+            "recommendationMean": 2.69231,
+            "upsidePotential": 0.0972461273666092
+        }
+    },
+    {
+        "symbol": "BAYN.DE",
+        "timestamp": "2026-02-28 19:10:21",
+        "price_metrics": {
+            "currentPrice": 42.01,
+            "forwardPE": 9.170807,
+            "priceToBook": 1.3953565,
+            "evToEbitda": 9.128,
+            "dividendYield": 0.26,
+            "marketCap": 41271631872,
+            "beta": 0.972
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.75041664,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 42.1073,
+            "twoHundredDayAverage": 31.6463,
+            "distFrom52WeekHigh": 0.1560867818400965
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 50.0,
+            "recommendationMean": 2.25,
+            "upsidePotential": 0.1901928112354201
+        }
+    },
+    {
+        "symbol": "ARGX.BR",
+        "timestamp": "2026-02-28 19:10:21",
+        "price_metrics": {
+            "currentPrice": 657.4,
+            "forwardPE": 20.334356,
+            "priceToBook": 6.5402513,
+            "evToEbitda": 33.071,
+            "dividendYield": null,
+            "marketCap": 40682151936,
+            "beta": -0.173
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.088771105,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 704.196,
+            "twoHundredDayAverage": 639.6445,
+            "distFrom52WeekHigh": 0.18839506172839504
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 866.0,
+            "recommendationMean": 1.66667,
+            "upsidePotential": 0.3173106175844236
+        }
+    },
+    {
+        "symbol": "AD.AS",
+        "timestamp": "2026-02-28 19:10:22",
+        "price_metrics": {
+            "currentPrice": 41.77,
+            "forwardPE": 14.085268,
+            "priceToBook": 2.6096463,
+            "evToEbitda": 9.513,
+            "dividendYield": 3.5,
+            "marketCap": 37044862976,
+            "beta": 0.281
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": 0.22961438,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 35.5978,
+            "twoHundredDayAverage": 35.34835,
+            "distFrom52WeekHigh": 0.0
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 40.8,
+            "recommendationMean": 2.29412,
+            "upsidePotential": -0.023222408427100882
+        }
+    },
+    {
+        "symbol": "ADYEN.AS",
+        "timestamp": "2026-02-28 19:10:23",
+        "price_metrics": {
+            "currentPrice": 994.8,
+            "forwardPE": 20.738186,
+            "priceToBook": 6.704498,
+            "evToEbitda": null,
+            "dividendYield": null,
+            "marketCap": 31372701696,
+            "beta": 2.003
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.43063188,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 1250.06,
+            "twoHundredDayAverage": 1413.83,
+            "distFrom52WeekHigh": 0.4330331699532657
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 1510.95,
+            "recommendationMean": 1.4375,
+            "upsidePotential": 0.5188480096501811
+        }
+    },
+    {
+        "symbol": "ADS.DE",
+        "timestamp": "2026-02-28 19:10:23",
+        "price_metrics": {
+            "currentPrice": 158.2,
+            "forwardPE": 14.8534,
+            "priceToBook": 4.960025,
+            "evToEbitda": 13.594,
+            "dividendYield": 1.26,
+            "marketCap": 28246464512,
+            "beta": 1.184
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.36261082,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 157.922,
+            "twoHundredDayAverage": 176.309,
+            "distFrom52WeekHigh": 0.3666933546837471
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 222.05,
+            "recommendationMean": 1.72414,
+            "upsidePotential": 0.4036030341340078
+        }
+    },
+    {
+        "symbol": "WKL.AS",
+        "timestamp": "2026-02-28 19:10:24",
+        "price_metrics": {
+            "currentPrice": 68.1,
+            "forwardPE": 10.841048,
+            "priceToBook": 19.30272,
+            "evToEbitda": 9.698,
+            "dividendYield": 3.7,
+            "marketCap": 15359269888,
+            "beta": 0.194
+        },
+        "market_context": {
+            "fiftyTwoWeekChange": -0.5469062,
+            "SandP52WeekChange": 0.17593324
+        },
+        "momentum_signals": {
+            "fiftyDayAverage": 78.2704,
+            "twoHundredDayAverage": 108.39515,
+            "distFrom52WeekHigh": 0.5838680109990835
+        },
+        "sentiment_signals": {
+            "targetMedianPrice": 104.0,
+            "recommendationMean": 1.57143,
+            "upsidePotential": 0.5271659324522762
+        }
+    }
+]
