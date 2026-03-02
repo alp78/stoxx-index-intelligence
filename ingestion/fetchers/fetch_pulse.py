@@ -166,13 +166,31 @@ def fetch_pulse(ticker_file, output_file, index_name, index_key=None):
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     pulse_records = []
+    max_retries = 3
 
     with StepTimer() as timer:
         for symbol in symbols:
-            try:
-                tkr = yf.Ticker(symbol)
-                info = tkr.info
+            info = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    tkr = yf.Ticker(symbol)
+                    info = tkr.info
+                    break
+                except Exception as e:
+                    if attempt < max_retries:
+                        wait = 0.5 * (2 ** (attempt - 1))
+                        log_warning(logger, f"Retry {attempt}/{max_retries} for symbol — waiting {wait}s",
+                                    step="fetch", symbol=symbol, error=str(e))
+                        time.sleep(wait)
+                    else:
+                        log_error(logger, f"Failed after {max_retries} attempts for symbol",
+                                  step="fetch", symbol=symbol, error=str(e))
 
+            if info is None:
+                time.sleep(0.1)
+                continue
+
+            try:
                 current_price = info.get("currentPrice")
                 prev_close = info.get("regularMarketPreviousClose")
                 bid = info.get("bid")
@@ -207,7 +225,7 @@ def fetch_pulse(ticker_file, output_file, index_name, index_key=None):
                 }
                 pulse_records.append(record)
             except Exception as e:
-                log_error(logger, "Failed to fetch pulse snapshot for symbol",
+                log_error(logger, "Failed to build pulse record from fetched data",
                           step="fetch", symbol=symbol, error=str(e))
 
             time.sleep(0.1)

@@ -18,8 +18,8 @@ public class PulseRepository
     {
         using var conn = _db.Create();
         var sql = """
-            SELECT p._index        AS [Index],
-                   p.symbol         AS Symbol,
+            SELECT t._index        AS [Index],
+                   t.symbol         AS Symbol,
                    p.timestamp      AS Timestamp,
                    d.short_name     AS ShortName,
                    d.country        AS Country,
@@ -39,12 +39,12 @@ public class PulseRepository
                    p.current_volume AS CurrentVolume,
                    p.average_volume_10day AS AverageVolume10Day,
                    p.volume_ratio   AS VolumeRatio
-            FROM bronze.pulse p
-            INNER JOIN bronze.pulse_tickers t
-                ON p._index = t._index AND p.symbol = t.symbol
+            FROM bronze.pulse_tickers t
+            LEFT JOIN bronze.pulse p
+                ON t._index = p._index AND t.symbol = p.symbol
             LEFT JOIN silver.index_dim d
-                ON p._index = d._index AND p.symbol = d.symbol AND d.is_current = 1
-            ORDER BY p._index, t.rank
+                ON t._index = d._index AND t.symbol = d.symbol AND d.is_current = 1
+            ORDER BY t._index, t.rank
             """;
         return await conn.QueryAsync<PulseSnapshot>(sql);
     }

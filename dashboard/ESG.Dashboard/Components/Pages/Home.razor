@@ -682,10 +682,10 @@ else
             .Select(d => d.Symbol).ToArray();
         if (top5.Length == 0) { _momClosesData.Clear(); return; }
 
-        // Use latest score date as anchor (data may lag behind today)
-        // Fetch extra calendar days to cover trading day gaps
+        // Pre-load max range (1Y) so period switches are instant (just re-slice)
         var latestDate = indexDaily.Max(d => d.ScoreDate);
-        var calendarDays = (int)(MomTradingDays * 1.6) + 10;
+        var maxDays = _momPeriods.Max(p => p.Days);
+        var calendarDays = (int)(maxDays * 1.6) + 10;
         var from = latestDate.AddDays(-calendarDays);
         var closes = (await StockRepo.GetBatchClosesAsync(_selectedSignalIndex, top5, from)).ToList();
         _momClosesData = closes.GroupBy(c => c.Symbol)
@@ -700,48 +700,106 @@ else
                 "./Components/Pages/Home.razor.js");
         }
 
-        var revealed = false;
+        var tasks = new List<Task>();
 
         if (!_chartReady && _chartRef is not null)
-        {
-            await InitChartOptions(_chartRef);
-            _chartRef.CrosshairMoved += OnMainCrosshair;
-            await UpdateAllSeries();
-            _chartReady = true;
-            revealed = true;
-        }
-
+            tasks.Add(InitSyntheticChart());
         if (!_rollReady && _rollRef is not null)
-        {
-            await InitChartOptions(_rollRef);
-            _rollRef.CrosshairMoved += OnRollCrosshair;
-            await UpdateSimpleSeries(_rollRef, _rollSeriesRefs, _rollLookup, _rollContainer,
-                p => p.Rolling30dReturn, true);
-            _rollReady = true;
-            revealed = true;
-        }
-
+            tasks.Add(InitRollingChart());
         if (!_volReady && _volRef is not null)
-        {
-            await InitChartOptions(_volRef);
-            _volRef.CrosshairMoved += OnVolCrosshair;
-            await UpdateSimpleSeries(_volRef, _volSeriesRefs, _volLookup, _volContainer,
-                p => p.Rolling30dVolatility, false);
-            _volReady = true;
-            revealed = true;
-        }
-
+            tasks.Add(InitVolatilityChart());
         if (!_momReady && _momRef is not null)
-        {
-            await InitSparklineOptions(_momRef);
-            _momRef.CrosshairMoved += OnMomCrosshair;
-            await UpdateMomentumSeries();
-            _momReady = true;
-            revealed = true;
-        }
+            tasks.Add(InitMomentumChart());
 
-        if (revealed)
+        if (tasks.Count > 0)
+        {
+            await Task.WhenAll(tasks);
             StateHasChanged();
+        }
+    }
+
+    private async Task InitSyntheticChart()
+    {
+        await InitChartOptions(_chartRef!);
+        _chartRef!.CrosshairMoved += OnMainCrosshair;
+        foreach (var key in _indexKeys)
+        {
+            _seriesRefs[key] = await _chartRef!.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr(IndexColor(key)),
+                    LineWidth = 1,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+        }
+        await UpdateChartData();
+        _chartReady = true;
+    }
+
+    private async Task InitRollingChart()
+    {
+        await InitChartOptions(_rollRef!);
+        _rollRef!.CrosshairMoved += OnRollCrosshair;
+        foreach (var key in _indexKeys)
+        {
+            _rollSeriesRefs[key] = await _rollRef!.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr(IndexColor(key)),
+                    LineWidth = 1,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+        }
+        await UpdateRollingData();
+        _rollReady = true;
+    }
+
+    private async Task InitVolatilityChart()
+    {
+        await InitChartOptions(_volRef!);
+        _volRef!.CrosshairMoved += OnVolCrosshair;
+        foreach (var key in _indexKeys)
+        {
+            _volSeriesRefs[key] = await _volRef!.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr(IndexColor(key)),
+                    LineWidth = 1,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+        }
+        await UpdateVolatilityData();
+        _volReady = true;
+    }
+
+    private async Task InitMomentumChart()
+    {
+        await InitSparklineOptions(_momRef!);
+        _momRef!.CrosshairMoved += OnMomCrosshair;
+        for (int i = 0; i < 5; i++)
+        {
+            _momSeriesRefs[i] = await _momRef!.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr(MomSeriesColors[i]),
+                    LineWidth = 2,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+        }
+        await UpdateMomData();
+        _momReady = true;
     }
 
     private async Task InitSparklineOptions(ChartComponent chart)
@@ -776,40 +834,30 @@ else
         });
     }
 
-    private async Task UpdateMomentumSeries()
+    private async Task UpdateMomData()
     {
         if (_momRef is null) return;
-
-        // Remove existing series
-        foreach (var s in _momSeriesRefs)
-        {
-            if (s is not null) await _momRef.RemoveSeries(s);
-        }
-        _momSeriesRefs = new ISeriesApi<long>?[5];
         _momLastHover = null;
         _momLookup.Clear();
 
         var top5 = TopMomentum.Take(5).ToList();
-        for (var i = 0; i < top5.Count; i++)
+        for (var i = 0; i < 5; i++)
         {
-            var sym = top5[i].Symbol;
-            if (!_momClosesData.TryGetValue(sym, out var closes) || closes.Count == 0) continue;
+            var series = _momSeriesRefs[i];
+            if (series is null) continue;
 
+            if (i >= top5.Count
+                || !_momClosesData.TryGetValue(top5[i].Symbol, out var closes)
+                || closes.Count == 0)
+            {
+                await series.SetData(Array.Empty<LineData<long>>());
+                continue;
+            }
+
+            var sym = top5[i].Symbol;
             var recent = closes.TakeLast(MomTradingDays).ToList();
             var baseClose = recent[0].Close;
-            if (baseClose == 0) continue;
-
-            var series = await _momRef.AddSeries<LineStyleOptions>(
-                SeriesType.Line,
-                new LineStyleOptions
-                {
-                    Color = Clr(MomSeriesColors[i]),
-                    LineWidth = 2,
-                    CrosshairMarkerVisible = false,
-                    LastValueVisible = false,
-                    PriceLineVisible = false
-                });
-            _momSeriesRefs[i] = series;
+            if (baseClose == 0) { await series.SetData(Array.Empty<LineData<long>>()); continue; }
 
             var data = recent.Select(c => new LineData<long>
             {
@@ -875,7 +923,7 @@ else
 
     // ── Main chart series (rebased cumulative return) ──
 
-    private async Task UpdateAllSeries()
+    private async Task UpdateChartData()
     {
         if (_chartRef is null) return;
         _lastHoverTime = null;
@@ -885,36 +933,16 @@ else
 
         foreach (var key in _indexKeys)
         {
-            if (_seriesRefs.TryGetValue(key, out var old) && old is not null)
-            {
-                await _chartRef.RemoveSeries(old);
-                _seriesRefs[key] = null;
-            }
-        }
+            var series = _seriesRefs.GetValueOrDefault(key);
+            if (series is null) continue;
 
-        foreach (var key in _indexKeys)
-        {
             var allData = _perfByIndex.GetValueOrDefault(key) ?? [];
-            if (allData.Count == 0) continue;
-
             var filtered = cutoff.HasValue
                 ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
                 : allData;
-            if (filtered.Count == 0) continue;
+            if (filtered.Count == 0) { await series.SetData(Array.Empty<LineData<long>>()); continue; }
 
             var baseVal = filtered[0].CumulativeFactor ?? 1;
-
-            var series = await _chartRef.AddSeries<LineStyleOptions>(
-                SeriesType.Line,
-                new LineStyleOptions
-                {
-                    Color = Clr(IndexColor(key)),
-                    LineWidth = 1,
-                    CrosshairMarkerVisible = false,
-                    LastValueVisible = false,
-                    PriceLineVisible = false
-                });
-            _seriesRefs[key] = series;
 
             var data = filtered.Select(p => new LineData<long>
             {
@@ -952,18 +980,10 @@ else
 
         foreach (var key in _indexKeys)
         {
-            if (seriesRefs.TryGetValue(key, out var old) && old is not null)
-            {
-                await chart.RemoveSeries(old);
-                seriesRefs[key] = null;
-            }
-        }
+            var series = seriesRefs.GetValueOrDefault(key);
+            if (series is null) continue;
 
-        foreach (var key in _indexKeys)
-        {
             var allData = _perfByIndex.GetValueOrDefault(key) ?? [];
-            if (allData.Count == 0) continue;
-
             var filtered = cutoff.HasValue
                 ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
                 : allData.ToList();
@@ -975,19 +995,7 @@ else
                     Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
                     Value = (valueSelector(p) ?? 0) * 100
                 }).ToArray();
-            if (points.Length == 0) continue;
 
-            var series = await chart.AddSeries<LineStyleOptions>(
-                SeriesType.Line,
-                new LineStyleOptions
-                {
-                    Color = Clr(IndexColor(key)),
-                    LineWidth = 1,
-                    CrosshairMarkerVisible = false,
-                    LastValueVisible = false,
-                    PriceLineVisible = false
-                });
-            seriesRefs[key] = series;
             await series.SetData(points);
 
             foreach (var d in points)
@@ -1002,6 +1010,14 @@ else
         await ts.FitContent();
         await SendTooltipData(container, lookup, colorBySign);
     }
+
+    private Task UpdateRollingData() =>
+        UpdateSimpleSeries(_rollRef!, _rollSeriesRefs, _rollLookup, _rollContainer,
+            p => p.Rolling30dReturn, true);
+
+    private Task UpdateVolatilityData() =>
+        UpdateSimpleSeries(_volRef!, _volSeriesRefs, _volLookup, _volContainer,
+            p => p.Rolling30dVolatility, false);
 
     // ── Period & tooltip helpers ──
 
@@ -1026,28 +1042,25 @@ else
     {
         _selectedSignalIndex = newIndex;
         await LoadMomentumCloses();
-        if (_momReady && _momRef is not null)
-            await UpdateMomentumSeries();
+        if (_momReady)
+            await UpdateMomData();
     }
 
     private async Task SetMomPeriod(string period)
     {
         _selectedMomPeriod = period;
-        await LoadMomentumCloses();
-        if (_momReady && _momRef is not null)
-            await UpdateMomentumSeries();
+        if (_momReady)
+            await UpdateMomData();
     }
 
     private async Task SetPeriod(string period)
     {
         _selectedPeriod = period;
-        await UpdateAllSeries();
-        if (_rollRef is not null)
-            await UpdateSimpleSeries(_rollRef, _rollSeriesRefs, _rollLookup, _rollContainer,
-                p => p.Rolling30dReturn, true);
-        if (_volRef is not null)
-            await UpdateSimpleSeries(_volRef, _volSeriesRefs, _volLookup, _volContainer,
-                p => p.Rolling30dVolatility, false);
+        await UpdateChartData();
+        if (_rollReady)
+            await UpdateRollingData();
+        if (_volReady)
+            await UpdateVolatilityData();
     }
 
     // ── Crosshair handlers ──

@@ -725,11 +725,72 @@ else
                 }
             });
 
+            // Create all series once — they persist across stock changes
+            _areaSeries = await _chart.AddSeries<AreaStyleOptions>(
+                SeriesType.Area,
+                new AreaStyleOptions
+                {
+                    TopColor = Clr(38, 166, 154, 18),
+                    BottomColor = Clr(38, 166, 154, 3),
+                    LineVisible = false,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+
+            _candleSeries = await _chart.AddSeries<CandlestickStyleOptions>(
+                SeriesType.Candlestick,
+                new CandlestickStyleOptions
+                {
+                    UpColor = Clr("#26A69A"),
+                    DownColor = Clr("#EF5350"),
+                    BorderUpColor = Clr("#26A69A"),
+                    BorderDownColor = Clr("#EF5350"),
+                    WickUpColor = Clr("#26A69A"),
+                    WickDownColor = Clr("#EF5350"),
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+
+            _ma30Series = await _chart.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr("#42A5F5"),
+                    LineWidth = 1,
+                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dashed,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+
+            _ma90Series = await _chart.AddSeries<LineStyleOptions>(
+                SeriesType.Line,
+                new LineStyleOptions
+                {
+                    Color = Clr("#AB47BC"),
+                    LineWidth = 1,
+                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dashed,
+                    CrosshairMarkerVisible = false,
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+
+            _volumeSeries = await _chart.AddSeries<HistogramStyleOptions>(
+                SeriesType.Histogram,
+                new HistogramStyleOptions
+                {
+                    Color = Clr(160, 170, 180, 80),
+                    PriceScaleId = "volume",
+                    LastValueVisible = false,
+                    PriceLineVisible = false
+                });
+
             _chart.CrosshairMoved += OnCrosshairMoved;
             _chartReady = true;
             await MeasureChartContainerAsync();
 
-            if (_chartUpdatePending)
+            if (_chartUpdatePending || _allPrices.Count > 0)
             {
                 _chartUpdatePending = false;
                 await UpdateChart();
@@ -849,7 +910,7 @@ else
 
     private async Task UpdateChart()
     {
-        if (_chart is null) return;
+        if (_chart is null || !_chartReady) return;
         await MeasureChartContainerAsync();
 
         // Filter to period
@@ -870,79 +931,15 @@ else
         for (int i = 0; i < _filteredPrices.Count; i++)
             _tsIndex[ToUnix(_filteredPrices[i].Date)] = i;
 
-        // Remove old series
-        if (_ma90Series is not null) { await _chart.RemoveSeries(_ma90Series); _ma90Series = null; }
-        if (_ma30Series is not null) { await _chart.RemoveSeries(_ma30Series); _ma30Series = null; }
-        if (_candleSeries is not null) { await _chart.RemoveSeries(_candleSeries); _candleSeries = null; }
-        if (_areaSeries is not null) { await _chart.RemoveSeries(_areaSeries); _areaSeries = null; }
-        if (_volumeSeries is not null) { await _chart.RemoveSeries(_volumeSeries); _volumeSeries = null; }
-
-        if (_filteredPrices.Count == 0) return;
-
-        // Area fill under candlesticks (almost transparent, renders first = behind)
-        _areaSeries = await _chart.AddSeries<AreaStyleOptions>(
-            SeriesType.Area,
-            new AreaStyleOptions
-            {
-                TopColor = Clr(38, 166, 154, 18),
-                BottomColor = Clr(38, 166, 154, 3),
-                LineVisible = false,
-                CrosshairMarkerVisible = false,
-                LastValueVisible = false,
-                PriceLineVisible = false
-            });
-
-        // Candlestick series (pane 0)
-        _candleSeries = await _chart.AddSeries<CandlestickStyleOptions>(
-            SeriesType.Candlestick,
-            new CandlestickStyleOptions
-            {
-                UpColor = Clr("#26A69A"),
-                DownColor = Clr("#EF5350"),
-                BorderUpColor = Clr("#26A69A"),
-                BorderDownColor = Clr("#EF5350"),
-                WickUpColor = Clr("#26A69A"),
-                WickDownColor = Clr("#EF5350"),
-                LastValueVisible = false,
-                PriceLineVisible = false
-            });
-
-        // MA 30 line (pane 0)
-        _ma30Series = await _chart.AddSeries<LineStyleOptions>(
-            SeriesType.Line,
-            new LineStyleOptions
-            {
-                Color = Clr("#42A5F5"),
-                LineWidth = 1,
-                LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dashed,
-                CrosshairMarkerVisible = false,
-                LastValueVisible = false,
-                PriceLineVisible = false
-            });
-
-        // MA 90 line (pane 0)
-        _ma90Series = await _chart.AddSeries<LineStyleOptions>(
-            SeriesType.Line,
-            new LineStyleOptions
-            {
-                Color = Clr("#AB47BC"),
-                LineWidth = 1,
-                LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dashed,
-                CrosshairMarkerVisible = false,
-                LastValueVisible = false,
-                PriceLineVisible = false
-            });
-
-        // Volume histogram — overlaid on pane 0 at bottom 10% via OverlayPriceScale
-        _volumeSeries = await _chart.AddSeries<HistogramStyleOptions>(
-            SeriesType.Histogram,
-            new HistogramStyleOptions
-            {
-                Color = Clr(160, 170, 180, 80),
-                PriceScaleId = "volume",
-                LastValueVisible = false,
-                PriceLineVisible = false
-            });
+        if (_filteredPrices.Count == 0)
+        {
+            await _candleSeries!.SetData(Array.Empty<CandlestickData<long>>());
+            await _areaSeries!.SetData(Array.Empty<AreaData<long>>());
+            await _ma30Series!.SetData(Array.Empty<LineData<long>>());
+            await _ma90Series!.SetData(Array.Empty<LineData<long>>());
+            await _volumeSeries!.SetData(Array.Empty<HistogramData<long>>());
+            return;
+        }
 
         // Candle data
         var candleData = _filteredPrices.Select(p => new CandlestickData<long>
@@ -987,16 +984,22 @@ else
             };
         }).ToArray();
 
-        await _areaSeries.SetData(areaData);
-        await _candleSeries.SetData(candleData);
-        await _ma30Series.SetData(ma30Data);
-        await _ma90Series.SetData(ma90Data);
-        await _volumeSeries.SetData(volumeData);
+        // Update data on existing series (no remove/add)
+        await _areaSeries!.SetData(areaData);
+        await _candleSeries!.SetData(candleData);
+        await _ma30Series!.SetData(ma30Data);
+        await _ma90Series!.SetData(ma90Data);
+        await _volumeSeries!.SetData(volumeData);
 
-        // Fixed dashed line at current price
+        // Update price line
+        if (_currentPriceLine is not null)
+        {
+            try { await _candleSeries!.RemovePriceLine(_currentPriceLine); } catch { }
+            _currentPriceLine = null;
+        }
         if (_latestCandle?.Close is not null)
         {
-            _currentPriceLine = await _candleSeries.CreatePriceLine(
+            _currentPriceLine = await _candleSeries!.CreatePriceLine(
                 new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
                 {
                     Price = _latestCandle.Close.Value,
