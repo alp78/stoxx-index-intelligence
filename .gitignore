@@ -2,6 +2,7 @@
 .env/
 .claude/
 data/
+!data/definitions/
 logs/
 __pycache__/
 

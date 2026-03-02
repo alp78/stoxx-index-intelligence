@@ -1,0 +1,14 @@
+{
+    "name": "Euro Stoxx 50",
+    "symbols": [
+        "ASML.AS", "MC.PA", "RMS.PA", "OR.PA", "SAP.DE", "SIE.DE", "ITX.MC",
+        "DTE.DE", "SAN.MC", "SU.PA", "ALV.DE", "AIR.PA", "TTE.PA", "ENR.DE",
+        "SAF.PA", "IBE.MC", "ABI.BR", "BBVA.MC", "UCG.MI", "BNP.PA", "EL.PA",
+        "AI.PA", "ENEL.MI", "ISP.MI", "SAN.PA", "PRX.AS", "CS.PA", "DG.PA",
+        "RHM.DE", "MUV2.DE", "INGA.AS", "IFX.DE", "ENI.MI", "DHL.DE",
+        "RACE.MI", "NDA-FI.HE", "BMW.DE", "MBG.DE", "VOW.DE", "BN.PA",
+        "BAS.DE", "SGO.PA", "DB1.DE", "BAYN.DE", "ARGX.BR", "AD.AS",
+        "ADYEN.AS", "ADS.DE", "WKL.AS"
+    ],
+    "history_start": "2021-01-01"
+}
