@@ -864,7 +864,6 @@ else
         _detailDaily = await dailyTask;
         _detailQuarterly = await quarterlyTask;
         _allPrices = (await pricesTask).ToList();
-        _selectedMonths = 12;
         _currencySymbol = CurrencySymbol(stock.Index);
 
         // Latest candle + change %

@@ -841,30 +841,31 @@ else
         _momLookup.Clear();
 
         var top5 = TopMomentum.Take(5).ToList();
+        var tradingDays = MomTradingDays; // capture once — stable across awaits
+
+        // Phase 1: prepare all data arrays (pure C#, no JS interop)
+        var prepared = new LineData<long>[5][];
         for (var i = 0; i < 5; i++)
         {
-            var series = _momSeriesRefs[i];
-            if (series is null) continue;
-
             if (i >= top5.Count
                 || !_momClosesData.TryGetValue(top5[i].Symbol, out var closes)
                 || closes.Count == 0)
             {
-                await series.SetData(Array.Empty<LineData<long>>());
+                prepared[i] = Array.Empty<LineData<long>>();
                 continue;
             }
 
             var sym = top5[i].Symbol;
-            var recent = closes.TakeLast(MomTradingDays).ToList();
+            var recent = closes.TakeLast(tradingDays).ToList();
             var baseClose = recent[0].Close;
-            if (baseClose == 0) { await series.SetData(Array.Empty<LineData<long>>()); continue; }
+            if (baseClose == 0) { prepared[i] = Array.Empty<LineData<long>>(); continue; }
 
             var data = recent.Select(c => new LineData<long>
             {
                 Time = new DateTimeOffset(c.Date, TimeSpan.Zero).ToUnixTimeSeconds(),
                 Value = (c.Close / baseClose - 1) * 100
             }).ToArray();
-            await series.SetData(data);
+            prepared[i] = data;
 
             foreach (var d in data)
             {
@@ -872,6 +873,13 @@ else
                     _momLookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
                 _momLookup[d.Time].Values[sym] = d.Value;
             }
+        }
+
+        // Phase 2: push all data to chart in rapid succession (minimal gap between JS calls)
+        for (var i = 0; i < 5; i++)
+        {
+            if (_momSeriesRefs[i] is not null)
+                await _momSeriesRefs[i]!.SetData(prepared[i]);
         }
 
         var ts = await _momRef.TimeScale();
@@ -1056,11 +1064,10 @@ else
     private async Task SetPeriod(string period)
     {
         _selectedPeriod = period;
-        await UpdateChartData();
-        if (_rollReady)
-            await UpdateRollingData();
-        if (_volReady)
-            await UpdateVolatilityData();
+        var tasks = new List<Task> { UpdateChartData() };
+        if (_rollReady) tasks.Add(UpdateRollingData());
+        if (_volReady) tasks.Add(UpdateVolatilityData());
+        await Task.WhenAll(tasks);
     }
 
     // ── Crosshair handlers ──
