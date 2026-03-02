@@ -829,6 +829,8 @@ else
                 BorderVisible = false,
                 FixLeftEdge = true,
                 FixRightEdge = true,
+                RightOffset = 0,
+                LockVisibleTimeRangeOnResize = true
             },
             Crosshair = new CrosshairOptions { Mode = CrosshairMode.Magnet }
         });
@@ -875,12 +877,14 @@ else
             }
         }
 
-        // Phase 2: push all data to chart in rapid succession (minimal gap between JS calls)
+        // Phase 2: push all series data in parallel (single JS batch, no intermediate renders)
+        var setTasks = new List<Task>(5);
         for (var i = 0; i < 5; i++)
         {
             if (_momSeriesRefs[i] is not null)
-                await _momSeriesRefs[i]!.SetData(prepared[i]);
+                setTasks.Add(_momSeriesRefs[i]!.SetData(prepared[i]));
         }
+        await Task.WhenAll(setTasks);
 
         var ts = await _momRef.TimeScale();
         await ts.FitContent();
@@ -939,16 +943,17 @@ else
 
         var cutoff = GetPeriodCutoff();
 
+        // Phase 1: prepare all data arrays (pure C#, no JS interop)
+        var prepared = new Dictionary<string, LineData<long>[]>();
         foreach (var key in _indexKeys)
         {
-            var series = _seriesRefs.GetValueOrDefault(key);
-            if (series is null) continue;
+            if (!_seriesRefs.ContainsKey(key) || _seriesRefs[key] is null) continue;
 
             var allData = _perfByIndex.GetValueOrDefault(key) ?? [];
             var filtered = cutoff.HasValue
                 ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
                 : allData;
-            if (filtered.Count == 0) { await series.SetData(Array.Empty<LineData<long>>()); continue; }
+            if (filtered.Count == 0) { prepared[key] = Array.Empty<LineData<long>>(); continue; }
 
             var baseVal = filtered[0].CumulativeFactor ?? 1;
 
@@ -957,8 +962,7 @@ else
                 Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
                 Value = ((p.CumulativeFactor ?? 1) / baseVal - 1) * 100
             }).ToArray();
-
-            await series.SetData(data);
+            prepared[key] = data;
 
             foreach (var d in data)
             {
@@ -967,6 +971,13 @@ else
                 _tsLookup[d.Time].Values[key] = d.Value;
             }
         }
+
+        // Phase 2: push all series data in parallel (single JS batch)
+        var setTasks = prepared
+            .Where(kv => _seriesRefs[kv.Key] is not null)
+            .Select(kv => _seriesRefs[kv.Key]!.SetData(kv.Value))
+            .ToList();
+        await Task.WhenAll(setTasks);
 
         var timeScale = await _chartRef.TimeScale();
         await timeScale.FitContent();
@@ -986,6 +997,8 @@ else
         var cutoff = GetPeriodCutoff();
         lookup.Clear();
 
+        // Phase 1: prepare all data arrays (pure C#, no JS interop)
+        var prepared = new Dictionary<string, LineData<long>[]>();
         foreach (var key in _indexKeys)
         {
             var series = seriesRefs.GetValueOrDefault(key);
@@ -1003,8 +1016,7 @@ else
                     Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
                     Value = (valueSelector(p) ?? 0) * 100
                 }).ToArray();
-
-            await series.SetData(points);
+            prepared[key] = points;
 
             foreach (var d in points)
             {
@@ -1013,6 +1025,13 @@ else
                 lookup[d.Time].Values[key] = d.Value;
             }
         }
+
+        // Phase 2: push all series data in parallel (single JS batch)
+        var setTasks = prepared
+            .Where(kv => seriesRefs[kv.Key] is not null)
+            .Select(kv => seriesRefs[kv.Key]!.SetData(kv.Value))
+            .ToList();
+        await Task.WhenAll(setTasks);
 
         var ts = await chart.TimeScale();
         await ts.FitContent();

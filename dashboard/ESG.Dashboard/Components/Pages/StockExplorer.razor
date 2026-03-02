@@ -983,12 +983,13 @@ else
             };
         }).ToArray();
 
-        // Update data on existing series (no remove/add)
-        await _areaSeries!.SetData(areaData);
-        await _candleSeries!.SetData(candleData);
-        await _ma30Series!.SetData(ma30Data);
-        await _ma90Series!.SetData(ma90Data);
-        await _volumeSeries!.SetData(volumeData);
+        // Update all series in parallel (single JS batch, no intermediate renders)
+        await Task.WhenAll(
+            _areaSeries!.SetData(areaData),
+            _candleSeries!.SetData(candleData),
+            _ma30Series!.SetData(ma30Data),
+            _ma90Series!.SetData(ma90Data),
+            _volumeSeries!.SetData(volumeData));
 
         // Update price line
         if (_currentPriceLine is not null)
