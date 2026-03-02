@@ -15,7 +15,7 @@ resource "google_cloud_run_v2_service" "dashboard" {
     timeout         = "3600s"
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = 1
       max_instance_count = 2
     }
 
@@ -107,6 +107,26 @@ resource "google_cloud_run_v2_job" "pipeline" {
         env {
           name  = "SA_PASSWORD"
           value = var.db_password
+        }
+        env {
+          name  = "DD_SERVICE"
+          value = "stoxx-pipeline"
+        }
+        env {
+          name  = "DD_ENV"
+          value = "prod"
+        }
+        env {
+          name  = "DD_TRACE_AGENT_URL"
+          value = "https://trace.agent.datadoghq.eu/api/v0.2/traces"
+        }
+        env {
+          name  = "DD_API_KEY"
+          value = var.dd_api_key
+        }
+        env {
+          name  = "LOG_FORMAT"
+          value = "json"
         }
 
         resources {

@@ -65,6 +65,15 @@ class DatadogJsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "service": "esg-ingestion",
         }
+        # Inject trace correlation IDs for Datadog log-to-trace linking
+        try:
+            from ddtrace import tracer
+            span = tracer.current_span()
+            if span:
+                log["dd.trace_id"] = str(span.trace_id)
+                log["dd.span_id"] = str(span.span_id)
+        except ImportError:
+            pass
         if hasattr(record, "_fields"):
             log.update(record._fields)
         if record.exc_info and not record.exc_text:

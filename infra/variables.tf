@@ -26,3 +26,10 @@ variable "db_tier" {
   type        = string
   default     = "db-custom-1-3840"
 }
+
+variable "dd_api_key" {
+  description = "Datadog API key (leave empty to disable agent)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

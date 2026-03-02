@@ -21,3 +21,8 @@ output "pipeline_job" {
 output "setup_job" {
   value = google_cloud_run_v2_job.setup.name
 }
+
+output "datadog_sa_key" {
+  value     = var.dd_api_key != "" ? google_service_account_key.datadog[0].private_key : ""
+  sensitive = true
+}

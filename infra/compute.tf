@@ -29,7 +29,8 @@ resource "google_compute_instance" "airflow" {
   }
 
   metadata = {
-    startup-script = file("${path.module}/scripts/airflow-startup.sh")
+    startup-script = replace(file("${path.module}/scripts/airflow-startup.sh"), "\r\n", "\n")
+    dd-api-key     = var.dd_api_key
   }
 
   allow_stopping_for_update = true

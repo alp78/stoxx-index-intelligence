@@ -64,3 +64,38 @@ resource "google_project_iam_member" "airflow_logs" {
   role    = "roles/logging.viewer"
   member  = "serviceAccount:${google_service_account.airflow.email}"
 }
+
+# --------------------------------------------------------------------------
+# Datadog GCP Integration (conditional on dd_api_key)
+# --------------------------------------------------------------------------
+resource "google_service_account" "datadog" {
+  count        = var.dd_api_key != "" ? 1 : 0
+  account_id   = "stoxx-datadog"
+  display_name = "Datadog GCP Integration"
+}
+
+resource "google_project_iam_member" "datadog_monitoring" {
+  count   = var.dd_api_key != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/monitoring.viewer"
+  member  = "serviceAccount:${google_service_account.datadog[0].email}"
+}
+
+resource "google_project_iam_member" "datadog_compute" {
+  count   = var.dd_api_key != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/compute.viewer"
+  member  = "serviceAccount:${google_service_account.datadog[0].email}"
+}
+
+resource "google_project_iam_member" "datadog_cloudasset" {
+  count   = var.dd_api_key != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/cloudasset.viewer"
+  member  = "serviceAccount:${google_service_account.datadog[0].email}"
+}
+
+resource "google_service_account_key" "datadog" {
+  count              = var.dd_api_key != "" ? 1 : 0
+  service_account_id = google_service_account.datadog[0].name
+}

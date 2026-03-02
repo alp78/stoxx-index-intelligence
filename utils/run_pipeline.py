@@ -28,6 +28,11 @@ from logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger("pipeline")
 
+try:
+    from ddtrace import tracer
+except ImportError:
+    tracer = None
+
 _REBUILD_HINT = "To rebuild: python utils/drop_index.py {key} && python utils/setup_index.py {key} && python utils/run_pipeline.py"
 
 
@@ -345,7 +350,14 @@ def main():
             log_info(logger, f"Running step {num}/{len(steps)}: {name}", step="pipeline", step_num=num)
             try:
                 with StepTimer() as step_timer:
-                    fn()
+                    if tracer:
+                        with tracer.trace("pipeline.step", service="stoxx-pipeline",
+                                          resource=name) as span:
+                            span.set_tag("step.num", num)
+                            span.set_tag("step.name", name)
+                            fn()
+                    else:
+                        fn()
                 log_info(logger, f"Step {num} ({name}) complete", step="pipeline",
                          step_num=num, step_name=name,
                          duration_ms=step_timer.duration_ms)

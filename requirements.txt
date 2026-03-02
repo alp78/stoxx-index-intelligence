@@ -1,3 +1,4 @@
+ddtrace>=2.10.0
 exchange-calendars==4.13.1
 numpy==2.4.2
 pandas==3.0.1

@@ -25,4 +25,4 @@ COPY data/definitions/ data/definitions/
 # Data directories (volumes in compose)
 RUN mkdir -p data/dimensions data/ohlcv data/signals data/pulse data/tickers logs
 
-ENTRYPOINT ["python", "utils/run_pipeline.py"]
+ENTRYPOINT ["ddtrace-run", "python", "utils/run_pipeline.py"]
