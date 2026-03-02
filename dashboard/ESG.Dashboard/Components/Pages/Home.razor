@@ -567,9 +567,14 @@ else
     private static readonly string[] MomSeriesColors = ["#42A5F5", "#26A69A", "#AB47BC", "#FFA726", "#EF5350"];
     private string _selectedMomPeriod = "1M";
 
-    private static readonly (string Key, int Days)[] _momPeriods =
+    private static readonly (string Key, Func<DateTime, DateTime?> GetStart)[] _momPeriods =
     [
-        ("1W", 5), ("2W", 10), ("1M", 22), ("3M", 66), ("6M", 132), ("1Y", 252),
+        ("1M", now => now.AddMonths(-1)),
+        ("3M", now => now.AddMonths(-3)),
+        ("6M", now => now.AddMonths(-6)),
+        ("1Y", now => now.AddYears(-1)),
+        ("3Y", now => now.AddYears(-3)),
+        ("MAX", _ => null),
     ];
 
     private IndexPerformance? SelectedSnap => _snapshots.FirstOrDefault(s => s.Index == _selectedSignalIndex);
@@ -673,7 +678,11 @@ else
             InvokeAsync(StateHasChanged), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
     }
 
-    private int MomTradingDays => _momPeriods.FirstOrDefault(p => p.Key == _selectedMomPeriod).Days;
+    private DateTime? GetMomCutoff()
+    {
+        var p = _momPeriods.FirstOrDefault(p => p.Key == _selectedMomPeriod);
+        return p.GetStart?.Invoke(DateTime.UtcNow);
+    }
 
     private async Task LoadMomentumCloses()
     {
@@ -683,11 +692,9 @@ else
             .Select(d => d.Symbol).ToArray();
         if (top5.Length == 0) { _momClosesData.Clear(); return; }
 
-        // Pre-load max range (1Y) so period switches are instant (just re-slice)
+        // Pre-load 3Y + buffer so period switches are instant (just re-filter)
         var latestDate = indexDaily.Max(d => d.ScoreDate);
-        var maxDays = _momPeriods.Max(p => p.Days);
-        var calendarDays = (int)(maxDays * 1.6) + 10;
-        var from = latestDate.AddDays(-calendarDays);
+        var from = latestDate.AddYears(-3).AddMonths(-1);
         var closes = (await StockRepo.GetBatchClosesAsync(_selectedSignalIndex, top5, from)).ToList();
         _momClosesData = closes.GroupBy(c => c.Symbol)
             .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Date).ToList());
@@ -844,26 +851,12 @@ else
         _momLookup.Clear();
 
         var top5 = TopMomentum.Take(5).ToList();
-        var tradingDays = MomTradingDays; // capture once — stable across awaits
+        var cutoff = GetMomCutoff();
 
-        // Step 1: determine canonical date window from the stock with the most data.
-        // That stock's TakeLast(N) gives the tightest calendar range for N trading days.
-        // Stocks with sparse data (volume gaps) or short history get clipped to this window.
-        DateTime windowStart = DateTime.MaxValue, windowEnd = DateTime.MinValue;
-        int bestCount = 0;
-        for (var i = 0; i < 5 && i < top5.Count; i++)
-        {
-            if (!_momClosesData.TryGetValue(top5[i].Symbol, out var cl) || cl.Count == 0) continue;
-            if (cl.Count <= bestCount) continue;
-            bestCount = cl.Count;
-            var slice = cl.TakeLast(tradingDays);
-            windowStart = slice.First().Date;
-            windowEnd = slice.Last().Date;
-        }
-        if (windowStart == DateTime.MaxValue) return; // no data at all
-
-        // Phase 1: prepare all data arrays — filtered to canonical window
+        // Phase 1: prepare all data arrays — filtered by calendar cutoff
         var prepared = new LineData<long>[5][];
+        long minTime = long.MaxValue, maxTime = long.MinValue;
+
         for (var i = 0; i < 5; i++)
         {
             if (i >= top5.Count
@@ -875,20 +868,28 @@ else
             }
 
             var sym = top5[i].Symbol;
-            var recent = closes.Where(c => c.Date >= windowStart && c.Date <= windowEnd).ToList();
-            if (recent.Count == 0 || recent[0].Close == 0)
+            var filtered = cutoff.HasValue
+                ? closes.Where(c => c.Date >= cutoff.Value).ToList()
+                : closes;
+            if (filtered.Count == 0 || filtered[0].Close == 0)
             {
                 prepared[i] = Array.Empty<LineData<long>>();
                 continue;
             }
 
-            var baseClose = recent[0].Close;
-            var data = recent.Select(c => new LineData<long>
+            var baseClose = filtered[0].Close;
+            var data = filtered.Select(c => new LineData<long>
             {
                 Time = new DateTimeOffset(c.Date, TimeSpan.Zero).ToUnixTimeSeconds(),
                 Value = (c.Close / baseClose - 1) * 100
             }).ToArray();
             prepared[i] = data;
+
+            if (data.Length > 0)
+            {
+                if (data[0].Time < minTime) minTime = data[0].Time;
+                if (data[^1].Time > maxTime) maxTime = data[^1].Time;
+            }
 
             foreach (var d in data)
             {
@@ -907,11 +908,12 @@ else
         }
         await Task.WhenAll(setTasks);
 
-        // Lock viewport to the canonical window (no FitContent drift)
-        var fromUnix = new DateTimeOffset(windowStart, TimeSpan.Zero).ToUnixTimeSeconds();
-        var toUnix = new DateTimeOffset(windowEnd, TimeSpan.Zero).ToUnixTimeSeconds();
+        // Lock viewport to the data range
         var ts = await _momRef.TimeScale();
-        await ts.SetVisibleRange(new TimeRange { From = fromUnix, To = toUnix });
+        if (minTime < long.MaxValue)
+            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
+        else
+            await ts.FitContent();
         await SendMomTooltipData();
     }
 
