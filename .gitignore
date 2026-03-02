@@ -1,6 +1,5 @@
 .esg/
 .env/
-.claude/
 /data/
 !/data/definitions/
 logs/
