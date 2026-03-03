@@ -1,12 +1,14 @@
-name: Deploy
+name: Deploy Dashboard
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "infra/**"
-      - "**.md"
-      - ".gitignore"
+    paths:
+      - "dashboard/**"
+      - "docker/dashboard.Dockerfile"
+      - ".github/workflows/deploy-dashboard.yml"
+  workflow_dispatch:
+  workflow_call:
 
 env:
   REGION: europe-west1
@@ -30,14 +32,6 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 
-      - name: Build & push pipeline image
-        run: |
-          docker build --provenance=false \
-            -t $REGISTRY/pipeline:${{ github.sha }} \
-            -t $REGISTRY/pipeline:latest \
-            -f docker/pipeline.Dockerfile .
-          docker push $REGISTRY/pipeline --all-tags
-
       - name: Build & push dashboard image
         run: |
           docker build --provenance=false \
@@ -46,20 +40,8 @@ jobs:
             -f docker/dashboard.Dockerfile .
           docker push $REGISTRY/dashboard --all-tags
 
-      - name: Deploy dashboard to Cloud Run
+      - name: Deploy to Cloud Run
         run: |
           gcloud run services update stoxx-dashboard \
             --image=$REGISTRY/dashboard:${{ github.sha }} \
-            --region=$REGION
-
-      - name: Update pipeline job
-        run: |
-          gcloud run jobs update stoxx-pipeline \
-            --image=$REGISTRY/pipeline:${{ github.sha }} \
-            --region=$REGION
-
-      - name: Update setup job
-        run: |
-          gcloud run jobs update stoxx-setup \
-            --image=$REGISTRY/pipeline:${{ github.sha }} \
             --region=$REGION

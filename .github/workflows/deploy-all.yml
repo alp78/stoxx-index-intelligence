@@ -1,0 +1,13 @@
+name: Deploy All
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dashboard:
+    uses: ./.github/workflows/deploy-dashboard.yml
+    secrets: inherit
+
+  pipeline:
+    uses: ./.github/workflows/deploy-pipeline.yml
+    secrets: inherit

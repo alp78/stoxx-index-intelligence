@@ -573,8 +573,6 @@ else
         ("3M", now => now.AddMonths(-3)),
         ("6M", now => now.AddMonths(-6)),
         ("1Y", now => now.AddYears(-1)),
-        ("3Y", now => now.AddYears(-3)),
-        ("MAX", _ => null),
     ];
 
     private IndexPerformance? SelectedSnap => _snapshots.FirstOrDefault(s => s.Index == _selectedSignalIndex);

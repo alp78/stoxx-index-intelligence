@@ -1,0 +1,55 @@
+name: Deploy Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ingestion/**"
+      - "utils/**"
+      - "db/**"
+      - "docker/pipeline.Dockerfile"
+      - ".github/workflows/deploy-pipeline.yml"
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  REGION: europe-west1
+  REGISTRY: europe-west1-docker.pkg.dev/stoxx-index-intelligence/stoxx
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+
+      - name: Build & push pipeline image
+        run: |
+          docker build --provenance=false \
+            -t $REGISTRY/pipeline:${{ github.sha }} \
+            -t $REGISTRY/pipeline:latest \
+            -f docker/pipeline.Dockerfile .
+          docker push $REGISTRY/pipeline --all-tags
+
+      - name: Update pipeline job
+        run: |
+          gcloud run jobs update stoxx-pipeline \
+            --image=$REGISTRY/pipeline:${{ github.sha }} \
+            --region=$REGION
+
+      - name: Update setup job
+        run: |
+          gcloud run jobs update stoxx-setup \
+            --image=$REGISTRY/pipeline:${{ github.sha }} \
+            --region=$REGION
