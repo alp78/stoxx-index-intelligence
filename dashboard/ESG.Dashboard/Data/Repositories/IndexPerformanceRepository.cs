@@ -45,7 +45,6 @@ public class IndexPerformanceRepository
             INNER JOIN (
                 SELECT _index, MAX(perf_date) AS max_date
                 FROM gold.index_performance
-                WHERE ABS(ISNULL(daily_return, 0)) > 0.0001
                 GROUP BY _index
             ) latest ON p._index = latest._index AND p.perf_date = latest.max_date
             ORDER BY p._index

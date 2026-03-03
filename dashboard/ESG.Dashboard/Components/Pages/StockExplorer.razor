@@ -506,6 +506,8 @@ else
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _ma30Series;
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _ma90Series;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _currentPriceLine;
+    private LightweightCharts.Blazor.Series.IPriceLine<long>? _highPriceLine;
+    private LightweightCharts.Blazor.Series.IPriceLine<long>? _lowPriceLine;
 
     // Price header
     private OhlcvPrice? _latestCandle;
@@ -995,11 +997,21 @@ else
             _ma90Series!.SetData(ma90Data),
             _volumeSeries!.SetData(volumeData));
 
-        // Update price line
+        // Update price lines (current, high, low)
         if (_currentPriceLine is not null)
         {
             try { await _candleSeries!.RemovePriceLine(_currentPriceLine); } catch { }
             _currentPriceLine = null;
+        }
+        if (_highPriceLine is not null)
+        {
+            try { await _candleSeries!.RemovePriceLine(_highPriceLine); } catch { }
+            _highPriceLine = null;
+        }
+        if (_lowPriceLine is not null)
+        {
+            try { await _candleSeries!.RemovePriceLine(_lowPriceLine); } catch { }
+            _lowPriceLine = null;
         }
         if (_latestCandle?.Close is not null)
         {
@@ -1010,6 +1022,31 @@ else
                     Color = Clr(255, 255, 255, 80),
                     LineWidth = 1,
                     LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dashed,
+                    AxisLabelVisible = true,
+                    LineVisible = true
+                });
+        }
+        if (_filteredPrices.Count > 0)
+        {
+            var periodHigh = _filteredPrices.Max(p => p.High ?? 0);
+            var periodLow = _filteredPrices.Where(p => p.Low > 0).Min(p => p.Low!.Value);
+            _highPriceLine = await _candleSeries!.CreatePriceLine(
+                new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
+                {
+                    Price = periodHigh,
+                    Color = Clr(38, 166, 154, 60),
+                    LineWidth = 1,
+                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
+                    AxisLabelVisible = true,
+                    LineVisible = true
+                });
+            _lowPriceLine = await _candleSeries!.CreatePriceLine(
+                new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
+                {
+                    Price = periodLow,
+                    Color = Clr(239, 83, 80, 60),
+                    LineWidth = 1,
+                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
                     AxisLabelVisible = true,
                     LineVisible = true
                 });
