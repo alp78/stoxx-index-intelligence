@@ -897,25 +897,19 @@ else
             }
         }
 
-        // Phase 2: lock viewport BEFORE pushing data to prevent flash on longer periods
+        // Phase 2: push all series data + set visible range in one batch (no intermediate render)
         var ts = await _momRef.TimeScale();
-        if (minTime < long.MaxValue)
-            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
-
-        // Phase 3: push all series data in parallel (single JS batch, no intermediate renders)
-        var setTasks = new List<Task>(5);
+        var setTasks = new List<Task>(6);
         for (var i = 0; i < 5; i++)
         {
             if (_momSeriesRefs[i] is not null)
                 setTasks.Add(_momSeriesRefs[i]!.SetData(prepared[i]));
         }
-        await Task.WhenAll(setTasks);
-
-        // Re-apply range after data load to ensure it sticks
         if (minTime < long.MaxValue)
-            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
+            setTasks.Add(ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime }));
         else
-            await ts.FitContent();
+            setTasks.Add(ts.FitContent());
+        await Task.WhenAll(setTasks);
         await SendMomTooltipData();
     }
 
