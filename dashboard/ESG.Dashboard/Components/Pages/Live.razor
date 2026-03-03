@@ -112,11 +112,11 @@ else
                                         var markerColor = pctCurrent > 50 ? "#26A69A" : "#EF5350";
                                         _tickerLookup.TryGetValue((idx, p.Symbol), out var ticker);
 
-                                        <tr>
+                                        <tr style="height: 38px;">
                                             <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(p.Country)" style="font-size: 0.7rem;"></span></td>
                                             <td>
-                                                <a href="@StockLink(idx, p.Symbol)" style="font-weight: 600; font-size: 0.75rem; color: inherit; text-decoration: none; cursor: pointer;">@p.Symbol</a>
-                                                <div style="font-size: 0.55em; opacity: 0.35; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">@p.ShortName</div>
+                                                <MudLink Href="@StockLink(idx, p.Symbol)">@p.Symbol</MudLink>
+                                                <div style="font-size: 0.65em; opacity: 0.35; max-width: 90px; overflow: hidden; text-overflow: ellipsis;">@p.ShortName</div>
                                             </td>
                                             <td style="text-align: right; font-weight: 600; font-size: 0.75rem;">@($"{currency}{p.CurrentPrice:N2}")</td>
                                             <td style="text-align: right; color: @ChgColor(p.PriceChangePct); font-size: 0.7rem;">
