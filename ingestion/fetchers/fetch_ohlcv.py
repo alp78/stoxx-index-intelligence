@@ -10,7 +10,6 @@ Scenarios:
   - Up to date: skip symbol entirely
 """
 
-import json
 import sys
 import time
 from datetime import datetime
@@ -21,7 +20,7 @@ import yfinance as yf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from utils.db import get_connection
+from utils.db import get_connection, get_index_symbols
 from utils.config import get_index, data_path, silver_ohlcv, safe_write_json
 from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
@@ -32,7 +31,6 @@ _DEFAULT_HISTORY_START = "2021-01-01"
 
 def fetch_ohlcv(index_key):
     idx = get_index(index_key)
-    dim_file = data_path(index_key, "dim")
     output_file = data_path(index_key, "ohlcv")
 
     log_info(logger, "Fetching OHLCV prices from yfinance (gap-aware)",
@@ -40,27 +38,13 @@ def fetch_ohlcv(index_key):
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
-    # Read symbol list from dim JSON, fall back to DB (Cloud Run ephemeral filesystem)
-    registry = None
-    try:
-        with open(dim_file, "r", encoding="utf-8") as f:
-            registry = json.load(f)
-    except FileNotFoundError:
-        log_info(logger, "Dim JSON not found — falling back to bronze.index_dim",
-                 step="fetch", index=index_key)
-        conn_dim = get_connection()
-        cur = conn_dim.cursor()
-        cur.execute("SELECT symbol FROM bronze.index_dim WHERE _index = ?", index_key)
-        symbols = [r[0] for r in cur.fetchall() if r[0]]
-        cur.close()
-        conn_dim.close()
-        if symbols:
-            registry = [{"symbol": s} for s in symbols]
-
-    if not registry:
-        log_error(logger, "Cannot fetch OHLCV — no stock symbols available (file or DB)",
+    # Read symbol list from bronze.index_dim (populated by setup_index.py)
+    rows = get_index_symbols(index_key)
+    if not rows:
+        log_error(logger, "No symbols in bronze.index_dim — run setup_index.py first",
                   step="fetch", index=index_key)
         return
+    registry = [{"symbol": r[0], "_price_data_start": r[1]} for r in rows]
 
     # Query silver for last date per symbol
     conn = get_connection()
@@ -72,6 +56,7 @@ def fetch_ohlcv(index_key):
         cursor.execute(f"""
             SELECT symbol, CONVERT(VARCHAR(10), MAX(date), 120)
             FROM {silver_table}
+            WHERE is_filled = 0
             GROUP BY symbol
         """)
         last_dates = {r[0]: r[1] for r in cursor.fetchall()}

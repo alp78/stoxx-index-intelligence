@@ -7,7 +7,9 @@ After silver is updated, trims bronze to keep only the latest day per symbol.
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -74,12 +76,26 @@ def _transform_index(cursor, conn, index_name, bronze_table, silver_table):
             inserted = 0
             filled = 0
 
+            # Get exchange timezone mapping to determine "today" per exchange
+            cursor.execute("""
+                SELECT DISTINCT exchange, exchange_timezone_name
+                FROM bronze.index_dim WHERE _index = ?
+            """, index_name)
+            tz_by_exchange = {r[0]: r[1] for r in cursor.fetchall()}
+
             for symbol, exchange in symbol_exchange.items():
                 trading_days = cal_by_exchange.get(exchange, [])
                 if not trading_days:
                     log_warning(logger, "Skipping symbol — no trading calendar available for its exchange",
                                 step="transform", symbol=symbol, exchange=exchange)
                     continue
+
+                # Cap forward-fill at today in the exchange's timezone
+                tz_name = tz_by_exchange.get(exchange, "UTC")
+                try:
+                    today_str = datetime.now(ZoneInfo(tz_name)).strftime("%Y-%m-%d")
+                except Exception:
+                    today_str = datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%d")
 
                 # Load bronze data for this symbol
                 cursor.execute(f"""
@@ -101,6 +117,8 @@ def _transform_index(cursor, conn, index_name, bronze_table, silver_table):
                     td_str = str(td)
                     if td_str < first_date:
                         continue
+                    if td_str > today_str:
+                        break
 
                     if (symbol, td_str) in existing:
                         if td_str in bronze_rows:

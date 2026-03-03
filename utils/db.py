@@ -24,3 +24,14 @@ def get_connection(autocommit=False):
         f"TrustServerCertificate=yes"
     )
     return pyodbc.connect(conn_str, autocommit=autocommit)
+
+
+def get_index_symbols(index_key):
+    """Read stock symbols and price_data_start for an index from bronze.index_dim."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT symbol, price_data_start FROM bronze.index_dim WHERE _index = ?", index_key)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
