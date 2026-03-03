@@ -713,7 +713,7 @@ else
                 RightPriceScale = new PriceScaleOptions { BorderColor = Clr(255, 255, 255, 26), MinimumWidth = 56 },
                 OverlayPriceScale = new LightweightCharts.Blazor.Customization.Chart.BasePriceScaleOptions
                 {
-                    ScaleMargins = new LightweightCharts.Blazor.Customization.PriceScaleMargins { Top = 0.9, Bottom = 0 }
+                    ScaleMargins = new LightweightCharts.Blazor.Customization.PriceScaleMargins { Top = 0.05, Bottom = 0.18 }
                 },
                 Crosshair = new LightweightCharts.Blazor.Customization.Chart.CrosshairOptions
                 {
@@ -739,7 +739,8 @@ else
                     LineVisible = false,
                     CrosshairMarkerVisible = false,
                     LastValueVisible = false,
-                    PriceLineVisible = false
+                    PriceLineVisible = false,
+                    PriceScaleId = ""
                 });
 
             _candleSeries = await _chart.AddSeries<CandlestickStyleOptions>(
@@ -997,7 +998,11 @@ else
             _ma90Series!.SetData(ma90Data),
             _volumeSeries!.SetData(volumeData));
 
-        // Update price lines (current, high, low)
+        // Fit content first so price scale is stable before adding price lines
+        var ts = await _chart.TimeScale();
+        await ts.FitContent();
+
+        // Remove old price lines
         if (_currentPriceLine is not null)
         {
             try { await _candleSeries!.RemovePriceLine(_currentPriceLine); } catch { }
@@ -1013,6 +1018,8 @@ else
             try { await _candleSeries!.RemovePriceLine(_lowPriceLine); } catch { }
             _lowPriceLine = null;
         }
+
+        // Create price lines (current, high, low)
         if (_latestCandle?.Close is not null)
         {
             _currentPriceLine = await _candleSeries!.CreatePriceLine(
@@ -1051,9 +1058,6 @@ else
                     LineVisible = true
                 });
         }
-
-        var ts = await _chart.TimeScale();
-        await ts.FitContent();
 
         // Reset hover
         _hoverCandle = null;
