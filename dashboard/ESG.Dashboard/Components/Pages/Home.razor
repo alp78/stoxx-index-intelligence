@@ -897,7 +897,12 @@ else
             }
         }
 
-        // Phase 2: push all series data in parallel (single JS batch, no intermediate renders)
+        // Phase 2: lock viewport BEFORE pushing data to prevent flash on longer periods
+        var ts = await _momRef.TimeScale();
+        if (minTime < long.MaxValue)
+            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
+
+        // Phase 3: push all series data in parallel (single JS batch, no intermediate renders)
         var setTasks = new List<Task>(5);
         for (var i = 0; i < 5; i++)
         {
@@ -906,8 +911,7 @@ else
         }
         await Task.WhenAll(setTasks);
 
-        // Lock viewport to the data range
-        var ts = await _momRef.TimeScale();
+        // Re-apply range after data load to ensure it sticks
         if (minTime < long.MaxValue)
             await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
         else
