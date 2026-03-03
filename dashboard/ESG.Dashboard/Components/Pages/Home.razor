@@ -155,6 +155,27 @@ else
 
     @if (SelectedSnap is not null)
     {
+        <div class="mb-2">
+            <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                <ChildContent>
+                    <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">INDEX SNAPSHOT</MudText>
+                </ChildContent>
+                <TooltipContent>
+                    <div style="@_tipStyle">
+                        <div style="@_tipHead">Index Performance Snapshot</div>
+                        <div style="@_tipDesc">Cap-weighted aggregate metrics for the selected index:</div>
+                        <ul style="@_tipList">
+                            <li><b>YTD</b> &mdash; year-to-date cumulative return</li>
+                            <li><b>30d / 90d Ret</b> &mdash; rolling 30- and 90-day returns</li>
+                            <li><b>30d Vol</b> &mdash; 30-day annualized volatility</li>
+                            <li><b>PE / PB</b> &mdash; average price-to-earnings and price-to-book</li>
+                            <li><b>Yield</b> &mdash; average dividend yield</li>
+                        </ul>
+                    </div>
+                </TooltipContent>
+            </MudTooltip>
+            <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">Updated @SelectedSnap.PerfDate.ToString("yyyy-MM-dd") &middot; @SelectedSnap.StocksCount stocks</MudText>
+        </div>
         <MudPaper Class="pa-2 px-3 mb-3" Elevation="1">
             <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; flex-wrap: wrap; gap: 4px 0;">
                 <span><span style="opacity: 0.4;">YTD</span> <span style="font-weight: 600; color: @ReturnHex(SelectedSnap.YtdReturn);">@FormatPct(SelectedSnap.YtdReturn)</span></span>
@@ -170,8 +191,6 @@ else
                 <span><span style="opacity: 0.4;">PB</span> @FormatNum(SelectedSnap.AvgPb)</span>
                 <span style="opacity: 0.3;">|</span>
                 <span><span style="opacity: 0.4;">Yield</span> @FormatPct(SelectedSnap.AvgDividendYield)</span>
-                <span style="opacity: 0.3;">|</span>
-                <span style="opacity: 0.4;">@SelectedSnap.PerfDate.ToString("yyyy-MM-dd") &middot; @SelectedSnap.StocksCount stocks</span>
             </div>
         </MudPaper>
     }
