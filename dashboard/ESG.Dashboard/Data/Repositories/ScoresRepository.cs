@@ -30,7 +30,8 @@ public class ScoresRepository
                    current_price AS CurrentPrice, day_change_pct AS DayChangePct,
                    five_day_change_pct AS FiveDayChangePct, ytd_change_pct AS YtdChangePct
             FROM gold.scores_daily
-            WHERE (@Index IS NULL OR _index = @Index)
+            WHERE score_date = (SELECT MAX(score_date) FROM gold.scores_daily)
+              AND (@Index IS NULL OR _index = @Index)
             ORDER BY _index, index_weight DESC
             """;
         return await conn.QueryAsync<ScoreDaily>(sql, new { Index = index });
@@ -83,7 +84,8 @@ public class ScoresRepository
                    governance_score AS GovernanceScore, governance_rank AS GovernanceRank,
                    beta AS Beta, governance_vs_quality AS GovernanceVsQuality
             FROM gold.scores_quarterly
-            WHERE (@Index IS NULL OR _index = @Index)
+            WHERE as_of_date = (SELECT MAX(as_of_date) FROM gold.scores_quarterly)
+              AND (@Index IS NULL OR _index = @Index)
             ORDER BY _index, quality_rank
             """;
         return await conn.QueryAsync<ScoreQuarterly>(sql, new { Index = index });
@@ -131,9 +133,11 @@ public class ScoresRepository
             FROM gold.scores_daily sd
             JOIN gold.scores_quarterly sq
                 ON sd._index = sq._index AND sd.symbol = sq.symbol
+                AND sq.as_of_date = (SELECT MAX(as_of_date) FROM gold.scores_quarterly)
             JOIN silver.index_dim d
                 ON sd._index = d._index AND sd.symbol = d.symbol AND d.is_current = 1
-            WHERE (@Index IS NULL OR d._index = @Index)
+            WHERE sd.score_date = (SELECT MAX(score_date) FROM gold.scores_daily)
+              AND (@Index IS NULL OR d._index = @Index)
             GROUP BY d._index, d.sector
             ORDER BY d._index, AVG(sd.composite_score) DESC
             """;
