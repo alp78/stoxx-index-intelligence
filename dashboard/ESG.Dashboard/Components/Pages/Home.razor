@@ -180,7 +180,7 @@ else
         <!-- Strongest Momentum -->
         <MudItem xs="12" md="6" lg="4">
             <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
                     <div>
                         <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                             <ChildContent>
@@ -994,15 +994,28 @@ else
             }
         }
 
-        // Phase 2: push all series data in parallel (single JS batch)
+        // Phase 2: push all series data + set visible range in one batch
+        long minTime = long.MaxValue, maxTime = long.MinValue;
+        foreach (var arr in prepared.Values)
+        {
+            if (arr.Length > 0)
+            {
+                if (arr[0].Time < minTime) minTime = arr[0].Time;
+                if (arr[^1].Time > maxTime) maxTime = arr[^1].Time;
+            }
+        }
+
+        var timeScale = await _chartRef.TimeScale();
         var setTasks = prepared
             .Where(kv => _seriesRefs[kv.Key] is not null)
             .Select(kv => _seriesRefs[kv.Key]!.SetData(kv.Value))
             .ToList();
+        if (minTime < long.MaxValue)
+            setTasks.Add(timeScale.SetVisibleRange(new TimeRange { From = minTime, To = maxTime }));
+        else
+            setTasks.Add(timeScale.FitContent());
         await Task.WhenAll(setTasks);
 
-        var timeScale = await _chartRef.TimeScale();
-        await timeScale.FitContent();
         await SendTooltipData(_chartContainer, _tsLookup, true);
     }
 
@@ -1048,15 +1061,28 @@ else
             }
         }
 
-        // Phase 2: push all series data in parallel (single JS batch)
+        // Phase 2: push all series data + set visible range in one batch
+        long minTime = long.MaxValue, maxTime = long.MinValue;
+        foreach (var arr in prepared.Values)
+        {
+            if (arr.Length > 0)
+            {
+                if (arr[0].Time < minTime) minTime = arr[0].Time;
+                if (arr[^1].Time > maxTime) maxTime = arr[^1].Time;
+            }
+        }
+
+        var ts = await chart.TimeScale();
         var setTasks = prepared
             .Where(kv => seriesRefs[kv.Key] is not null)
             .Select(kv => seriesRefs[kv.Key]!.SetData(kv.Value))
             .ToList();
+        if (minTime < long.MaxValue)
+            setTasks.Add(ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime }));
+        else
+            setTasks.Add(ts.FitContent());
         await Task.WhenAll(setTasks);
 
-        var ts = await chart.TimeScale();
-        await ts.FitContent();
         await SendTooltipData(container, lookup, colorBySign);
     }
 
@@ -1099,7 +1125,13 @@ else
     {
         _selectedMomPeriod = period;
         if (_momReady)
+        {
+            _momReady = false;
+            StateHasChanged();
+            await Task.Delay(20);
             await UpdateMomData();
+            _momReady = true;
+        }
     }
 
     private async Task SetPeriod(string period)
