@@ -40,7 +40,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - pipeline_data:/app/data
+      - ./data:/app/data
       - pipeline_logs:/app/logs
 
   dashboard:
@@ -58,5 +58,4 @@ services:
 
 volumes:
   sqlserver_data:
-  pipeline_data:
   pipeline_logs:

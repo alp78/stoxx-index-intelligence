@@ -1,6 +1,5 @@
 """Fetches daily trading signals (PE, dividend yield, moving averages, etc.) from yfinance."""
 
-import json
 import sys
 import yfinance as yf
 import time
@@ -9,42 +8,27 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from utils.config import INDICES, data_path, safe_write_json, cet_now_str
-from utils.db import get_connection
+from utils.db import get_index_symbols
 from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
 logger = get_logger(__name__)
 
 
-def fetch_daily_signals(reg_file, output_file, index_key=None):
+def fetch_daily_signals(index_key, output_file):
     log_info(logger, "Fetching daily trading signals (PE, yield, momentum) from yfinance",
-             step="fetch", source="yfinance", kind="signals_daily",
-             reg_file=str(reg_file))
+             step="fetch", source="yfinance", kind="signals_daily", index=index_key)
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     daily_signals = []
 
-    registry = None
-    try:
-        with open(reg_file, 'r', encoding='utf-8') as f:
-            registry = json.load(f)
-    except FileNotFoundError:
-        if index_key:
-            log_info(logger, "Registry JSON not found — falling back to bronze.index_dim",
-                     step="fetch", index=index_key)
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT symbol FROM bronze.index_dim WHERE _index = ?", index_key)
-            symbols = [r[0] for r in cur.fetchall() if r[0]]
-            cur.close()
-            conn.close()
-            if symbols:
-                registry = [{"symbol": s} for s in symbols]
-
-    if not registry:
-        log_error(logger, "Cannot fetch daily signals — no stock symbols available (file or DB)",
-                  step="fetch", reg_file=str(reg_file), index=index_key)
+    # Read symbol list from bronze.index_dim (populated by setup_index.py)
+    symbols = [r[0] for r in get_index_symbols(index_key)]
+    if not symbols:
+        log_error(logger, "No symbols in bronze.index_dim — run setup_index.py first",
+                  step="fetch", index=index_key)
         return
+    registry = [{"symbol": s} for s in symbols]
 
     with StepTimer() as timer:
         for company in registry:
@@ -105,8 +89,4 @@ def fetch_daily_signals(reg_file, output_file, index_key=None):
 if __name__ == "__main__":
     for idx in INDICES:
         key = idx["key"]
-        fetch_daily_signals(
-            reg_file=data_path(key, "dim"),
-            output_file=data_path(key, "signals_daily"),
-            index_key=key
-        )
+        fetch_daily_signals(key, data_path(key, "signals_daily"))

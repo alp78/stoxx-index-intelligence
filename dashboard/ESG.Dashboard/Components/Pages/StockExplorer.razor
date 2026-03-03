@@ -508,6 +508,7 @@ else
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _currentPriceLine;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _highPriceLine;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _lowPriceLine;
+    private int _chartUpdateId; // concurrency guard for overlapping UpdateChart calls
 
     // Price header
     private OhlcvPrice? _latestCandle;
@@ -713,7 +714,7 @@ else
                 RightPriceScale = new PriceScaleOptions { BorderColor = Clr(255, 255, 255, 26), MinimumWidth = 56 },
                 OverlayPriceScale = new LightweightCharts.Blazor.Customization.Chart.BasePriceScaleOptions
                 {
-                    ScaleMargins = new LightweightCharts.Blazor.Customization.PriceScaleMargins { Top = 0.05, Bottom = 0.18 }
+                    ScaleMargins = new LightweightCharts.Blazor.Customization.PriceScaleMargins { Top = 0.9, Bottom = 0 }
                 },
                 Crosshair = new LightweightCharts.Blazor.Customization.Chart.CrosshairOptions
                 {
@@ -739,8 +740,7 @@ else
                     LineVisible = false,
                     CrosshairMarkerVisible = false,
                     LastValueVisible = false,
-                    PriceLineVisible = false,
-                    PriceScaleId = ""
+                    PriceLineVisible = false
                 });
 
             _candleSeries = await _chart.AddSeries<CandlestickStyleOptions>(
@@ -917,6 +917,7 @@ else
     private async Task UpdateChart()
     {
         if (_chart is null || !_chartReady) return;
+        var updateId = ++_chartUpdateId; // guard: if superseded, stop before creating price lines
         await MeasureChartContainerAsync();
 
         // Filter to period
@@ -1019,13 +1020,17 @@ else
             _lowPriceLine = null;
         }
 
-        // Create price lines (current, high, low)
-        if (_latestCandle?.Close is not null)
+        // If a newer UpdateChart started while we were awaiting, bail out
+        if (updateId != _chartUpdateId) return;
+
+        // Create price lines (current, high, low) — skip overlapping ones
+        var currentPrice = _latestCandle?.Close;
+        if (currentPrice is not null)
         {
             _currentPriceLine = await _candleSeries!.CreatePriceLine(
                 new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
                 {
-                    Price = _latestCandle.Close.Value,
+                    Price = currentPrice.Value,
                     Color = Clr(255, 255, 255, 80),
                     LineWidth = 1,
                     LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dashed,
@@ -1033,30 +1038,39 @@ else
                     LineVisible = true
                 });
         }
+        if (updateId != _chartUpdateId) return;
         if (_filteredPrices.Count > 0)
         {
             var periodHigh = _filteredPrices.Max(p => p.High ?? 0);
             var periodLow = _filteredPrices.Where(p => p.Low > 0).Min(p => p.Low!.Value);
-            _highPriceLine = await _candleSeries!.CreatePriceLine(
-                new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
-                {
-                    Price = periodHigh,
-                    Color = Clr(38, 166, 154, 60),
-                    LineWidth = 1,
-                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
-                    AxisLabelVisible = true,
-                    LineVisible = true
-                });
-            _lowPriceLine = await _candleSeries!.CreatePriceLine(
-                new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
-                {
-                    Price = periodLow,
-                    Color = Clr(239, 83, 80, 60),
-                    LineWidth = 1,
-                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
-                    AxisLabelVisible = true,
-                    LineVisible = true
-                });
+
+            if (currentPrice is null || Math.Abs(periodHigh - currentPrice.Value) > currentPrice.Value * 0.001)
+            {
+                _highPriceLine = await _candleSeries!.CreatePriceLine(
+                    new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
+                    {
+                        Price = periodHigh,
+                        Color = Clr(38, 166, 154, 60),
+                        LineWidth = 1,
+                        LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
+                        AxisLabelVisible = true,
+                        LineVisible = true
+                    });
+            }
+            if (updateId != _chartUpdateId) return;
+            if (currentPrice is null || Math.Abs(periodLow - currentPrice.Value) > currentPrice.Value * 0.001)
+            {
+                _lowPriceLine = await _candleSeries!.CreatePriceLine(
+                    new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
+                    {
+                        Price = periodLow,
+                        Color = Clr(239, 83, 80, 60),
+                        LineWidth = 1,
+                        LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
+                        AxisLabelVisible = true,
+                        LineVisible = true
+                    });
+            }
         }
 
         // Reset hover

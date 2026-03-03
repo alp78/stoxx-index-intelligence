@@ -139,14 +139,12 @@ def step_03_transform_ohlcv():
 # ---------------------------------------------------------------------------
 
 def step_04_fetch_signals_daily():
-    """Fetch daily trading signals from yfinance -> JSON.
-    Falls back to DB for stock symbols when dim file is missing (Cloud Run)."""
+    """Fetch daily trading signals from yfinance -> JSON."""
     from fetchers.fetch_signals_daily import fetch_daily_signals
     for idx in INDICES:
         key = idx["key"]
         try:
-            fetch_daily_signals(data_path(key, "dim"), data_path(key, "signals_daily"),
-                                index_key=key)
+            fetch_daily_signals(key, data_path(key, "signals_daily"))
         except Exception as e:
             _skip(key, f"signals_daily fetch failed: {e}")
 
@@ -170,14 +168,12 @@ def step_05_load_signals_daily():
 
 
 def step_06_fetch_signals_quarterly():
-    """Fetch quarterly fundamental signals from yfinance -> JSON.
-    Falls back to DB for stock symbols when dim file is missing (Cloud Run)."""
+    """Fetch quarterly fundamental signals from yfinance -> JSON."""
     from fetchers.fetch_signals_quarterly import fetch_quarterly_fundamentals
     for idx in INDICES:
         key = idx["key"]
         try:
-            fetch_quarterly_fundamentals(data_path(key, "dim"), data_path(key, "signals_quarterly"),
-                                         index_key=key)
+            fetch_quarterly_fundamentals(key, data_path(key, "signals_quarterly"))
         except Exception as e:
             _skip(key, f"signals_quarterly fetch failed: {e}")
 
@@ -217,14 +213,12 @@ def step_09_transform_signals_quarterly():
 # ---------------------------------------------------------------------------
 
 def step_10_fetch_pulse_tickers():
-    """Discover most active tickers from yfinance -> JSON.
-    Falls back to DB for stock symbols when dim file is missing (Cloud Run)."""
+    """Discover most active tickers from yfinance -> JSON."""
     from fetchers.fetch_pulse import discover_pulse_tickers
     for idx in INDICES:
         key = idx["key"]
         try:
-            discover_pulse_tickers(data_path(key, "dim"), data_path(key, "tickers"),
-                                   index_key=key)
+            discover_pulse_tickers(key, data_path(key, "tickers"))
         except Exception as e:
             _skip(key, f"pulse ticker discovery failed: {e}")
 
