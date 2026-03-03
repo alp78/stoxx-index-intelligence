@@ -505,10 +505,13 @@ else
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _volumeSeries;
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _ma30Series;
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _ma90Series;
+    private LightweightCharts.Blazor.Charts.ITimeScaleApi<long>? _timeScale;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _currentPriceLine;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _highPriceLine;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _lowPriceLine;
     private int _chartUpdateId; // concurrency guard for overlapping UpdateChart calls
+    private int _priceLineUpdateId; // concurrency guard for visible range changes
+    private CancellationTokenSource? _priceLineCts; // debounce for pan/zoom
 
     // Price header
     private OhlcvPrice? _latestCandle;
@@ -527,11 +530,11 @@ else
     private double _chartHeight = 420;
     private ElementReference _chartContainer;
 
-    // Filtered data for crosshair lookup
-    private List<OhlcvPrice> _filteredPrices = [];
-    private double?[] _filteredMa30 = [];
-    private double?[] _filteredMa90 = [];
+    // Data for crosshair lookup (full range) + filtered subset for period high/low
+    private double?[] _allMa30 = [];
+    private double?[] _allMa90 = [];
     private Dictionary<long, int> _tsIndex = new();
+    private List<OhlcvPrice> _filteredPrices = [];
 
     private static readonly (string Label, int Months)[] _ranges =
     [
@@ -792,6 +795,8 @@ else
                 });
 
             _chart.CrosshairMoved += OnCrosshairMoved;
+            _timeScale = await _chart.TimeScale();
+            _timeScale.VisibleTimeRangeChanged += OnVisibleRangeChanged;
             _chartReady = true;
             await MeasureChartContainerAsync();
 
@@ -830,10 +835,10 @@ else
         }
         if (_tsIndex.TryGetValue(e.Time.Value, out var idx))
         {
-            _hoverCandle = _filteredPrices[idx];
-            _hoverPrevCandle = idx > 0 ? _filteredPrices[idx - 1] : null;
-            _hoverMa30 = _filteredMa30[idx];
-            _hoverMa90 = _filteredMa90[idx];
+            _hoverCandle = _allPrices[idx];
+            _hoverPrevCandle = idx > 0 ? _allPrices[idx - 1] : null;
+            _hoverMa30 = _allMa30[idx];
+            _hoverMa90 = _allMa90[idx];
             InvokeAsync(StateHasChanged);
         }
     }
@@ -920,7 +925,14 @@ else
         var updateId = ++_chartUpdateId; // guard: if superseded, stop before creating price lines
         await MeasureChartContainerAsync();
 
-        // Filter to period
+        // Build lookup arrays from full data
+        _allMa30 = _allPrices.Select(p => p.Sma30).ToArray();
+        _allMa90 = _allPrices.Select(p => p.Sma90).ToArray();
+        _tsIndex.Clear();
+        for (int i = 0; i < _allPrices.Count; i++)
+            _tsIndex[ToUnix(_allPrices[i].Date)] = i;
+
+        // Filtered subset for period high/low price lines
         int startIdx = 0;
         if (_selectedMonths > 0)
         {
@@ -928,17 +940,9 @@ else
             startIdx = _allPrices.FindIndex(p => p.Date >= cutoff);
             if (startIdx < 0) startIdx = _allPrices.Count;
         }
-
         _filteredPrices = _allPrices.GetRange(startIdx, _allPrices.Count - startIdx);
-        _filteredMa30 = _filteredPrices.Select(p => p.Sma30).ToArray();
-        _filteredMa90 = _filteredPrices.Select(p => p.Sma90).ToArray();
 
-        // Build timestamp lookup
-        _tsIndex.Clear();
-        for (int i = 0; i < _filteredPrices.Count; i++)
-            _tsIndex[ToUnix(_filteredPrices[i].Date)] = i;
-
-        if (_filteredPrices.Count == 0)
+        if (_allPrices.Count == 0)
         {
             await _candleSeries!.SetData(Array.Empty<CandlestickData<long>>());
             await _areaSeries!.SetData(Array.Empty<AreaData<long>>());
@@ -948,8 +952,8 @@ else
             return;
         }
 
-        // Candle data
-        var candleData = _filteredPrices.Select(p => new CandlestickData<long>
+        // Candle data (full range — period is controlled via visible range)
+        var candleData = _allPrices.Select(p => new CandlestickData<long>
         {
             Time = ToUnix(p.Date),
             Open = p.Open ?? 0,
@@ -959,27 +963,27 @@ else
         }).ToArray();
 
         // Area data (close prices for the fill)
-        var areaData = _filteredPrices.Select(p => new AreaData<long>
+        var areaData = _allPrices.Select(p => new AreaData<long>
         {
             Time = ToUnix(p.Date),
             Value = p.Close ?? 0
         }).ToArray();
 
         // MA data from SQL (skip nulls)
-        var ma30Data = _filteredPrices
+        var ma30Data = _allPrices
             .Where(p => p.Sma30.HasValue)
             .Select(p => new LineData<long> { Time = ToUnix(p.Date), Value = p.Sma30!.Value })
             .ToArray();
 
-        var ma90Data = _filteredPrices
+        var ma90Data = _allPrices
             .Where(p => p.Sma90.HasValue)
             .Select(p => new LineData<long> { Time = ToUnix(p.Date), Value = p.Sma90!.Value })
             .ToArray();
 
-        // Volume data — grey with intensity
-        var maxVol = _filteredPrices.Max(p => p.Volume ?? 0);
+        // Volume data — grey with intensity based on full range max
+        var maxVol = _allPrices.Max(p => p.Volume ?? 0);
         if (maxVol == 0) maxVol = 1;
-        var volumeData = _filteredPrices.Select(p =>
+        var volumeData = _allPrices.Select(p =>
         {
             var ratio = (double)(p.Volume ?? 0) / maxVol;
             var alpha = (int)(50 + 180 * ratio);
@@ -999,9 +1003,49 @@ else
             _ma90Series!.SetData(ma90Data),
             _volumeSeries!.SetData(volumeData));
 
-        // Fit content first so price scale is stable before adding price lines
-        var ts = await _chart.TimeScale();
-        await ts.FitContent();
+        // Set visible range: zoom to period, or fit all for MAX
+        // (VisibleTimeRangeChanged will fire and update price lines)
+        if (_selectedMonths > 0 && _filteredPrices.Count > 0)
+        {
+            await _timeScale!.SetVisibleRange(new LightweightCharts.Blazor.Models.TimeRange
+            {
+                From = ToUnix(_filteredPrices[0].Date),
+                To = ToUnix(_filteredPrices[^1].Date)
+            });
+        }
+        else
+        {
+            await _timeScale!.FitContent();
+        }
+
+        // Reset hover
+        _hoverCandle = null;
+        _lastHoverTime = null;
+    }
+
+    private void OnVisibleRangeChanged(object? sender, LightweightCharts.Blazor.Models.TimeRange? e)
+    {
+        if (_disposed || e is null || _candleSeries is null) return;
+        _priceLineCts?.Cancel();
+        _priceLineCts = new CancellationTokenSource();
+        var cts = _priceLineCts;
+        var from = e.From;
+        var to = e.To;
+        InvokeAsync(async () =>
+        {
+            try
+            {
+                await Task.Delay(120, cts.Token);
+                if (!cts.IsCancellationRequested)
+                    await UpdatePriceLines(from, to);
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
+
+    private async Task UpdatePriceLines(long fromTs, long toTs)
+    {
+        var updateId = ++_priceLineUpdateId;
 
         // Remove old price lines
         if (_currentPriceLine is not null)
@@ -1020,11 +1064,17 @@ else
             _lowPriceLine = null;
         }
 
-        // If a newer UpdateChart started while we were awaiting, bail out
-        if (updateId != _chartUpdateId) return;
+        if (updateId != _priceLineUpdateId) return;
 
-        // Create price lines (current, high, low) — skip overlapping ones
-        var currentPrice = _latestCandle?.Close;
+        // Find prices within visible range
+        var visiblePrices = _allPrices
+            .Where(p => { var ts = ToUnix(p.Date); return ts >= fromTs && ts <= toTs; })
+            .ToList();
+
+        if (visiblePrices.Count == 0) return;
+
+        // Current price = latest close in visible range
+        var currentPrice = visiblePrices[^1].Close;
         if (currentPrice is not null)
         {
             _currentPriceLine = await _candleSeries!.CreatePriceLine(
@@ -1038,44 +1088,39 @@ else
                     LineVisible = true
                 });
         }
-        if (updateId != _chartUpdateId) return;
-        if (_filteredPrices.Count > 0)
+        if (updateId != _priceLineUpdateId) return;
+
+        var visibleHigh = visiblePrices.Max(p => p.High ?? 0);
+        var visibleLow = visiblePrices.Where(p => p.Low > 0).Min(p => p.Low!.Value);
+
+        if (currentPrice is null || Math.Abs(visibleHigh - currentPrice.Value) > currentPrice.Value * 0.001)
         {
-            var periodHigh = _filteredPrices.Max(p => p.High ?? 0);
-            var periodLow = _filteredPrices.Where(p => p.Low > 0).Min(p => p.Low!.Value);
-
-            if (currentPrice is null || Math.Abs(periodHigh - currentPrice.Value) > currentPrice.Value * 0.001)
-            {
-                _highPriceLine = await _candleSeries!.CreatePriceLine(
-                    new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
-                    {
-                        Price = periodHigh,
-                        Color = Clr(38, 166, 154, 60),
-                        LineWidth = 1,
-                        LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
-                        AxisLabelVisible = true,
-                        LineVisible = true
-                    });
-            }
-            if (updateId != _chartUpdateId) return;
-            if (currentPrice is null || Math.Abs(periodLow - currentPrice.Value) > currentPrice.Value * 0.001)
-            {
-                _lowPriceLine = await _candleSeries!.CreatePriceLine(
-                    new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
-                    {
-                        Price = periodLow,
-                        Color = Clr(239, 83, 80, 60),
-                        LineWidth = 1,
-                        LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
-                        AxisLabelVisible = true,
-                        LineVisible = true
-                    });
-            }
+            _highPriceLine = await _candleSeries!.CreatePriceLine(
+                new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
+                {
+                    Price = visibleHigh,
+                    Color = Clr(38, 166, 154, 60),
+                    LineWidth = 1,
+                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
+                    AxisLabelVisible = true,
+                    LineVisible = true
+                });
         }
+        if (updateId != _priceLineUpdateId) return;
 
-        // Reset hover
-        _hoverCandle = null;
-        _lastHoverTime = null;
+        if (currentPrice is null || Math.Abs(visibleLow - currentPrice.Value) > currentPrice.Value * 0.001)
+        {
+            _lowPriceLine = await _candleSeries!.CreatePriceLine(
+                new LightweightCharts.Blazor.Customization.Series.PriceLineOptions
+                {
+                    Price = visibleLow,
+                    Color = Clr(239, 83, 80, 60),
+                    LineWidth = 1,
+                    LineStyle = LightweightCharts.Blazor.Customization.Enums.LineStyle.Dotted,
+                    AxisLabelVisible = true,
+                    LineVisible = true
+                });
+        }
     }
 
     private async Task OnIndexFilterChanged(string? value)
@@ -1187,6 +1232,9 @@ else
         _disposed = true;
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
+        _priceLineCts?.Cancel();
+        _priceLineCts?.Dispose();
+        if (_timeScale is not null) _timeScale.VisibleTimeRangeChanged -= OnVisibleRangeChanged;
         if (_chart is not null) _chart.CrosshairMoved -= OnCrosshairMoved;
         if (_jsModule is not null)
         {
