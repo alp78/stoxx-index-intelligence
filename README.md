@@ -179,7 +179,11 @@ Each workload runs under its own service account with scoped roles:
 
 No service account has `editor` or `owner` roles. The CI account can assume pipeline and dashboard identities only for deployment (via `serviceAccountUser`), not for data access.
 
-### Data integrity & idempotency
+---
+
+## Data quality
+
+### Idempotency
 
 Every loader and transform is designed to be safely rerunnable. The pipeline uses three idempotency strategies depending on the data characteristics:
 
@@ -189,7 +193,7 @@ Every loader and transform is designed to be safely rerunnable. The pipeline use
 
 **Upsert with change detection** — Silver-layer transforms pre-load existing rows into memory, compare values, and execute insert/update/skip decisions per row. Unchanged rows are not touched, which avoids unnecessary write amplification and keeps audit trails clean.
 
-### Database transactions & rollback
+### Transactions & rollback
 
 All database operations run inside explicit transactions with `autocommit=False`. Every loader and transform follows the same pattern:
 
@@ -203,6 +207,8 @@ except Exception:
 ```
 
 Long-running transforms use periodic commits to avoid holding locks across millions of rows. If a failure occurs mid-batch, the rollback reverts only the uncommitted portion — previously committed batches are idempotent and will be skipped on re-run.
+
+### Resilience & recovery
 
 Cloud SQL runs automated backups daily at 03:00 UTC on a stable maintenance window (Sunday 04:00 UTC). The pipeline job is configured with `max_retries = 1` at the Cloud Run level, so a transient failure (OOM, network blip) triggers an automatic retry of the entire job. At the application level, per-index errors are caught and logged without stopping the pipeline — a failed index is skipped and the remaining indices continue. Subsequent scheduled runs recover naturally because every step is idempotent.
 

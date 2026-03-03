@@ -58,16 +58,18 @@ public class StockRepository
         var sql = $"""
             WITH cte AS (
                 SELECT symbol, date, [open], high, low, [close], adj_close, volume,
-                       AVG([close]) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS sma_30,
-                       AVG([close]) OVER (ORDER BY date ROWS BETWEEN 89 PRECEDING AND CURRENT ROW) AS sma_90,
-                       COUNT([close]) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS cnt_30,
-                       COUNT([close]) OVER (ORDER BY date ROWS BETWEEN 89 PRECEDING AND CURRENT ROW) AS cnt_90
+                       CASE WHEN [close] <> 0 THEN adj_close / [close] ELSE 1 END AS adj_ratio,
+                       AVG(adj_close) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS sma_30,
+                       AVG(adj_close) OVER (ORDER BY date ROWS BETWEEN 89 PRECEDING AND CURRENT ROW) AS sma_90,
+                       COUNT(adj_close) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS cnt_30,
+                       COUNT(adj_close) OVER (ORDER BY date ROWS BETWEEN 89 PRECEDING AND CURRENT ROW) AS cnt_90
                 FROM {table}
                 WHERE symbol = @Symbol AND ISNULL(volume, 0) > 0
             )
             SELECT symbol AS Symbol, date AS Date,
-                   [open] AS [Open], high AS High, low AS Low,
-                   [close] AS [Close], adj_close AS AdjClose, volume AS Volume,
+                   [open] * adj_ratio AS [Open], high * adj_ratio AS High,
+                   low * adj_ratio AS Low, adj_close AS [Close],
+                   [close] AS RawClose, adj_close AS AdjClose, volume AS Volume,
                    CASE WHEN cnt_30 >= 30 THEN sma_30 END AS Sma30,
                    CASE WHEN cnt_90 >= 90 THEN sma_90 END AS Sma90
             FROM cte
@@ -86,10 +88,10 @@ public class StockRepository
 
         using var conn = _db.Create();
         var sql = $"""
-            SELECT symbol AS Symbol, date AS Date, [close] AS [Close]
+            SELECT symbol AS Symbol, date AS Date, adj_close AS [Close]
             FROM {table}
             WHERE symbol IN @Symbols AND date >= @From
-              AND [close] IS NOT NULL AND ISNULL(volume, 0) > 0
+              AND adj_close IS NOT NULL AND ISNULL(volume, 0) > 0
             ORDER BY symbol, date
             """;
         return await conn.QueryAsync<SymbolClose>(sql, new { Symbols = symbols, From = from });

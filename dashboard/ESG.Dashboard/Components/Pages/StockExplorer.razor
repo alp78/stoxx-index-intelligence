@@ -60,7 +60,7 @@ else
                                 <div>
                                     <MudText Typo="Typo.caption" Style="opacity: 0.4;">PRICE</MudText>
                                     <div class="d-flex align-center justify-end" style="gap: 6px;">
-                                        <MudText Typo="Typo.h6" Style="font-weight: 700;">@FmtPrice(_latestCandle.Close)</MudText>
+                                        <MudText Typo="Typo.h6" Style="font-weight: 700;">@FmtPrice(_latestCandle.RawClose)</MudText>
                                         @if (_priceChangePct is not null)
                                         {
                                             var up = _priceChangePct >= 0;
@@ -127,11 +127,12 @@ else
                                 <div style="color: #888;"><span style="opacity: 0.5;">O</span> <span style="float: right; margin-left: 10px;">@FmtPrice(_hoverCandle.Open)</span></div>
                                 <div style="color: #888;"><span style="opacity: 0.5;">H</span> <span style="float: right; margin-left: 10px;">@FmtPrice(_hoverCandle.High)</span></div>
                                 <div style="color: #888;"><span style="opacity: 0.5;">L</span> <span style="float: right; margin-left: 10px;">@FmtPrice(_hoverCandle.Low)</span></div>
-                                <div style="color: #fff;"><span style="font-weight: 600;">C</span> <span style="float: right; margin-left: 10px; font-weight: 600;">@FmtPrice(_hoverCandle.Close)</span></div>
-                                @if (_latestCandle is not null && _hoverCandle.Date != _latestCandle.Date)
+                                <div style="color: #fff;"><span style="font-weight: 600;">C</span> <span style="float: right; margin-left: 10px; font-weight: 600;">@FmtPrice(_hoverCandle.RawClose)</span></div>
+                                <div style="color: #888;"><span style="opacity: 0.5;">Adj</span> <span style="float: right; margin-left: 10px;">@FmtPrice(_hoverCandle.Close)</span></div>
+                                @if (_hoverPrevCandle is not null)
                                 {
-                                    var diff = (_hoverCandle.Close ?? 0) - (_latestCandle.Close ?? 0);
-                                    var pct = (_latestCandle.Close ?? 0) != 0 ? diff / (_latestCandle.Close ?? 1) * 100 : 0;
+                                    var diff = (_hoverCandle.RawClose ?? 0) - (_hoverPrevCandle.RawClose ?? 0);
+                                    var pct = (_hoverPrevCandle.RawClose ?? 0) != 0 ? diff / (_hoverPrevCandle.RawClose ?? 1) * 100 : 0;
                                     var clr = diff >= 0 ? "#26A69A" : "#EF5350";
                                     <div><span style="opacity: 0.5;">VS</span> <span style="float: right; margin-left: 10px; color: @clr;">@($"{pct:+0.00;-0.00}%")</span></div>
                                 }
@@ -513,6 +514,7 @@ else
 
     // Hover overlay
     private OhlcvPrice? _hoverCandle;
+    private OhlcvPrice? _hoverPrevCandle;
     private double? _hoverMa30;
     private double? _hoverMa90;
     private long? _lastHoverTime;
@@ -808,6 +810,7 @@ else
             if (e.Time is null && _hoverCandle is not null)
             {
                 _hoverCandle = null;
+                _hoverPrevCandle = null;
                 _hoverMa30 = null;
                 _hoverMa90 = null;
                 _lastHoverTime = null;
@@ -825,6 +828,7 @@ else
         if (_tsIndex.TryGetValue(e.Time.Value, out var idx))
         {
             _hoverCandle = _filteredPrices[idx];
+            _hoverPrevCandle = idx > 0 ? _filteredPrices[idx - 1] : null;
             _hoverMa30 = _filteredMa30[idx];
             _hoverMa90 = _filteredMa90[idx];
             InvokeAsync(StateHasChanged);
@@ -870,8 +874,8 @@ else
         _latestCandle = _allPrices.Count > 0 ? _allPrices[^1] : null;
         if (_allPrices.Count >= 2)
         {
-            var prev = _allPrices[^2].Close ?? 0;
-            var curr = _allPrices[^1].Close ?? 0;
+            var prev = _allPrices[^2].RawClose ?? 0;
+            var curr = _allPrices[^1].RawClose ?? 0;
             _priceChangePct = prev != 0 ? (curr - prev) / prev * 100 : null;
         }
         else _priceChangePct = null;

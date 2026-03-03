@@ -176,6 +176,7 @@ else
         </MudPaper>
     }
 
+    <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 4px; margin-top: 12px;">DAILY SIGNALS</MudText>
     <MudGrid>
         <!-- Strongest Momentum -->
         <MudItem xs="12" md="6" lg="4">
@@ -200,7 +201,7 @@ else
                                 </div>
                             </TooltipContent>
                         </MudTooltip>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
+                        <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
                     </div>
                     <MudButtonGroup OverrideStyles="false" Size="Size.Small">
                         @foreach (var p in _momPeriods)
@@ -224,7 +225,7 @@ else
                         </div>
                     }
                 </div>
-                <div @ref="_momContainer" style="position: relative; height: 160px; overflow: hidden; background: #1E1E2D; opacity: @(_momReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                <div @ref="_momContainer" style="position: relative; height: 160px; overflow: hidden; background: #1E1E2D; opacity: @(_momReady && !_momTransitioning ? "1" : "0"); transition: opacity 0.15s ease-in;">
                     <ChartShell @ref="_momShell" />
                     <div class="chart-tooltip"></div>
                 </div>
@@ -249,25 +250,27 @@ else
         <!-- Best Relative Value -->
         <MudItem xs="12" md="6" lg="4">
             <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
-                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                    <ChildContent>
-                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Best Relative Value</MudText>
-                    </ChildContent>
-                    <TooltipContent>
-                        <div style="@_tipStyle">
-                            <div style="@_tipHead">Relative Value Score</div>
-                            <div style="@_tipDesc">Cross-sectional z-scores of valuation ratios vs index peers (inverted — lower multiples score higher):</div>
-                            <ul style="@_tipList">
-                                <li><b>P/E</b> &mdash; price-to-earnings</li>
-                                <li><b>P/B</b> &mdash; price-to-book</li>
-                                <li><b>EV/EBITDA</b> &mdash; enterprise value vs cash earnings</li>
-                                <li><b>Dividend Yield</b> &mdash; higher yield = higher score</li>
-                            </ul>
-                            <div style="@_tipNote">Top-ranked stocks trade at the deepest discount to the index median. Verify fundamentals — cheap can mean value trap.</div>
-                        </div>
-                    </TooltipContent>
-                </MudTooltip>
-                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@DailyAsOf</MudText>
+                <div class="mb-2">
+                    <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                        <ChildContent>
+                            <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Best Relative Value</MudText>
+                        </ChildContent>
+                        <TooltipContent>
+                            <div style="@_tipStyle">
+                                <div style="@_tipHead">Relative Value Score</div>
+                                <div style="@_tipDesc">Cross-sectional z-scores of valuation ratios vs index peers (inverted — lower multiples score higher):</div>
+                                <ul style="@_tipList">
+                                    <li><b>P/E</b> &mdash; price-to-earnings</li>
+                                    <li><b>P/B</b> &mdash; price-to-book</li>
+                                    <li><b>EV/EBITDA</b> &mdash; enterprise value vs cash earnings</li>
+                                    <li><b>Dividend Yield</b> &mdash; higher yield = higher score</li>
+                                </ul>
+                                <div style="@_tipNote">Top-ranked stocks trade at the deepest discount to the index median. Verify fundamentals — cheap can mean value trap.</div>
+                            </div>
+                        </TooltipContent>
+                    </MudTooltip>
+                    <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
+                </div>
                 <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
                     <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
                     <tbody>
@@ -286,71 +289,32 @@ else
             </MudPaper>
         </MudItem>
 
-        <!-- Strongest Fundamentals (Quality) -->
-        <MudItem xs="12" md="6" lg="4">
-            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
-                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                    <ChildContent>
-                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Strongest Fundamentals</MudText>
-                    </ChildContent>
-                    <TooltipContent>
-                        <div style="@_tipStyle">
-                            <div style="@_tipHead">Quality / Moat Score</div>
-                            <div style="@_tipDesc">Z-scored quarterly financial metrics vs index peers:</div>
-                            <ul style="@_tipList">
-                                <li><b>Gross Margin</b> &mdash; pricing power</li>
-                                <li><b>ROE</b> &mdash; capital efficiency</li>
-                                <li><b>Operating Margin</b> &mdash; operational leverage</li>
-                                <li><b>Leverage</b> &mdash; inverted (low debt = high score)</li>
-                                <li><b>FCF Yield</b> &mdash; free cash flow / market cap</li>
-                            </ul>
-                            <div style="@_tipNote">Updated quarterly with earnings. High scores = superior profitability, low debt, strong cash generation.</div>
-                        </div>
-                    </TooltipContent>
-                </MudTooltip>
-                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@QuarterlyAsOf</MudText>
-                <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
-                    <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
-                    <tbody>
-                        @foreach (var s in TopQuality)
-                        {
-                            <tr>
-                                <td>@s.QualityRank</td>
-                                <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(QuarterlyCountry(s))"></span></td>
-                                <td><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></td>
-                                <td>@F(s.QualityScore)</td>
-                                <td><span class="score-bar" style="width: @ScoreBarWidth(s.QualityScore, TopQuality.Select(x => x.QualityScore)); background: #26A69A;"></span></td>
-                            </tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
-            </MudPaper>
-        </MudItem>
-
         <!-- Most Bullish Sentiment -->
         <MudItem xs="12" md="6" lg="4">
             <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
-                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                    <ChildContent>
-                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Most Bullish Sentiment</MudText>
-                    </ChildContent>
-                    <TooltipContent>
-                        <div style="@_tipStyle">
-                            <div style="@_tipHead">Analyst Sentiment Score</div>
-                            <div style="@_tipDesc">Combines implied upside and consensus recommendation:</div>
-                            <ul style="@_tipList">
-                                <li><b>Implied Upside</b> &mdash; (target price / current) &minus; 1</li>
-                                <li><b>Recommendation</b> &mdash; consensus analyst rating</li>
-                            </ul>
-                            <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Recommendation scale:</div>
-                            <ul style="@_tipColorList">
-                                <li><span style="color: #26A69A;">1.0</span> Strong Buy &rarr; <span style="color: #FFA726;">3.0</span> Hold &rarr; <span style="color: #EF5350;">5.0</span> Strong Sell</li>
-                            </ul>
-                            <div style="@_tipNote">Large positive upside = market may be underpricing the stock relative to analyst targets.</div>
-                        </div>
-                    </TooltipContent>
-                </MudTooltip>
-                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@DailyAsOf</MudText>
+                <div class="mb-2">
+                    <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                        <ChildContent>
+                            <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Most Bullish Sentiment</MudText>
+                        </ChildContent>
+                        <TooltipContent>
+                            <div style="@_tipStyle">
+                                <div style="@_tipHead">Analyst Sentiment Score</div>
+                                <div style="@_tipDesc">Combines implied upside and consensus recommendation:</div>
+                                <ul style="@_tipList">
+                                    <li><b>Implied Upside</b> &mdash; (target price / current) &minus; 1</li>
+                                    <li><b>Recommendation</b> &mdash; consensus analyst rating</li>
+                                </ul>
+                                <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Recommendation scale:</div>
+                                <ul style="@_tipColorList">
+                                    <li><span style="color: #26A69A;">1.0</span> Strong Buy &rarr; <span style="color: #FFA726;">3.0</span> Hold &rarr; <span style="color: #EF5350;">5.0</span> Strong Sell</li>
+                                </ul>
+                                <div style="@_tipNote">Large positive upside = market may be underpricing the stock relative to analyst targets.</div>
+                            </div>
+                        </TooltipContent>
+                    </MudTooltip>
+                    <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
+                </div>
                 <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
                     <thead><tr><th>#</th><th></th><th>Symbol</th><th>Upside</th><th style="width: 70px;"></th><th>Score</th></tr></thead>
                     <tbody>
@@ -373,28 +337,30 @@ else
         <!-- Divergence Alerts -->
         <MudItem xs="12" md="6" lg="4">
             <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
-                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                    <ChildContent>
-                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Divergence Alerts</MudText>
-                    </ChildContent>
-                    <TooltipContent>
-                        <div style="@_tipStyle">
-                            <div style="@_tipHead">Price vs Analyst Divergence</div>
-                            <div style="@_tipDesc">Stocks where market action conflicts with analyst consensus:</div>
-                            <ul style="@_tipColorList">
-                                <li><span style="color: #EF5350;">&#9660;</span> Price falling (negative short-term return)</li>
-                                <li><span style="color: #26A69A;">&#9650;</span> Analysts bullish (rec &le; 2.5, positive upside)</li>
-                            </ul>
-                            <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Columns:</div>
-                            <ul style="@_tipList">
-                                <li><b>Upside</b> &mdash; analyst target vs current price</li>
-                                <li><b>Rec</b> &mdash; consensus (closer to <span style="color: #26A69A;">1.0</span> = stronger buy)</li>
-                            </ul>
-                            <div style="@_tipNote">Contrarian signal — market is selling while analysts still see value. Verify fundamentals before acting.</div>
-                        </div>
-                    </TooltipContent>
-                </MudTooltip>
-                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@DailyAsOf</MudText>
+                <div class="mb-2">
+                    <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                        <ChildContent>
+                            <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Divergence Alerts</MudText>
+                        </ChildContent>
+                        <TooltipContent>
+                            <div style="@_tipStyle">
+                                <div style="@_tipHead">Price vs Analyst Divergence</div>
+                                <div style="@_tipDesc">Stocks where market action conflicts with analyst consensus:</div>
+                                <ul style="@_tipColorList">
+                                    <li><span style="color: #EF5350;">&#9660;</span> Price falling (negative short-term return)</li>
+                                    <li><span style="color: #26A69A;">&#9650;</span> Analysts bullish (rec &le; 2.5, positive upside)</li>
+                                </ul>
+                                <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Columns:</div>
+                                <ul style="@_tipList">
+                                    <li><b>Upside</b> &mdash; analyst target vs current price</li>
+                                    <li><b>Rec</b> &mdash; consensus (closer to <span style="color: #26A69A;">1.0</span> = stronger buy)</li>
+                                </ul>
+                                <div style="@_tipNote">Contrarian signal — price is dropping but analysts still rate it a buy with significant upside. Either the market is overreacting (opportunity) or analysts haven't caught up yet (value trap). Check fundamentals before acting.</div>
+                            </div>
+                        </TooltipContent>
+                    </MudTooltip>
+                    <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
+                </div>
                 @if (DivergenceAlerts.Any())
                 {
                     <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
@@ -422,33 +388,81 @@ else
                 }
             </MudPaper>
         </MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 4px; margin-top: 16px;">QUARTERLY SIGNALS</MudText>
+    <MudGrid>
+        <!-- Strongest Fundamentals (Quality) -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <div class="mb-2">
+                    <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                        <ChildContent>
+                            <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Strongest Fundamentals</MudText>
+                        </ChildContent>
+                        <TooltipContent>
+                            <div style="@_tipStyle">
+                                <div style="@_tipHead">Quality / Moat Score</div>
+                                <div style="@_tipDesc">Z-scored quarterly financial metrics vs index peers:</div>
+                                <ul style="@_tipList">
+                                    <li><b>Gross Margin</b> &mdash; pricing power</li>
+                                    <li><b>ROE</b> &mdash; capital efficiency</li>
+                                    <li><b>Operating Margin</b> &mdash; operational leverage</li>
+                                    <li><b>Leverage</b> &mdash; inverted (low debt = high score)</li>
+                                    <li><b>FCF Yield</b> &mdash; free cash flow / market cap</li>
+                                </ul>
+                                <div style="@_tipNote">Updated quarterly with earnings. High scores = superior profitability, low debt, strong cash generation.</div>
+                            </div>
+                        </TooltipContent>
+                    </MudTooltip>
+                    <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@QuarterlyAsOf</MudText>
+                </div>
+                <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                    <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
+                    <tbody>
+                        @foreach (var s in TopQuality)
+                        {
+                            <tr>
+                                <td>@s.QualityRank</td>
+                                <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(QuarterlyCountry(s))"></span></td>
+                                <td><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></td>
+                                <td>@F(s.QualityScore)</td>
+                                <td><span class="score-bar" style="width: @ScoreBarWidth(s.QualityScore, TopQuality.Select(x => x.QualityScore)); background: #26A69A;"></span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
 
         <!-- Health Warnings -->
         <MudItem xs="12" md="6" lg="4">
             <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
-                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                    <ChildContent>
-                        <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Health Warnings</MudText>
-                    </ChildContent>
-                    <TooltipContent>
-                        <div style="@_tipStyle">
-                            <div style="@_tipHead">Financial Health Flags</div>
-                            <div style="@_tipDesc">Stocks with 2+ flags from quarterly balance sheet data:</div>
-                            <ul style="@_tipColorList">
-                                <li><span style="color: #42A5F5;">&#9679;</span> <b>Liq</b> &mdash; current ratio &lt; 1 (liquidity risk)</li>
-                                <li><span style="color: #FFA726;">&#9679;</span> <b>Lev</b> &mdash; debt-to-equity &gt; 200% (high leverage)</li>
-                                <li><span style="color: #EF5350;">&#9679;</span> <b>Cash</b> &mdash; negative free cash flow (cash burn)</li>
-                                <li><span style="color: #AB47BC;">&#9679;</span> <b>Decl</b> &mdash; revenue &amp; margin both declining QoQ</li>
-                            </ul>
-                            <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Risk levels:</div>
-                            <ul style="@_tipColorList">
-                                <li><span style="color: #42A5F5;">0 flags</span> = healthy &bull; <span style="color: #2196F3;">1</span> = watch &bull; <span style="color: #FFA726;">2</span> = warning &bull; <span style="color: #EF5350;">3+</span> = critical</li>
-                            </ul>
-                            <div style="@_tipNote">Low quality score + many flags = strong caution signal.</div>
-                        </div>
-                    </TooltipContent>
-                </MudTooltip>
-                <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem;" Class="mb-2">@QuarterlyAsOf</MudText>
+                <div class="mb-2">
+                    <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                        <ChildContent>
+                            <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Health Warnings</MudText>
+                        </ChildContent>
+                        <TooltipContent>
+                            <div style="@_tipStyle">
+                                <div style="@_tipHead">Financial Health Flags</div>
+                                <div style="@_tipDesc">Stocks with 2+ flags from quarterly balance sheet data:</div>
+                                <ul style="@_tipColorList">
+                                    <li><span style="color: #42A5F5;">&#9679;</span> <b>Liq</b> &mdash; current ratio &lt; 1 (liquidity risk)</li>
+                                    <li><span style="color: #FFA726;">&#9679;</span> <b>Lev</b> &mdash; debt-to-equity &gt; 200% (high leverage)</li>
+                                    <li><span style="color: #EF5350;">&#9679;</span> <b>Cash</b> &mdash; negative free cash flow (cash burn)</li>
+                                    <li><span style="color: #AB47BC;">&#9679;</span> <b>Decl</b> &mdash; revenue &amp; margin both declining QoQ</li>
+                                </ul>
+                                <div style="margin: 6px 0 4px; font-size: 0.7rem; opacity: 0.5;">Risk levels:</div>
+                                <ul style="@_tipColorList">
+                                    <li><span style="color: #42A5F5;">0 flags</span> = healthy &bull; <span style="color: #2196F3;">1</span> = watch &bull; <span style="color: #FFA726;">2</span> = warning &bull; <span style="color: #EF5350;">3+</span> = critical</li>
+                                </ul>
+                                <div style="@_tipNote">Low quality score + many flags = strong caution signal.</div>
+                            </div>
+                        </TooltipContent>
+                    </MudTooltip>
+                    <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@QuarterlyAsOf</MudText>
+                </div>
                 <div style="display: flex; gap: 8px; font-size: 0.6rem; opacity: 0.5; margin-bottom: 4px;">
                     <span><span class="flag-dot" style="background: #42A5F5;"></span>Liq</span>
                     <span><span class="flag-dot" style="background: #FFA726;"></span>Lev</span>
@@ -489,7 +503,6 @@ else
                 }
             </MudPaper>
         </MudItem>
-
     </MudGrid>
 }
 
@@ -559,6 +572,7 @@ else
     private ChartComponent? _momRef => _momShell?.Chart;
     private ElementReference _momContainer;
     private bool _momReady;
+    private bool _momTransitioning;
     private Dictionary<string, List<SymbolClose>> _momClosesData = new();
     private ISeriesApi<long>?[] _momSeriesRefs = new ISeriesApi<long>?[5];
     private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _momLookup = new();
@@ -1126,11 +1140,11 @@ else
         _selectedMomPeriod = period;
         if (_momReady)
         {
-            _momReady = false;
+            _momTransitioning = true;
             StateHasChanged();
             await Task.Delay(20);
             await UpdateMomData();
-            _momReady = true;
+            _momTransitioning = false;
         }
     }
 

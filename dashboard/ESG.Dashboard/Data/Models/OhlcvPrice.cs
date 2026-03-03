@@ -8,6 +8,7 @@ public class OhlcvPrice
     public double? High { get; set; }
     public double? Low { get; set; }
     public double? Close { get; set; }
+    public double? RawClose { get; set; }
     public double? AdjClose { get; set; }
     public long? Volume { get; set; }
     public double? Sma30 { get; set; }
