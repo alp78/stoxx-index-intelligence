@@ -69,6 +69,10 @@ public class ScoresRepository
     {
         using var conn = _db.Create();
         var sql = """
+            WITH latest AS (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY _index, symbol ORDER BY as_of_date DESC) AS rn
+                FROM gold.scores_quarterly
+            )
             SELECT _index AS [Index], symbol AS Symbol, as_of_date AS AsOfDate, sector AS Sector,
                    gross_margin_zscore AS GrossMarginZscore, roe_zscore AS RoeZscore,
                    operating_margin_zscore AS OperatingMarginZscore,
@@ -83,8 +87,8 @@ public class ScoresRepository
                    shareholder_rights_risk AS ShareholderRightsRisk,
                    governance_score AS GovernanceScore, governance_rank AS GovernanceRank,
                    beta AS Beta, governance_vs_quality AS GovernanceVsQuality
-            FROM gold.scores_quarterly
-            WHERE as_of_date = (SELECT MAX(as_of_date) FROM gold.scores_quarterly)
+            FROM latest
+            WHERE rn = 1
               AND (@Index IS NULL OR _index = @Index)
             ORDER BY _index, quality_rank
             """;
@@ -121,6 +125,10 @@ public class ScoresRepository
     {
         using var conn = _db.Create();
         var sql = """
+            WITH latest_q AS (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY _index, symbol ORDER BY as_of_date DESC) AS rn
+                FROM gold.scores_quarterly
+            )
             SELECT d._index AS [Index], d.sector AS Sector,
                    COUNT(*) AS StockCount,
                    AVG(sd.relative_value_score) AS AvgRelativeValueScore,
@@ -131,9 +139,8 @@ public class ScoresRepository
                    AVG(sq.governance_score) AS AvgGovernanceScore,
                    SUM(CAST(ISNULL(sq.health_flags_count, 0) AS INT)) AS HealthFlagsTotal
             FROM gold.scores_daily sd
-            JOIN gold.scores_quarterly sq
-                ON sd._index = sq._index AND sd.symbol = sq.symbol
-                AND sq.as_of_date = (SELECT MAX(as_of_date) FROM gold.scores_quarterly)
+            JOIN latest_q sq
+                ON sd._index = sq._index AND sd.symbol = sq.symbol AND sq.rn = 1
             JOIN silver.index_dim d
                 ON sd._index = d._index AND sd.symbol = d.symbol AND d.is_current = 1
             WHERE sd.score_date = (SELECT MAX(score_date) FROM gold.scores_daily)
