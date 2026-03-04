@@ -321,11 +321,15 @@ STEPS = [
 def main():
     parser = argparse.ArgumentParser(description="STOXX ingestion pipeline")
     parser.add_argument("--step", type=int, help="Run a single step")
+    parser.add_argument("--steps", type=str, help="Comma-separated step numbers (e.g., 4,5,8)")
     parser.add_argument("--from", type=int, dest="from_step", help="Resume from step N")
     parser.add_argument("--to", type=int, dest="to_step", help="Stop after step N (use with --from)")
     args = parser.parse_args()
 
-    if args.step:
+    if args.steps:
+        step_nums = [int(s) for s in args.steps.split(",")]
+        steps = [(n, name, fn) for n, name, fn in STEPS if n in step_nums]
+    elif args.step:
         steps = [(n, name, fn) for n, name, fn in STEPS if n == args.step]
     elif args.from_step:
         lo = args.from_step
