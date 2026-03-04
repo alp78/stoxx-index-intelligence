@@ -1,3 +1,8 @@
+@* ───────────────────────────────────────────────────────────────────
+   Index Comparison — side-by-side performance of all three indices.
+   Cumulative return (rebased to 100), rolling 30d/90d returns,
+   volatility, and valuation metrics over a configurable time range.
+   ─────────────────────────────────────────────────────────────────── *@
 @page "/indices"
 @rendermode InteractiveServer
 @inject IndexPerformanceRepository PerfRepo
@@ -98,6 +103,7 @@ else
 }
 
 @code {
+    // ── State ─────────────────────────────────────────────────────────
     private bool _loading = true;
     private List<IndexPerformance> _allPerf = [];
     private List<IndexPerformance> _latest = [];

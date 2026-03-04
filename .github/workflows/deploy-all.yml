@@ -1,3 +1,4 @@
+# Manually triggered workflow that deploys both dashboard and pipeline.
 name: Deploy All
 
 on:

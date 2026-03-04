@@ -1,3 +1,8 @@
+@* ───────────────────────────────────────────────────────────────────
+   Home / Overview — single-index dashboard with charts and signals.
+   Layout: exchange clocks → index selector → snapshot strip →
+   50/50 grid (line charts | radar + donut) → daily/quarterly signals.
+   ─────────────────────────────────────────────────────────────────── *@
 @page "/"
 @rendermode InteractiveServer
 @inject IndexPerformanceRepository PerfRepo
@@ -573,12 +578,13 @@ else
 }
 
 @code {
+    // ── State ──────────────────────────────────────────────────────────
     private bool _loading = true;
     private List<IndexPerformance> _snapshots = [];
     private Dictionary<string, List<IndexPerformance>> _perfByIndex = [];
     private string[] _indexKeys = [];
 
-    // Exchange clocks
+    // ── Exchange clocks ──────────────────────────────────────────────
     private System.Threading.Timer? _clockTimer;
 
     private record ExchangeInfo(string Symbol, string City, TimeZoneInfo Tz, TimeSpan Open, TimeSpan Close);
@@ -596,7 +602,7 @@ else
         => localNow.DayOfWeek is >= DayOfWeek.Monday and <= DayOfWeek.Friday
            && localNow.TimeOfDay >= ex.Open && localNow.TimeOfDay < ex.Close;
 
-    // Main chart
+    // ── LightweightCharts (synthetic portfolio, rolling 30d, volatility) ──
     private ChartShell? _chartShell;
     private ChartComponent? _chartRef => _chartShell?.Chart;
     private ElementReference _chartContainer;
@@ -628,12 +634,12 @@ else
     private long? _rollLastHover;
     private long? _volLastHover;
 
-    // Signals
+    // ── Signals (daily + quarterly scores) ──────────────────────────
     private string _selectedSignalIndex = null!;
     private List<ScoreDaily> _daily = [];
     private List<ScoreQuarterly> _quarterly = [];
 
-    // Radar + Donut charts
+    // ── Chart.js (radar factor profile, donut composition) ──────────
     private bool _radarReady;
     private bool _donutReady;
 
@@ -714,6 +720,8 @@ else
     };
 
     private static string IndexColor(string key) => _indexColors.GetValueOrDefault(key, "#A0AEC0");
+
+    // ── Lifecycle ─────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
@@ -1130,6 +1138,8 @@ else
             sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors, _selectedSignalIndex);
     }
 
+    // ── LightweightCharts init / update ─────────────────────────────
+
     private async Task InitChartOptions(ChartComponent chart)
     {
         await chart.InitializationCompleted;
@@ -1442,6 +1452,8 @@ else
 
     private static System.Drawing.Color Clr(string hex) => System.Drawing.ColorTranslator.FromHtml(hex);
     private static System.Drawing.Color Clr(int r, int g, int b, int a) => System.Drawing.Color.FromArgb(a, r, g, b);
+
+    // ── Formatting helpers ────────────────────────────────────────────
 
     private static string FormatIndexName(string key) => key switch
     {

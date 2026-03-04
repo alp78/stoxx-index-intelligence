@@ -1,3 +1,7 @@
+# --------------------------------------------------------------------------
+# Cloud Run services and jobs — Dashboard, Pipeline, Setup
+# --------------------------------------------------------------------------
+
 locals {
   registry = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.stoxx.repository_id}"
 }

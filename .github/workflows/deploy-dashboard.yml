@@ -1,3 +1,4 @@
+# Build & deploy Blazor dashboard to Cloud Run on push to dashboard/** paths.
 name: Deploy Dashboard
 
 on:

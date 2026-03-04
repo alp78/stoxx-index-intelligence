@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Real-time price snapshot for a stock — price, book, volume data pushed via SignalR.</summary>
 public class PulseSnapshot
 {
     public string Index { get; set; } = "";

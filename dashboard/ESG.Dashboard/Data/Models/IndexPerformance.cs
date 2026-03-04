@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Index-level daily performance — returns, volatility, and aggregate valuation metrics.</summary>
 public class IndexPerformance
 {
     public string Index { get; set; } = "";

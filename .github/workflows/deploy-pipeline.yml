@@ -1,3 +1,4 @@
+# Build & deploy Python pipeline to Cloud Run Job on push to ingestion/utils/db paths.
 name: Deploy Pipeline
 
 on:

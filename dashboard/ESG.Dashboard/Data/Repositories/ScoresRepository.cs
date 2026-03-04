@@ -3,12 +3,14 @@ using ESG.Dashboard.Data.Models;
 
 namespace ESG.Dashboard.Data.Repositories;
 
+/// <summary>Reads from gold.scores_daily and gold.scores_quarterly — stock-level factor scores.</summary>
 public class ScoresRepository
 {
     private readonly DbConnectionFactory _db;
 
     public ScoresRepository(DbConnectionFactory db) => _db = db;
 
+    /// <summary>Latest daily scores for all stocks (per-index MAX date). Used by Overview and Stock Explorer.</summary>
     public async Task<IEnumerable<ScoreDaily>> GetDailyScoresAsync(string? index = null)
     {
         using var conn = _db.Create();
@@ -37,6 +39,7 @@ public class ScoresRepository
         return await conn.QueryAsync<ScoreDaily>(sql, new { Index = index });
     }
 
+    /// <summary>Single stock's latest daily scores (for the detail panel).</summary>
     public async Task<ScoreDaily?> GetDailyScoreAsync(string index, string symbol)
     {
         using var conn = _db.Create();
@@ -65,6 +68,7 @@ public class ScoresRepository
         return await conn.QueryFirstOrDefaultAsync<ScoreDaily>(sql, new { Index = index, Symbol = symbol });
     }
 
+    /// <summary>Latest quarterly scores per stock (quality, governance, health flags).</summary>
     public async Task<IEnumerable<ScoreQuarterly>> GetQuarterlyScoresAsync(string? index = null)
     {
         using var conn = _db.Create();
@@ -95,6 +99,7 @@ public class ScoresRepository
         return await conn.QueryAsync<ScoreQuarterly>(sql, new { Index = index });
     }
 
+    /// <summary>Single stock's latest quarterly scores (for the detail panel).</summary>
     public async Task<ScoreQuarterly?> GetQuarterlyScoreAsync(string index, string symbol)
     {
         using var conn = _db.Create();
@@ -121,6 +126,7 @@ public class ScoresRepository
         return await conn.QueryFirstOrDefaultAsync<ScoreQuarterly>(sql, new { Index = index, Symbol = symbol });
     }
 
+    /// <summary>Sector-level averages of all factor scores, joining daily + quarterly.</summary>
     public async Task<IEnumerable<SectorAggregate>> GetSectorAggregatesAsync(string? index = null)
     {
         using var conn = _db.Create();

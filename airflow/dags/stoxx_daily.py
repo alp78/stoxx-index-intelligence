@@ -1,3 +1,9 @@
+"""stoxx_daily — Main STOXX pipeline DAG.
+
+Runs 3x daily (09:00, 17:00, 22:00 UTC Mon-Fri) via Cloud Run.
+5 task groups: ohlcv → signals_daily + signals_quarterly → gold_scores → gold_performance.
+"""
+
 from airflow import DAG
 from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
 from datetime import datetime

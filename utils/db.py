@@ -1,3 +1,5 @@
+"""Database connection helper — creates pyodbc connections from .env config."""
+
 import pyodbc
 from pathlib import Path
 from dotenv import load_dotenv

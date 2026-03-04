@@ -1,3 +1,7 @@
+# --------------------------------------------------------------------------
+# Input variables — project, region, database, observability
+# --------------------------------------------------------------------------
+
 variable "project_id" {
   description = "GCP project ID"
   type        = string

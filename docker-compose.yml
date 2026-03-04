@@ -1,3 +1,6 @@
+# Local dev stack: SQL Server 2022 + Python pipeline + Blazor dashboard.
+# Usage: docker compose up --build
+
 name: stoxx
 
 services:

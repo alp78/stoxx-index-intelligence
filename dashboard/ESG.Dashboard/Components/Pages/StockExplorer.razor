@@ -1,3 +1,9 @@
+@* ───────────────────────────────────────────────────────────────────
+   Stock Explorer — per-index stock list with detail panel.
+   Left nav: filterable, market-cap ranked stock table.
+   Right panel: OHLCV chart, score gauges, and quarterly health flags.
+   Supports deep-linking via /stocks/{IndexKey}/{Symbol}.
+   ─────────────────────────────────────────────────────────────────── *@
 @page "/stocks"
 @page "/stocks/{IndexKey}/{Symbol}"
 @rendermode InteractiveServer
@@ -475,9 +481,11 @@ else
 }
 
 @code {
+    // ── Route parameters ──────────────────────────────────────────────
     [Parameter] public string? IndexKey { get; set; }
     [Parameter] public string? Symbol { get; set; }
 
+    // ── State ─────────────────────────────────────────────────────────
     private bool _loading = true;
     private string? _filterIndex;
     private string _searchText = "";

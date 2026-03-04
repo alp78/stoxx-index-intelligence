@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Top activity ticker — stocks ranked by volume surge and range intensity for the pulse feed.</summary>
 public class PulseTicker
 {
     public string Index { get; set; } = "";

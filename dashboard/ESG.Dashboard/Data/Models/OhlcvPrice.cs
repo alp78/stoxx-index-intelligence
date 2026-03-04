@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Adjusted OHLCV price row with server-computed SMA 30/90 from silver.*_ohlcv tables.</summary>
 public class OhlcvPrice
 {
     public string Symbol { get; set; } = "";

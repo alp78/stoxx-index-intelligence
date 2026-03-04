@@ -3,6 +3,7 @@ using System.Data;
 
 namespace ESG.Dashboard.Data;
 
+/// <summary>Creates IDbConnection instances from the configured SQL Server connection string.</summary>
 public class DbConnectionFactory
 {
     private readonly string _connectionString;

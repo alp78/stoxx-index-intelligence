@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Daily signal scores per stock — value, momentum, sentiment composites plus price/weight data.</summary>
 public class ScoreDaily
 {
     public string Index { get; set; } = "";

@@ -1,3 +1,9 @@
+"""stoxx_pulse — Real-time pulse snapshot DAG.
+
+Runs every 5 minutes (Mon-Fri 00:00-21:00 UTC) to fetch live price/book/volume
+snapshots for pre-discovered active tickers. Feeds the Live dashboard page.
+"""
+
 from airflow import DAG
 from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
 from datetime import datetime

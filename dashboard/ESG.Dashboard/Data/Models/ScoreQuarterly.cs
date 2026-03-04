@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Quarterly fundamental scores per stock — quality/moat, financial health flags, and governance risk.</summary>
 public class ScoreQuarterly
 {
     public string Index { get; set; } = "";

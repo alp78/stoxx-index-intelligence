@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Stock metadata from silver.index_dim — symbol, name, sector, industry, country.</summary>
 public class StockInfo
 {
     public string Index { get; set; } = "";

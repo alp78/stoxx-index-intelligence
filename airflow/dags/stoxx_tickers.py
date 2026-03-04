@@ -1,3 +1,9 @@
+"""stoxx_tickers — Hourly active ticker discovery DAG.
+
+Ranks all index stocks by volume surge + range intensity, saves top 10 per index.
+These tickers are then used by stoxx_pulse for high-frequency snapshot fetching.
+"""
+
 from airflow import DAG
 from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
 from datetime import datetime

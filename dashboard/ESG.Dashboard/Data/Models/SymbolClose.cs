@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Lightweight symbol + date + adj_close row — used for batch momentum sparklines.</summary>
 public class SymbolClose
 {
     public string Symbol { get; set; } = "";

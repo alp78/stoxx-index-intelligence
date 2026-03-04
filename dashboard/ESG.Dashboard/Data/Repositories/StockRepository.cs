@@ -3,6 +3,7 @@ using ESG.Dashboard.Data.Models;
 
 namespace ESG.Dashboard.Data.Repositories;
 
+/// <summary>Reads from silver.index_dim and silver.*_ohlcv — stock metadata and OHLCV prices.</summary>
 public class StockRepository
 {
     private readonly DbConnectionFactory _db;
@@ -17,6 +18,7 @@ public class StockRepository
 
     public StockRepository(DbConnectionFactory db) => _db = db;
 
+    /// <summary>All current index constituents from silver.index_dim.</summary>
     public async Task<IEnumerable<StockInfo>> GetStocksAsync(string? index = null)
     {
         using var conn = _db.Create();
@@ -32,6 +34,7 @@ public class StockRepository
         return await conn.QueryAsync<StockInfo>(sql, new { Index = index });
     }
 
+    /// <summary>Single stock's metadata (name, sector, country).</summary>
     public async Task<StockInfo?> GetStockAsync(string index, string symbol)
     {
         using var conn = _db.Create();
@@ -45,6 +48,7 @@ public class StockRepository
         return await conn.QueryFirstOrDefaultAsync<StockInfo>(sql, new { Index = index, Symbol = symbol });
     }
 
+    /// <summary>OHLCV prices with server-side SMA 30/90 computation via SQL window functions.</summary>
     public async Task<IEnumerable<OhlcvPrice>> GetOhlcvAsync(
         string index, string symbol, DateTime? from = null, DateTime? to = null)
     {
@@ -80,6 +84,7 @@ public class StockRepository
         return await conn.QueryAsync<OhlcvPrice>(sql, new { Symbol = symbol, From = from, To = to });
     }
 
+    /// <summary>Batch adj_close for multiple symbols — used for momentum sparkline charts.</summary>
     public async Task<IEnumerable<SymbolClose>> GetBatchClosesAsync(
         string index, string[] symbols, DateTime from)
     {
@@ -97,6 +102,7 @@ public class StockRepository
         return await conn.QueryAsync<SymbolClose>(sql, new { Symbols = symbols, From = from });
     }
 
+    /// <summary>Distinct index keys from silver.index_dim (used to populate dropdowns).</summary>
     public async Task<IEnumerable<string>> GetIndexKeysAsync()
     {
         using var conn = _db.Create();

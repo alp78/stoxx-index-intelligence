@@ -3,12 +3,14 @@ using ESG.Dashboard.Data.Models;
 
 namespace ESG.Dashboard.Data.Repositories;
 
+/// <summary>Reads from gold.index_performance — daily index-level metrics.</summary>
 public class IndexPerformanceRepository
 {
     private readonly DbConnectionFactory _db;
 
     public IndexPerformanceRepository(DbConnectionFactory db) => _db = db;
 
+    /// <summary>Full time-series of index performance, optionally filtered by index and date range.</summary>
     public async Task<IEnumerable<IndexPerformance>> GetPerformanceAsync(
         string? index = null, DateTime? from = null, DateTime? to = null)
     {
@@ -30,6 +32,7 @@ public class IndexPerformanceRepository
         return await conn.QueryAsync<IndexPerformance>(sql, new { Index = index, From = from, To = to });
     }
 
+    /// <summary>Most recent performance row per index (for the snapshot strip).</summary>
     public async Task<IEnumerable<IndexPerformance>> GetLatestSnapshotAsync()
     {
         using var conn = _db.Create();

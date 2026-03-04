@@ -1,3 +1,6 @@
+# Dashboard container — .NET 10 Blazor Server app (multi-stage build).
+# Serves the ESG dashboard on port 8080.
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 

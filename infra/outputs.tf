@@ -1,3 +1,7 @@
+# --------------------------------------------------------------------------
+# Terraform outputs — URLs and IPs for provisioned resources
+# --------------------------------------------------------------------------
+
 output "dashboard_url" {
   value = google_cloud_run_v2_service.dashboard.uri
 }

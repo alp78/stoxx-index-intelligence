@@ -1,3 +1,6 @@
+# Pipeline container — Python 3.12 with ODBC Driver 18 for SQL Server.
+# Runs the 16-step ingestion pipeline via ddtrace-run for Datadog APM.
+
 FROM python:3.12-slim
 
 # Install ODBC Driver 18 for SQL Server

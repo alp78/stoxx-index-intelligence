@@ -1,5 +1,6 @@
 namespace ESG.Dashboard.Data.Models;
 
+/// <summary>Sector-level score averages — used for sector comparison views and radar chart aggregation.</summary>
 public class SectorAggregate
 {
     public string Index { get; set; } = "";

@@ -1,3 +1,8 @@
+@* ───────────────────────────────────────────────────────────────────
+   Live Pulse — real-time intraday activity across all three indices.
+   Shows pulse snapshots (price, book, volume) and activity-ranked
+   tickers with auto-refresh via SignalR subscription.
+   ─────────────────────────────────────────────────────────────────── *@
 @page "/live"
 @rendermode InteractiveServer
 @inject PulseRepository PulseRepo
@@ -182,6 +187,7 @@ else
 }
 
 @code {
+    // ── State ─────────────────────────────────────────────────────────
     private bool _loading = true;
     private DateTime? _lastRefresh;
     private DateTime? _lastDataTimestamp;
@@ -195,7 +201,7 @@ else
     private static readonly string[] _indices =
         ["euro_stoxx_50", "stoxx_usa_50", "stoxx_asia_50"];
 
-    // --- Data loading ---
+    // ── Data loading ──────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
@@ -241,7 +247,7 @@ else
         }
     }
 
-    // --- Cleanup ---
+    // ── Cleanup ───────────────────────────────────────────────────────
 
     public async ValueTask DisposeAsync()
     {
@@ -249,7 +255,7 @@ else
         _refreshCts?.Dispose();
     }
 
-    // --- Market hours (approximate exchange sessions in UTC) ---
+    // ── Market hours (approximate exchange sessions in UTC) ─────────
 
     private static bool IsMarketOpen(string index)
     {
@@ -270,7 +276,7 @@ else
         };
     }
 
-    // --- Exchange info ---
+    // ── Exchange info ──────────────────────────────────────────────────
 
     private record ExchangeData(string Name, string City, string LocalTime);
 
@@ -289,14 +295,14 @@ else
         };
     }
 
-    // --- Tooltip styles ---
+    // ── Tooltip styles ────────────────────────────────────────────────
     private const string _tipStyle = "text-align: left; background: #1A1A2E; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; max-width: 340px; font-size: 0.75rem; line-height: 1.6; color: #E0E0E0; box-shadow: 0 4px 20px rgba(0,0,0,0.5);";
     private const string _tipHead = "font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: #fff;";
     private const string _tipDesc = "opacity: 0.6; margin-bottom: 8px;";
     private const string _tipList = "margin: 0 0 6px 0; padding-left: 16px; opacity: 0.85;";
     private const string _tipNote = "opacity: 0.45; font-size: 0.7rem; font-style: italic; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 4px;";
 
-    // --- Helpers ---
+    // ── Helpers ──────────────────────────────────────────────────────
 
     private static readonly Dictionary<string, string> _indexColors = new()
     {
