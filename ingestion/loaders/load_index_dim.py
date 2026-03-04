@@ -32,21 +32,13 @@ def load(json_file, index_name):
         with StepTimer() as timer:
             cursor.execute("DELETE FROM bronze.index_dim WHERE _index = ?", index_name)
 
-            inserted = 0
+            rows = []
             for rec in records:
                 symbol = rec.get("symbol")
                 if not symbol:
                     continue
 
-                cursor.execute("""
-                    INSERT INTO bronze.index_dim (
-                        _index, symbol, long_name, short_name, sector, sector_key,
-                        industry, industry_key, country, city, website,
-                        long_business_summary, exchange, full_exchange_name,
-                        exchange_timezone_name, exchange_timezone_short, currency,
-                        financial_currency, quote_type, market, range_start, price_data_start
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                rows.append((
                     index_name, symbol,
                     rec.get("longName"), rec.get("shortName"),
                     rec.get("sector"), rec.get("sectorKey"),
@@ -58,9 +50,19 @@ def load(json_file, index_name):
                     rec.get("currency"), rec.get("financialCurrency"),
                     rec.get("quoteType"), rec.get("market"),
                     rec.get("_range_start"), rec.get("_price_data_start")
-                )
-                inserted += 1
+                ))
 
+            cursor.fast_executemany = True
+            cursor.executemany("""
+                INSERT INTO bronze.index_dim (
+                    _index, symbol, long_name, short_name, sector, sector_key,
+                    industry, industry_key, country, city, website,
+                    long_business_summary, exchange, full_exchange_name,
+                    exchange_timezone_name, exchange_timezone_short, currency,
+                    financial_currency, quote_type, market, range_start, price_data_start
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, rows)
+            inserted = len(rows)
             conn.commit()
 
         log_info(logger, "Index dimensions load complete — bronze refreshed with latest identities",

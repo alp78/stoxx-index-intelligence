@@ -32,7 +32,7 @@ def load(json_file, index_name):
         with StepTimer() as timer:
             cursor.execute("DELETE FROM bronze.pulse WHERE _index = ?", index_name)
 
-            inserted = 0
+            rows = []
             for rec in records:
                 symbol = rec.get("symbol")
                 if not symbol:
@@ -42,24 +42,26 @@ def load(json_file, index_name):
                 b = rec.get("book", {})
                 v = rec.get("volume", {})
 
-                cursor.execute("""
-                    INSERT INTO bronze.pulse (
-                        _index, symbol, timestamp,
-                        current_price, open_price, day_high, day_low,
-                        previous_close, price_change, price_change_pct,
-                        bid, ask, bid_size, ask_size, spread,
-                        current_volume, average_volume_10day, volume_ratio
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                rows.append((
                     index_name, symbol, rec.get("timestamp"),
                     p.get("current"), p.get("open"), p.get("dayHigh"), p.get("dayLow"),
                     p.get("previousClose"), p.get("change"), p.get("changePct"),
                     b.get("bid"), b.get("ask"), b.get("bidSize"), b.get("askSize"),
                     b.get("spread"),
                     v.get("current"), v.get("average10Day"), v.get("ratio")
-                )
-                inserted += 1
+                ))
 
+            cursor.fast_executemany = True
+            cursor.executemany("""
+                INSERT INTO bronze.pulse (
+                    _index, symbol, timestamp,
+                    current_price, open_price, day_high, day_low,
+                    previous_close, price_change, price_change_pct,
+                    bid, ask, bid_size, ask_size, spread,
+                    current_volume, average_volume_10day, volume_ratio
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, rows)
+            inserted = len(rows)
             conn.commit()
 
         log_info(logger, "Pulse load complete — replaced snapshots in bronze",

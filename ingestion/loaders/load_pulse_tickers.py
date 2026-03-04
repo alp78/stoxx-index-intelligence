@@ -35,24 +35,26 @@ def load(json_file, index_name):
             discovered_at = data.get("discovered_at")
             ranking = data.get("ranking", [])
 
-            inserted = 0
+            rows = []
             for i, item in enumerate(ranking):
                 symbol = item.get("symbol")
                 if not symbol:
                     continue
 
-                cursor.execute("""
-                    INSERT INTO bronze.pulse_tickers (
-                        _index, discovered_at, symbol, rank,
-                        volume_surge, range_intensity, vol_z, rng_z, activity_score
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                rows.append((
                     index_name, discovered_at, symbol, i + 1,
                     item.get("volumeSurge"), item.get("rangeIntensity"),
                     item.get("volZ"), item.get("rngZ"), item.get("activityScore")
-                )
-                inserted += 1
+                ))
 
+            cursor.fast_executemany = True
+            cursor.executemany("""
+                INSERT INTO bronze.pulse_tickers (
+                    _index, discovered_at, symbol, rank,
+                    volume_surge, range_intensity, vol_z, rng_z, activity_score
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, rows)
+            inserted = len(rows)
             conn.commit()
 
         log_info(logger, "Pulse tickers load complete — bronze refreshed with latest ranking",

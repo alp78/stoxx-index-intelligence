@@ -32,7 +32,7 @@ def load(json_file, index_name):
         with StepTimer() as timer:
             cursor.execute("DELETE FROM bronze.signals_quarterly WHERE _index = ?", index_name)
 
-            inserted = 0
+            rows = []
             for rec in records:
                 symbol = rec.get("symbol")
                 if not symbol:
@@ -44,18 +44,7 @@ def load(json_file, index_name):
                 fc = rec.get("fiscal_calendar", {})
                 gov = rec.get("governance", {})
 
-                cursor.execute("""
-                    INSERT INTO bronze.signals_quarterly (
-                        _index, symbol, as_of_date,
-                        gross_margins, operating_margins, return_on_equity,
-                        revenue_growth, earnings_growth,
-                        shares_outstanding, float_shares, debt_to_equity,
-                        current_ratio, free_cashflow,
-                        last_fiscal_year_end, most_recent_quarter,
-                        overall_risk, audit_risk, board_risk,
-                        compensation_risk, shareholder_rights_risk, esg_populated
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                rows.append((
                     index_name, symbol, as_of,
                     qm.get("grossMargins"), qm.get("operatingMargins"),
                     qm.get("returnOnEquity"), qm.get("revenueGrowth"),
@@ -68,9 +57,22 @@ def load(json_file, index_name):
                     gov.get("boardRisk"), gov.get("compensationRisk"),
                     gov.get("shareHolderRightsRisk"),
                     1 if gov.get("esgPopulated") else 0
-                )
-                inserted += 1
+                ))
 
+            cursor.fast_executemany = True
+            cursor.executemany("""
+                INSERT INTO bronze.signals_quarterly (
+                    _index, symbol, as_of_date,
+                    gross_margins, operating_margins, return_on_equity,
+                    revenue_growth, earnings_growth,
+                    shares_outstanding, float_shares, debt_to_equity,
+                    current_ratio, free_cashflow,
+                    last_fiscal_year_end, most_recent_quarter,
+                    overall_risk, audit_risk, board_risk,
+                    compensation_risk, shareholder_rights_risk, esg_populated
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, rows)
+            inserted = len(rows)
             conn.commit()
 
         log_info(logger, "Quarterly signals load complete — bronze refreshed with latest snapshot",

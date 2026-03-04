@@ -276,9 +276,9 @@ def _transform_index(cursor, conn, key):
     placeholders = ', '.join(['?'] * len(insert_cols))
     col_list = ', '.join(insert_cols)
 
-    inserted = 0
+    rows = []
     for _, row in idx_ret.iterrows():
-        values = [
+        rows.append((
             key,
             row['date'].strftime('%Y-%m-%d'),
             _safe(row['daily_return']),
@@ -292,15 +292,15 @@ def _transform_index(cursor, conn, key):
             _safe(row['avg_pb']),
             _safe(row['avg_dividend_yield']),
             int(row['avg_market_cap']) if pd.notna(row['avg_market_cap']) else None,
-        ]
-        cursor.execute(
-            f"INSERT INTO gold.index_performance ({col_list}) VALUES ({placeholders})",
-            *values
-        )
-        inserted += 1
+        ))
 
-        if inserted % 5000 == 0:
-            conn.commit()
+    cursor.fast_executemany = True
+    cursor.executemany(
+        f"INSERT INTO gold.index_performance ({col_list}) VALUES ({placeholders})",
+        rows
+    )
+    inserted = len(rows)
+    conn.commit()
 
     log_info(logger, "Index performance rows inserted",
              step="transform", index=key, records_inserted=inserted)

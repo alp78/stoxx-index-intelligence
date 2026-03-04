@@ -168,22 +168,20 @@ def run():
             placeholders = ', '.join(['?'] * len(insert_cols))
             col_list = ', '.join(insert_cols)
 
-            inserted = 0
-            for row_tuple in insert_df.itertuples(index=False, name=None):
-                values = []
-                for v in row_tuple:
-                    if v is None or v is pd.NA or (isinstance(v, float) and np.isnan(v)):
-                        values.append(None)
-                    elif hasattr(v, 'item'):
-                        values.append(v.item())
-                    else:
-                        values.append(v)
-                cursor.execute(
-                    f"INSERT INTO gold.scores_quarterly ({col_list}) VALUES ({placeholders})",
-                    *values
-                )
-                inserted += 1
+            def _clean(v):
+                if v is None or v is pd.NA or (isinstance(v, float) and np.isnan(v)):
+                    return None
+                if hasattr(v, 'item'):
+                    return v.item()
+                return v
 
+            rows = [tuple(_clean(v) for v in row) for row in insert_df.itertuples(index=False, name=None)]
+            cursor.fast_executemany = True
+            cursor.executemany(
+                f"INSERT INTO gold.scores_quarterly ({col_list}) VALUES ({placeholders})",
+                rows
+            )
+            inserted = len(rows)
             conn.commit()
 
         log_info(logger, "Quarterly gold scores computed — quality, health flags, governance ranked",

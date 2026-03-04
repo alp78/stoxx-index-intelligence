@@ -36,7 +36,7 @@ def load(json_file, table):
             """)
             existing = set((row[0], row[1]) for row in cursor.fetchall())
 
-            inserted = 0
+            rows = []
             skipped = 0
 
             for rec in records:
@@ -49,22 +49,21 @@ def load(json_file, table):
                     skipped += 1
                     continue
 
-                cursor.execute(f"""
-                    INSERT INTO {table} (
-                        symbol, date, [open], high, low, [close],
-                        adj_close, volume, dividends, stock_splits
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                rows.append((
                     symbol, date,
                     rec.get("open"), rec.get("high"), rec.get("low"), rec.get("close"),
                     rec.get("adj_close"), rec.get("volume"),
                     rec.get("dividends"), rec.get("stock_splits")
-                )
-                inserted += 1
+                ))
 
-                if inserted % 10000 == 0:
-                    conn.commit()
-
+            cursor.fast_executemany = True
+            cursor.executemany(f"""
+                INSERT INTO {table} (
+                    symbol, date, [open], high, low, [close],
+                    adj_close, volume, dividends, stock_splits
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, rows)
+            inserted = len(rows)
             conn.commit()
 
         log_info(logger, "OHLCV load complete — merged new rows into bronze, skipped existing",

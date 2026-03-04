@@ -157,13 +157,13 @@ def run():
                         1 if i in quarter_end_indices else 0,
                     ))
 
-                for r in rows_final:
-                    cursor.execute("""
-                        INSERT INTO bronze.trading_calendar
-                            (date, exchange_code, xc_code, year, quarter, month,
-                             week_of_year, day_of_week, is_trading_day, is_month_end, is_quarter_end)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, *r)
+                cursor.fast_executemany = True
+                cursor.executemany("""
+                    INSERT INTO bronze.trading_calendar
+                        (date, exchange_code, xc_code, year, quarter, month,
+                         week_of_year, day_of_week, is_trading_day, is_month_end, is_quarter_end)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, rows_final)
 
                 conn.commit()
                 count = len(rows_final)

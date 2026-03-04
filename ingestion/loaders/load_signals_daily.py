@@ -32,7 +32,7 @@ def load(json_file, index_name):
         with StepTimer() as timer:
             cursor.execute("DELETE FROM bronze.signals_daily WHERE _index = ?", index_name)
 
-            inserted = 0
+            rows = []
             for rec in records:
                 symbol = rec.get("symbol")
                 if not symbol:
@@ -44,16 +44,7 @@ def load(json_file, index_name):
                 ms = rec.get("momentum_signals", {})
                 ss = rec.get("sentiment_signals", {})
 
-                cursor.execute("""
-                    INSERT INTO bronze.signals_daily (
-                        _index, symbol, timestamp,
-                        current_price, forward_pe, price_to_book, ev_to_ebitda,
-                        dividend_yield, market_cap, beta,
-                        fifty_two_week_change, sandp_52_week_change,
-                        fifty_day_average, two_hundred_day_average, dist_from_52_week_high,
-                        target_median_price, recommendation_mean, upside_potential
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                rows.append((
                     index_name, symbol, ts,
                     pm.get("currentPrice"), pm.get("forwardPE"),
                     pm.get("priceToBook"), pm.get("evToEbitda"),
@@ -63,9 +54,20 @@ def load(json_file, index_name):
                     ms.get("distFrom52WeekHigh"),
                     ss.get("targetMedianPrice"), ss.get("recommendationMean"),
                     ss.get("upsidePotential")
-                )
-                inserted += 1
+                ))
 
+            cursor.fast_executemany = True
+            cursor.executemany("""
+                INSERT INTO bronze.signals_daily (
+                    _index, symbol, timestamp,
+                    current_price, forward_pe, price_to_book, ev_to_ebitda,
+                    dividend_yield, market_cap, beta,
+                    fifty_two_week_change, sandp_52_week_change,
+                    fifty_day_average, two_hundred_day_average, dist_from_52_week_high,
+                    target_median_price, recommendation_mean, upside_potential
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, rows)
+            inserted = len(rows)
             conn.commit()
 
         log_info(logger, "Daily signals load complete — bronze refreshed with latest snapshot",
