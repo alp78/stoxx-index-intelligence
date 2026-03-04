@@ -16,32 +16,46 @@ DDL_DIR = Path(__file__).resolve().parent / "ddl"
 SCRIPTS = ["bronze_schema.sql", "silver_schema.sql", "gold_schema.sql"]
 
 
+def _run_script(cursor, script_path):
+    """Execute a single DDL script, splitting on GO batch separators."""
+    print(f"Running {script_path.name}...")
+    sql = script_path.read_text(encoding="utf-8")
+
+    batches = [b.strip() for b in sql.split("\nGO") if b.strip()]
+    for batch in batches:
+        lines = [l for l in batch.splitlines() if l.strip() and not l.strip().startswith("--")]
+        if not lines:
+            continue
+        # Skip USE statements — connection already targets the right database
+        if len(lines) == 1 and lines[0].strip().upper().startswith("USE "):
+            continue
+        try:
+            cursor.execute(batch)
+        except Exception as e:
+            print(f"  Error in {script_path.name}: {e}")
+            print(f"  Batch: {batch[:200]}...")
+            raise
+
+    print(f"  {script_path.name} complete.")
+
+
 def run_ddl():
+    # First connect to master to create the database if needed
+    master_conn = get_connection(autocommit=True, database="master")
+    master_cursor = master_conn.cursor()
+    master_cursor.execute(
+        "IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'stoxx') CREATE DATABASE stoxx"
+    )
+    master_cursor.close()
+    master_conn.close()
+    print("Database 'stoxx' ensured.")
+
+    # Now connect to stoxx and run schema scripts
     conn = get_connection(autocommit=True)
     cursor = conn.cursor()
 
     for script_name in SCRIPTS:
-        script_path = DDL_DIR / script_name
-        print(f"Running {script_name}...")
-
-        sql = script_path.read_text(encoding="utf-8")
-
-        # Split on GO statements (batch separator)
-        batches = [b.strip() for b in sql.split("\nGO") if b.strip()]
-
-        for batch in batches:
-            # Skip empty or comment-only batches
-            lines = [l for l in batch.splitlines() if l.strip() and not l.strip().startswith("--")]
-            if not lines:
-                continue
-            try:
-                cursor.execute(batch)
-            except Exception as e:
-                print(f"  Error in {script_name}: {e}")
-                print(f"  Batch: {batch[:200]}...")
-                raise
-
-        print(f"  {script_name} complete.")
+        _run_script(cursor, DDL_DIR / script_name)
 
     cursor.close()
     conn.close()

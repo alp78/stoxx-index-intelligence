@@ -41,37 +41,38 @@ def _preflight():
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT DISTINCT _index FROM bronze.index_dim")
-    loaded_indices = {r[0] for r in cursor.fetchall()}
+    try:
+        cursor.execute("SELECT DISTINCT _index FROM bronze.index_dim")
+        loaded_indices = {r[0] for r in cursor.fetchall()}
 
-    for idx in INDICES:
-        key = idx["key"]
+        for idx in INDICES:
+            key = idx["key"]
 
-        if key not in loaded_indices:
-            log_warning(logger, f"Index: {key} [NOT SETUP] — run setup_index.py first",
-                        step="pipeline", index=key, name=idx["name"])
-            continue
+            if key not in loaded_indices:
+                log_warning(logger, f"Index: {key} [NOT SETUP] — run setup_index.py first",
+                            step="pipeline", index=key, name=idx["name"])
+                continue
 
-        table = idx["ohlcv_table"]
-        cursor.execute(f"""
-            SELECT COUNT(*) FROM sys.tables t
-            JOIN sys.schemas s ON t.schema_id = s.schema_id
-            WHERE s.name = 'bronze' AND t.name = ?
-        """, table)
-        has_table = cursor.fetchone()[0] > 0
+            table = idx["ohlcv_table"]
+            cursor.execute(f"""
+                SELECT COUNT(*) FROM sys.tables t
+                JOIN sys.schemas s ON t.schema_id = s.schema_id
+                WHERE s.name = 'bronze' AND t.name = ?
+            """, table)
+            has_table = cursor.fetchone()[0] > 0
 
-        if has_table:
-            cursor.execute(f"SELECT COUNT(*) FROM bronze.{table}")
-            ohlcv_count = cursor.fetchone()[0]
-        else:
-            ohlcv_count = 0
+            if has_table:
+                cursor.execute(f"SELECT COUNT(*) FROM bronze.{table}")
+                ohlcv_count = cursor.fetchone()[0]
+            else:
+                ohlcv_count = 0
 
-        status = "READY" if ohlcv_count > 0 else "NEW (no OHLCV data)"
-        log_info(logger, f"Index: {key} [{status}]",
-                 step="pipeline", index=key, name=idx["name"], status=status)
-
-    cursor.close()
-    conn.close()
+            status = "READY" if ohlcv_count > 0 else "NEW (no OHLCV data)"
+            log_info(logger, f"Index: {key} [{status}]",
+                     step="pipeline", index=key, name=idx["name"], status=status)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def _file_ok(path):

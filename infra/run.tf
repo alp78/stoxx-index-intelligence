@@ -40,6 +40,7 @@ resource "google_cloud_run_v2_service" "dashboard" {
         failure_threshold     = 3
       }
 
+      # TODO: move full connection string (with password) to Secret Manager
       env {
         name  = "ConnectionStrings__stoxx"
         value = "Server=${google_sql_database_instance.main.private_ip_address},1433;Database=stoxx;User Id=sqlserver;Password=${var.db_password};TrustServerCertificate=true"
@@ -109,8 +110,13 @@ resource "google_cloud_run_v2_job" "pipeline" {
           value = "sqlserver"
         }
         env {
-          name  = "SA_PASSWORD"
-          value = var.db_password
+          name = "SA_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.db_password.secret_id
+              version = "latest"
+            }
+          }
         }
         env {
           name  = "DD_SERVICE"
@@ -125,8 +131,13 @@ resource "google_cloud_run_v2_job" "pipeline" {
           value = "http://${google_compute_instance.airflow.network_interface[0].network_ip}:8126"
         }
         env {
-          name  = "DD_API_KEY"
-          value = var.dd_api_key
+          name = "DD_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.dd_api_key.secret_id
+              version = "latest"
+            }
+          }
         }
         env {
           name  = "LOG_FORMAT"
@@ -189,8 +200,13 @@ resource "google_cloud_run_v2_job" "setup" {
           value = "sqlserver"
         }
         env {
-          name  = "SA_PASSWORD"
-          value = var.db_password
+          name = "SA_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.db_password.secret_id
+              version = "latest"
+            }
+          }
         }
 
         resources {

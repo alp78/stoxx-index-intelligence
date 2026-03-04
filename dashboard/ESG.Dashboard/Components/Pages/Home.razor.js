@@ -1,3 +1,9 @@
+// ── HTML escape helper (prevents XSS in innerHTML) ──
+
+const _esc = s => typeof s === 'string'
+    ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    : s;
+
 // ── Tooltip (managed entirely in JS to avoid Blazor re-renders) ──
 
 export function setTooltipData(container, lookup, indices, options) {
@@ -21,7 +27,7 @@ export function showTooltip(container, x, y, timestamp) {
     const colorBySign = options.colorBySign !== false;
 
     // Build content
-    let html = `<div style="opacity: 0.5; margin-bottom: 2px;">${entry.date}</div>`;
+    let html = `<div style="opacity: 0.5; margin-bottom: 2px;">${_esc(entry.date)}</div>`;
     for (const idx of indices) {
         const val = entry.values[idx.key];
         const hasVal = val !== undefined && val !== null;
@@ -32,7 +38,7 @@ export function showTooltip(container, x, y, timestamp) {
         const valText = hasVal ? prefix + val.toFixed(2) + '%' : '--';
         html += `<div style="display: flex; align-items: center; gap: 6px;">` +
             `<span style="display:inline-block;width:8px;height:2px;background:${idx.color};border-radius:1px;flex-shrink:0;"></span>` +
-            `<span style="opacity:0.5;flex:1;">${idx.name}</span>` +
+            `<span style="opacity:0.5;flex:1;">${_esc(idx.name)}</span>` +
             `<span style="font-weight:600;color:${valColor};">${valText}</span>` +
             `</div>`;
     }
@@ -222,8 +228,8 @@ export function initDonutChart(canvasId, stockLabels, stockNames, stockDisplayWe
                             ? `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:5px;vertical-align:middle;"></span>`
                             : '';
                         tooltip.innerHTML =
-                            `<div style="font-weight:600;color:#E0E0E0;display:flex;align-items:center;">${swatch}${symbol}</div>` +
-                            (name ? `<div style="font-size:10px;opacity:0.6;">${name}</div>` : '') +
+                            `<div style="font-weight:600;color:#E0E0E0;display:flex;align-items:center;">${swatch}${_esc(symbol)}</div>` +
+                            (name ? `<div style="font-size:10px;opacity:0.6;">${_esc(name)}</div>` : '') +
                             `<div>Weight: ${value}</div>`;
 
                         // Position outside the donut: push outward from center

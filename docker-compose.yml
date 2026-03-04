@@ -33,6 +33,7 @@ services:
       context: .
       dockerfile: docker/pipeline.Dockerfile
     container_name: stoxx-pipeline
+    user: root
     environment:
       SQL_HOST: db
       SQL_PORT: "1433"

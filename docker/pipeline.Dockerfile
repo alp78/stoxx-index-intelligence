@@ -24,8 +24,16 @@ COPY utils/ utils/
 COPY ingestion/ ingestion/
 COPY db/ db/
 COPY data/definitions/ data/definitions/
+COPY docker/pipeline-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-# Data directories (volumes in compose)
+# Run as non-root (Cloud Run; overridden in docker-compose for local dev)
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+# Data directories (created as appuser so volume mounts inherit ownership)
 RUN mkdir -p data/dimensions data/ohlcv data/signals data/pulse data/tickers logs
 
-ENTRYPOINT ["ddtrace-run", "python", "utils/run_pipeline.py"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["ddtrace-run", "python", "utils/run_pipeline.py"]

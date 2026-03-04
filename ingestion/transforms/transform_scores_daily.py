@@ -68,6 +68,25 @@ def run():
 
             df = pd.DataFrame.from_records(rows, columns=cols)
 
+            # --- 2b. Data validation: sanitize outliers ---
+            sanitized = 0
+            for col, condition in [
+                ('market_cap', df['market_cap'] <= 0),
+                ('current_price', df['current_price'] <= 0),
+                ('forward_pe', df['forward_pe'].abs() > 500),
+                ('price_to_book', df['price_to_book'].abs() > 100),
+                ('ev_to_ebitda', df['ev_to_ebitda'].abs() > 500),
+            ]:
+                mask = condition & df[col].notna()
+                count = mask.sum()
+                if count > 0:
+                    df.loc[mask, col] = np.nan
+                    sanitized += count
+            if sanitized > 0:
+                log_warning(logger, f"Sanitized {sanitized} outlier values to NaN",
+                            step="transform", target="gold.scores_daily",
+                            score_date=str(score_date))
+
             # --- 3. Relative Value z-scores ---
             # Invert PE/PB/EV (lower = cheaper = positive z-score)
             df['pe_zscore'] = -zscore_by_group(df, 'forward_pe', ['_index', 'sector'],

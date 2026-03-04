@@ -95,7 +95,8 @@ resource "google_project_iam_member" "datadog_cloudasset" {
   member  = "serviceAccount:${google_service_account.datadog[0].email}"
 }
 
-resource "google_service_account_key" "datadog" {
-  count              = var.dd_api_key != "" ? 1 : 0
-  service_account_id = google_service_account.datadog[0].name
+resource "google_secret_manager_secret_iam_member" "pipeline_dd_secret" {
+  secret_id = google_secret_manager_secret.dd_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.pipeline.email}"
 }

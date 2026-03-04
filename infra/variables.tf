@@ -37,3 +37,12 @@ variable "dd_api_key" {
   sensitive   = true
   default     = ""
 }
+
+variable "labels" {
+  description = "Common resource labels"
+  type        = map(string)
+  default = {
+    project     = "stoxx"
+    managed-by  = "terraform"
+  }
+}

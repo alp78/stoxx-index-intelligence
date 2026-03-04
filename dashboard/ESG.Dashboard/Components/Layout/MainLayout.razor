@@ -28,7 +28,14 @@
     </MudAppBar>
 
     <MudMainContent Class="pa-4 mt-12">
-        @Body
+        <ErrorBoundary @ref="_errorBoundary">
+            <ChildContent>@Body</ChildContent>
+            <ErrorContent>
+                <MudAlert Severity="MudBlazor.Severity.Error" Class="ma-4">
+                    Something went wrong. <MudLink OnClick="Recover">Try again</MudLink>
+                </MudAlert>
+            </ErrorContent>
+        </ErrorBoundary>
     </MudMainContent>
 </MudLayout>
 
@@ -42,6 +49,7 @@
         new("/live", "PULSE", Icons.Material.Filled.MonitorHeart),
     ];
 
+    private ErrorBoundary? _errorBoundary;
     private string _currentPath = "/";
 
     protected override void OnInitialized()
@@ -63,6 +71,8 @@
         if (href == "/") return _currentPath is "" or "/";
         return _currentPath.StartsWith(href, StringComparison.OrdinalIgnoreCase);
     }
+
+    private void Recover() => _errorBoundary?.Recover();
 
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 

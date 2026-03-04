@@ -30,7 +30,13 @@ resource "google_compute_instance" "airflow" {
 
   metadata = {
     startup-script = replace(file("${path.module}/scripts/airflow-startup.sh"), "\r\n", "\n")
-    dd-api-key     = var.dd_api_key
+    enable-oslogin = "TRUE"
+  }
+
+  shielded_instance_config {
+    enable_secure_boot          = true
+    enable_vtpm                 = true
+    enable_integrity_monitoring = true
   }
 
   allow_stopping_for_update = true

@@ -15,26 +15,31 @@ public class ScoresRepository
     {
         using var conn = _db.Create();
         var sql = """
-            SELECT _index AS [Index], symbol AS Symbol, score_date AS ScoreDate, sector AS Sector,
-                   pe_zscore AS PeZscore, pb_zscore AS PbZscore,
-                   ev_ebitda_zscore AS EvEbitdaZscore, yield_zscore AS YieldZscore,
-                   relative_value_score AS RelativeValueScore, relative_value_rank AS RelativeValueRank,
-                   relative_strength AS RelativeStrength, sma_50_ratio AS Sma50Ratio,
-                   sma_200_ratio AS Sma200Ratio, dist_from_52w_high AS DistFrom52wHigh,
-                   momentum_score AS MomentumScore, momentum_rank AS MomentumRank,
-                   implied_upside AS ImpliedUpside, recommendation_mean AS RecommendationMean,
-                   price_falling_analysts_bullish AS PriceFallingAnalystsBullish,
-                   sentiment_score AS SentimentScore, sentiment_rank AS SentimentRank,
-                   composite_score AS CompositeScore, composite_rank AS CompositeRank,
-                   sma_30_close AS Sma30Close, sma_90_close AS Sma90Close,
-                   market_cap AS MarketCap, index_weight AS IndexWeight,
-                   short_name AS ShortName, country AS Country, currency AS Currency,
-                   current_price AS CurrentPrice, day_change_pct AS DayChangePct,
-                   five_day_change_pct AS FiveDayChangePct, ytd_change_pct AS YtdChangePct
-            FROM gold.scores_daily
-            WHERE score_date = (SELECT MAX(s2.score_date) FROM gold.scores_daily s2 WHERE s2._index = gold.scores_daily._index)
-              AND (@Index IS NULL OR _index = @Index)
-            ORDER BY _index, index_weight DESC
+            WITH max_dates AS (
+                SELECT _index, MAX(score_date) AS max_date
+                FROM gold.scores_daily
+                WHERE @Index IS NULL OR _index = @Index
+                GROUP BY _index
+            )
+            SELECT sd._index AS [Index], sd.symbol AS Symbol, sd.score_date AS ScoreDate, sd.sector AS Sector,
+                   sd.pe_zscore AS PeZscore, sd.pb_zscore AS PbZscore,
+                   sd.ev_ebitda_zscore AS EvEbitdaZscore, sd.yield_zscore AS YieldZscore,
+                   sd.relative_value_score AS RelativeValueScore, sd.relative_value_rank AS RelativeValueRank,
+                   sd.relative_strength AS RelativeStrength, sd.sma_50_ratio AS Sma50Ratio,
+                   sd.sma_200_ratio AS Sma200Ratio, sd.dist_from_52w_high AS DistFrom52wHigh,
+                   sd.momentum_score AS MomentumScore, sd.momentum_rank AS MomentumRank,
+                   sd.implied_upside AS ImpliedUpside, sd.recommendation_mean AS RecommendationMean,
+                   sd.price_falling_analysts_bullish AS PriceFallingAnalystsBullish,
+                   sd.sentiment_score AS SentimentScore, sd.sentiment_rank AS SentimentRank,
+                   sd.composite_score AS CompositeScore, sd.composite_rank AS CompositeRank,
+                   sd.sma_30_close AS Sma30Close, sd.sma_90_close AS Sma90Close,
+                   sd.market_cap AS MarketCap, sd.index_weight AS IndexWeight,
+                   sd.short_name AS ShortName, sd.country AS Country, sd.currency AS Currency,
+                   sd.current_price AS CurrentPrice, sd.day_change_pct AS DayChangePct,
+                   sd.five_day_change_pct AS FiveDayChangePct, sd.ytd_change_pct AS YtdChangePct
+            FROM gold.scores_daily sd
+            INNER JOIN max_dates md ON sd._index = md._index AND sd.score_date = md.max_date
+            ORDER BY sd._index, sd.index_weight DESC
             """;
         return await conn.QueryAsync<ScoreDaily>(sql, new { Index = index });
     }
@@ -76,6 +81,7 @@ public class ScoresRepository
             WITH latest AS (
                 SELECT *, ROW_NUMBER() OVER (PARTITION BY _index, symbol ORDER BY as_of_date DESC) AS rn
                 FROM gold.scores_quarterly
+                WHERE @Index IS NULL OR _index = @Index
             )
             SELECT _index AS [Index], symbol AS Symbol, as_of_date AS AsOfDate, sector AS Sector,
                    gross_margin_zscore AS GrossMarginZscore, roe_zscore AS RoeZscore,
@@ -131,9 +137,16 @@ public class ScoresRepository
     {
         using var conn = _db.Create();
         var sql = """
-            WITH latest_q AS (
+            WITH max_dates AS (
+                SELECT _index, MAX(score_date) AS max_date
+                FROM gold.scores_daily
+                WHERE @Index IS NULL OR _index = @Index
+                GROUP BY _index
+            ),
+            latest_q AS (
                 SELECT *, ROW_NUMBER() OVER (PARTITION BY _index, symbol ORDER BY as_of_date DESC) AS rn
                 FROM gold.scores_quarterly
+                WHERE @Index IS NULL OR _index = @Index
             )
             SELECT d._index AS [Index], d.sector AS Sector,
                    COUNT(*) AS StockCount,
@@ -145,12 +158,11 @@ public class ScoresRepository
                    AVG(sq.governance_score) AS AvgGovernanceScore,
                    SUM(CAST(ISNULL(sq.health_flags_count, 0) AS INT)) AS HealthFlagsTotal
             FROM gold.scores_daily sd
+            INNER JOIN max_dates md ON sd._index = md._index AND sd.score_date = md.max_date
             JOIN latest_q sq
                 ON sd._index = sq._index AND sd.symbol = sq.symbol AND sq.rn = 1
             JOIN silver.index_dim d
                 ON sd._index = d._index AND sd.symbol = d.symbol AND d.is_current = 1
-            WHERE sd.score_date = (SELECT MAX(s2.score_date) FROM gold.scores_daily s2 WHERE s2._index = sd._index)
-              AND (@Index IS NULL OR d._index = @Index)
             GROUP BY d._index, d.sector
             ORDER BY d._index, AVG(sd.composite_score) DESC
             """;

@@ -90,11 +90,14 @@ def get_logger(name, level=logging.INFO):
     """
     logger = logging.getLogger(name)
     if not logger.handlers:
-        # JSON file for Datadog
-        _LOG_DIR.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
-        file_handler.setFormatter(DatadogJsonFormatter())
-        logger.addHandler(file_handler)
+        # JSON file for Datadog (skip gracefully if dir isn't writable, e.g. non-root container)
+        try:
+            _LOG_DIR.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
+            file_handler.setFormatter(DatadogJsonFormatter())
+            logger.addHandler(file_handler)
+        except OSError:
+            pass
 
         # Console for the developer
         stdout_handler = logging.StreamHandler(sys.stdout)

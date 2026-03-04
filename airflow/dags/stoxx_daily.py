@@ -6,13 +6,18 @@ Runs 3x daily (09:00, 17:00, 22:00 UTC Mon-Fri) via Cloud Run.
 
 from airflow import DAG
 from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
-from datetime import datetime
+from datetime import datetime, timedelta
 
 default_args = {
     "project_id": "stoxx-index-intelligence",
     "region": "europe-west1",
     "job_name": "stoxx-pipeline",
     "deferrable": False,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+    "execution_timeout": timedelta(minutes=30),
+    "sla": timedelta(hours=1),
+    "on_failure_callback": lambda context: None,
 }
 
 

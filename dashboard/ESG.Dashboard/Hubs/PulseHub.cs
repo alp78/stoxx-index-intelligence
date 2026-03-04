@@ -5,13 +5,24 @@ namespace ESG.Dashboard.Hubs;
 /// <summary>SignalR hub for real-time pulse data — clients subscribe/unsubscribe to index groups.</summary>
 public class PulseHub : Hub
 {
+    private static readonly HashSet<string> ValidIndices = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "STOXX50E", "SX5E", "SXXP"
+    };
+
     public async Task SubscribeToIndex(string index)
     {
+        if (string.IsNullOrWhiteSpace(index) || !ValidIndices.Contains(index))
+            return;
+
         await Groups.AddToGroupAsync(Context.ConnectionId, index);
     }
 
     public async Task UnsubscribeFromIndex(string index)
     {
+        if (string.IsNullOrWhiteSpace(index) || !ValidIndices.Contains(index))
+            return;
+
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, index);
     }
 }

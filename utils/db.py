@@ -5,25 +5,32 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-def get_connection(autocommit=False):
-    """Returns a pyodbc connection using .env config."""
+def get_connection(autocommit=False, database=None):
+    """Returns a pyodbc connection using .env config.
+
+    Args:
+        autocommit: Enable autocommit mode.
+        database: Override the target database (e.g. 'master' for initial setup).
+    """
     # Load .env from project root
     env_path = Path(__file__).resolve().parent.parent / ".env"
     load_dotenv(env_path)
 
     host = os.getenv("SQL_HOST", "localhost")
     port = os.getenv("SQL_PORT", "1434")
-    database = os.getenv("SQL_DATABASE", "stoxx")
+    db = database or os.getenv("SQL_DATABASE", "stoxx")
     user = os.getenv("SQL_USER", "sa")
     password = os.getenv("SA_PASSWORD")
+    driver = os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server")
+    trust_cert = os.getenv("SQL_TRUST_CERT", "yes")
 
     conn_str = (
-        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+        f"DRIVER={{{driver}}};"
         f"SERVER={host},{port};"
-        f"DATABASE={database};"
+        f"DATABASE={db};"
         f"UID={user};"
         f"PWD={password};"
-        f"TrustServerCertificate=yes"
+        f"TrustServerCertificate={trust_cert}"
     )
     return pyodbc.connect(conn_str, autocommit=autocommit)
 

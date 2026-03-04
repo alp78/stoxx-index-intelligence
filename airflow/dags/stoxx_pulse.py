@@ -6,7 +6,13 @@ snapshots for pre-discovered active tickers. Feeds the Live dashboard page.
 
 from airflow import DAG
 from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
-from datetime import datetime
+from datetime import datetime, timedelta
+
+default_args = {
+    "retries": 2,
+    "retry_delay": timedelta(minutes=1),
+    "execution_timeout": timedelta(minutes=4),
+}
 
 with DAG(
     "stoxx_pulse",
@@ -15,6 +21,7 @@ with DAG(
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["stoxx"],
+    default_args=default_args,
 ) as dag:
 
     fetch_and_load_pulse = CloudRunExecuteJobOperator(

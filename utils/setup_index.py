@@ -195,23 +195,24 @@ def _create_tables(targets):
     cursor = conn.cursor()
     created = 0
 
-    for idx in targets:
-        index_key = idx["key"]
-        table = idx["ohlcv_table"]
+    try:
+        for idx in targets:
+            index_key = idx["key"]
+            table = idx["ohlcv_table"]
 
-        for schema, ddl in [("bronze", BRONZE_OHLCV_DDL), ("silver", SILVER_OHLCV_DDL)]:
-            if _table_exists(cursor, schema, table):
-                log_info(logger, "OHLCV table already exists — skipping creation",
-                         step="setup", index=index_key, schema=schema, table=table)
-            else:
-                cursor.execute(ddl.format(table=table))
-                conn.commit()
-                created += 1
-                log_info(logger, "Created OHLCV table",
-                         step="setup", index=index_key, schema=schema, table=table)
-
-    cursor.close()
-    conn.close()
+            for schema, ddl in [("bronze", BRONZE_OHLCV_DDL), ("silver", SILVER_OHLCV_DDL)]:
+                if _table_exists(cursor, schema, table):
+                    log_info(logger, "OHLCV table already exists — skipping creation",
+                             step="setup", index=index_key, schema=schema, table=table)
+                else:
+                    cursor.execute(ddl.format(table=table))
+                    conn.commit()
+                    created += 1
+                    log_info(logger, "Created OHLCV table",
+                             step="setup", index=index_key, schema=schema, table=table)
+    finally:
+        cursor.close()
+        conn.close()
     return created
 
 
@@ -303,7 +304,7 @@ def _populate_data(targets):
 
         # Signals daily
         try:
-            fetch_daily_signals(dim, data_path(key, "signals_daily"))
+            fetch_daily_signals(key, data_path(key, "signals_daily"))
             sd = data_path(key, "signals_daily")
             if sd.exists():
                 load_signals_daily(sd, key)
@@ -313,7 +314,7 @@ def _populate_data(targets):
 
         # Signals quarterly
         try:
-            fetch_quarterly_fundamentals(dim, data_path(key, "signals_quarterly"))
+            fetch_quarterly_fundamentals(key, data_path(key, "signals_quarterly"))
             sq = data_path(key, "signals_quarterly")
             if sq.exists():
                 load_signals_quarterly(sq, key)
@@ -323,7 +324,7 @@ def _populate_data(targets):
 
         # Pulse tickers
         try:
-            discover_pulse_tickers(dim, data_path(key, "tickers"))
+            discover_pulse_tickers(key, data_path(key, "tickers"))
             t = data_path(key, "tickers")
             if t.exists():
                 load_pulse_tickers(t, key)

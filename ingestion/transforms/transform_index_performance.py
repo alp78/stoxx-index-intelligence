@@ -254,9 +254,16 @@ def _transform_index(cursor, conn, key):
         idx_ret[col] = idx_ret[col].ffill()
 
     # --- 11. Filter to only new dates (incremental) ---
+    # Always refresh the last 7 days so late-arriving signals (PE, PB, yield)
+    # get merged onto existing OHLCV dates.
     if max_existing:
         max_existing_dt = pd.Timestamp(max_existing)
-        idx_ret = idx_ret[idx_ret['date'] > max_existing_dt]
+        refresh_from = max_existing_dt - pd.Timedelta('7D')
+        cursor.execute("""
+            DELETE FROM gold.index_performance
+            WHERE _index = ? AND perf_date >= ?
+        """, key, refresh_from.strftime('%Y-%m-%d'))
+        idx_ret = idx_ret[idx_ret['date'] >= refresh_from]
 
     if idx_ret.empty:
         log_info(logger, "Index performance already up to date — no new dates",

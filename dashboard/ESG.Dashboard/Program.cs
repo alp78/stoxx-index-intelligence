@@ -13,6 +13,9 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.Components.Server.Circuits.Circu
 // MudBlazor
 builder.Services.AddMudServices();
 
+// In-memory cache (reduces DB load — scores change at most daily)
+builder.Services.AddMemoryCache();
+
 // Database
 var connectionString = builder.Configuration.GetConnectionString("stoxx")
     ?? throw new InvalidOperationException("Connection string 'stoxx' not found.");
@@ -39,6 +42,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseAntiforgery();
 app.MapStaticAssets();
+
+// Health check endpoint (Cloud Run cold start + load balancer readiness)
+app.MapGet("/healthz", () => Results.Ok("ok"));
 
 // SignalR hub
 app.MapHub<PulseHub>("/hubs/pulse");

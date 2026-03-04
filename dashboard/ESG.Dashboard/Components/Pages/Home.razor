@@ -105,7 +105,7 @@ else
 
     <!-- Charts: 50/50 split — left: 3 LightweightCharts stacked, right: radar + donut -->
     <MudGrid Spacing="3" Class="mb-4" Style="align-items: stretch;">
-        <MudItem xs="12" lg="6" Style="display: flex; flex-direction: column;">
+        <MudItem xs="12" md="6" Style="display: flex; flex-direction: column;">
             <!-- Rolling 30d Return -->
             <MudPaper Class="pa-3 mb-3" Elevation="2">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
@@ -194,7 +194,7 @@ else
         </MudItem>
 
         <!-- Right column: Radar + Donut -->
-        <MudItem xs="12" lg="6" Style="display: flex; flex-direction: column;">
+        <MudItem xs="12" md="6" Style="display: flex; flex-direction: column;">
             <div class="chart-split-col">
                 <MudPaper Class="pa-3 mb-3" Elevation="2">
                     <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
@@ -809,14 +809,19 @@ else
             tasks.Add(InitVolatilityChart());
         if (!_momReady && _momRef is not null)
             tasks.Add(InitMomentumChart());
-        if (!_radarReady && _jsModule is not null)
+        if (!_radarReady && _jsModule is not null && !firstRender && _daily.Count > 0)
             tasks.Add(InitRadarChart());
-        if (!_donutReady && _jsModule is not null)
+        if (!_donutReady && _jsModule is not null && !firstRender && _daily.Count > 0)
             tasks.Add(InitDonutChart());
 
         if (tasks.Count > 0)
         {
             await Task.WhenAll(tasks);
+            StateHasChanged();
+        }
+        else if (firstRender)
+        {
+            // Trigger a second render cycle so Chart.js canvases are in the DOM
             StateHasChanged();
         }
     }

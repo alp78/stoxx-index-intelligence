@@ -20,26 +20,44 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SA_EMAIL }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker
         run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build & push dashboard image
-        run: |
-          docker build --provenance=false \
-            -t $REGISTRY/dashboard:${{ github.sha }} \
-            -t $REGISTRY/dashboard:latest \
-            -f docker/dashboard.Dockerfile .
-          docker push $REGISTRY/dashboard --all-tags
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/dashboard.Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/dashboard:${{ github.sha }}
+            ${{ env.REGISTRY }}/dashboard:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/dashboard:${{ github.sha }}
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
 
       - name: Deploy to Cloud Run
         run: |

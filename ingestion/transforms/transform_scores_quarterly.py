@@ -8,6 +8,7 @@ Computes per-stock analytics for the latest quarterly data:
 """
 
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -133,7 +134,8 @@ def run():
 
             # governance_score = 10 - avg(risk scores), higher = better governance
             risk_values = df[risk_cols].values.astype(float)
-            with np.errstate(invalid='ignore'):
+            with np.errstate(invalid='ignore'), warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
                 avg_risk = np.nanmean(risk_values, axis=1)
             df['governance_score'] = np.where(np.isnan(avg_risk), np.nan, 10.0 - avg_risk)
 

@@ -33,19 +33,6 @@ resource "google_service_networking_connection" "private_vpc" {
 # --------------------------------------------------------------------------
 # Firewall rules
 # --------------------------------------------------------------------------
-resource "google_compute_firewall" "allow_ssh" {
-  name    = "stoxx-allow-ssh"
-  network = google_compute_network.main.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["airflow"]
-}
-
 resource "google_compute_firewall" "allow_airflow_ui" {
   name    = "stoxx-allow-airflow"
   network = google_compute_network.main.name
@@ -55,7 +42,8 @@ resource "google_compute_firewall" "allow_airflow_ui" {
     ports    = ["8080"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  # Restrict to IAP source range only
+  source_ranges = ["35.235.240.0/20"]
   target_tags   = ["airflow"]
 }
 
@@ -85,4 +73,16 @@ resource "google_compute_firewall" "allow_iap" {
   # IAP tunnel source range
   source_ranges = ["35.235.240.0/20"]
   target_tags   = ["airflow"]
+}
+
+resource "google_compute_firewall" "deny_all_ingress" {
+  name     = "stoxx-deny-all-ingress"
+  network  = google_compute_network.main.name
+  priority = 65000
+
+  deny {
+    protocol = "all"
+  }
+
+  source_ranges = ["0.0.0.0/0"]
 }
