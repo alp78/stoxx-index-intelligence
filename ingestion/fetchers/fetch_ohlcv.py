@@ -123,6 +123,7 @@ def fetch_ohlcv(index_key):
                     continue
 
                 df = df.reset_index()
+                df = df.dropna(subset=["Open", "High", "Low", "Close"], how="all")
 
                 for _, row in df.iterrows():
                     raw_close = float(row["Close"])

@@ -1,6 +1,7 @@
 """Loads OHLCV JSON into per-index bronze OHLCV tables. Strategy: merge (insert missing only)."""
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -14,17 +15,23 @@ logger = get_logger(__name__)
 
 
 def _float(val):
-    """Convert to float, treating empty strings and None as None."""
+    """Convert to float, treating empty strings, None, and NaN/Inf as None."""
     if val is None or val == "":
         return None
-    return float(val)
+    v = float(val)
+    if math.isnan(v) or math.isinf(v):
+        return None
+    return v
 
 
 def _int(val):
-    """Convert to int, treating empty strings and None as None."""
+    """Convert to int, treating empty strings, None, and NaN/Inf as None."""
     if val is None or val == "":
         return None
-    return int(val)
+    v = float(val)
+    if math.isnan(v) or math.isinf(v):
+        return None
+    return int(v)
 
 
 def load(json_file, table):
