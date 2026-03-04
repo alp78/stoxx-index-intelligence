@@ -695,7 +695,7 @@ else
                 return ordered;
             });
 
-        _indexKeys = _snapshots.Select(s => s.Index).OrderBy(k => k).ToArray();
+        _indexKeys = keys.Count != 0 ? keys.ToArray() : _snapshots.Select(s => s.Index).OrderBy(k => k).ToArray();
 
         foreach (var key in _indexKeys)
         {
