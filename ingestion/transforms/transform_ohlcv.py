@@ -149,7 +149,7 @@ def _transform_index(cursor, conn, index_name, bronze_table, silver_table):
                             r[6], r[7], r[8])
                         last_fill = r
                         inserted += 1
-                    elif last_fill is not None:
+                    elif last_fill is not None and td_str < today_str:
                         close = last_fill[4]
                         adj = last_fill[5]
                         cursor.execute(f"""

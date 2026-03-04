@@ -30,7 +30,7 @@ public class ScoresRepository
                    current_price AS CurrentPrice, day_change_pct AS DayChangePct,
                    five_day_change_pct AS FiveDayChangePct, ytd_change_pct AS YtdChangePct
             FROM gold.scores_daily
-            WHERE score_date = (SELECT MAX(score_date) FROM gold.scores_daily)
+            WHERE score_date = (SELECT MAX(s2.score_date) FROM gold.scores_daily s2 WHERE s2._index = gold.scores_daily._index)
               AND (@Index IS NULL OR _index = @Index)
             ORDER BY _index, index_weight DESC
             """;
@@ -143,7 +143,7 @@ public class ScoresRepository
                 ON sd._index = sq._index AND sd.symbol = sq.symbol AND sq.rn = 1
             JOIN silver.index_dim d
                 ON sd._index = d._index AND sd.symbol = d.symbol AND d.is_current = 1
-            WHERE sd.score_date = (SELECT MAX(score_date) FROM gold.scores_daily)
+            WHERE sd.score_date = (SELECT MAX(s2.score_date) FROM gold.scores_daily s2 WHERE s2._index = sd._index)
               AND (@Index IS NULL OR d._index = @Index)
             GROUP BY d._index, d.sector
             ORDER BY d._index, AVG(sd.composite_score) DESC
