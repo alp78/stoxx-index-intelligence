@@ -55,7 +55,7 @@ jobs:
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@0.34.2
         with:
-          version: 'v0.69.2'
+          version: 'v0.69.3'
           image-ref: ${{ env.REGISTRY }}/pipeline:${{ github.sha }}
           format: table
           exit-code: 1
