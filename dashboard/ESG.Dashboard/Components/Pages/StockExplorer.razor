@@ -4,6 +4,7 @@
 @inject StockRepository StockRepo
 @inject ScoresRepository ScoresRepo
 @inject IJSRuntime JS
+@inject IndexSelectionState IdxState
 @implements IAsyncDisposable
 
 <PageTitle>Stocks - STOXX Index Intelligence</PageTitle>
@@ -478,7 +479,7 @@ else
     [Parameter] public string? Symbol { get; set; }
 
     private bool _loading = true;
-    private string? _filterIndex = "euro_stoxx_50";
+    private string? _filterIndex;
     private string _searchText = "";
     private List<string> _indexKeys = [];
     private List<StockRow> _stockRows = [];
@@ -607,11 +608,16 @@ else
                 _mcapRank[(idx, sym)] = rank;
         }
 
+        // Use shared state unless URL specifies an index
+        _filterIndex = _indexKeys.Contains(IdxState.SelectedIndex)
+            ? IdxState.SelectedIndex
+            : _indexKeys.FirstOrDefault() ?? "euro_stoxx_50";
         UpdateNavScores();
 
         if (!string.IsNullOrEmpty(IndexKey) && !string.IsNullOrEmpty(Symbol))
         {
             _filterIndex = IndexKey;
+            IdxState.SelectedIndex = IndexKey;
             UpdateNavScores();
             var match = _stockRows.FirstOrDefault(r =>
                 r.Stock.Index == IndexKey && r.Stock.Symbol.Equals(Symbol, StringComparison.OrdinalIgnoreCase));
@@ -851,6 +857,7 @@ else
             _navSelected?.Symbol.Equals(Symbol, StringComparison.OrdinalIgnoreCase) == true) return;
 
         _filterIndex = IndexKey;
+        IdxState.SelectedIndex = IndexKey;
         UpdateNavScores();
         var match = _stockRows.FirstOrDefault(r =>
             r.Stock.Index == IndexKey && r.Stock.Symbol.Equals(Symbol, StringComparison.OrdinalIgnoreCase));
@@ -1126,6 +1133,7 @@ else
     private async Task OnIndexFilterChanged(string? value)
     {
         _filterIndex = value;
+        if (value is not null) IdxState.SelectedIndex = value;
         UpdateNavScores();
         var top = _stockRows
             .Where(r => r.Stock.Index == _filterIndex && r.Daily?.MarketCap is not null)

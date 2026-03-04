@@ -31,6 +31,23 @@
     margin-right: 3px;
 }
 
+::deep .chart-split-col {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+::deep .chart-split-col > .mud-paper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+::deep .chart-split-col > .mud-paper > div:last-child {
+    flex: 1;
+    min-height: 0;
+}
+
 .chart-tooltip {
     display: none;
     position: absolute;

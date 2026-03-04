@@ -21,6 +21,7 @@ builder.Services.AddScoped<ScoresRepository>();
 builder.Services.AddScoped<IndexPerformanceRepository>();
 builder.Services.AddScoped<StockRepository>();
 builder.Services.AddScoped<PulseRepository>();
+builder.Services.AddScoped<IndexSelectionState>();
 
 // SignalR
 builder.Services.AddSignalR();
