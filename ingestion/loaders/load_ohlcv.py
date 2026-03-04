@@ -31,13 +31,13 @@ def load(json_file, table):
     try:
         with StepTimer() as timer:
             cursor.execute(f"""
-                SELECT symbol, CONVERT(VARCHAR(10), date, 120)
+                SELECT symbol, CONVERT(VARCHAR(10), date, 120), ISNULL(volume, 0)
                 FROM {table}
             """)
-            existing = set((row[0], row[1]) for row in cursor.fetchall())
+            existing = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
 
-            rows = []
-            skipped = 0
+            inserts = []
+            updates = []
 
             for rec in records:
                 symbol = rec.get("symbol")
@@ -45,30 +45,42 @@ def load(json_file, table):
                 if not symbol or not date:
                     continue
 
-                if (symbol, date) in existing:
-                    skipped += 1
-                    continue
-
-                rows.append((
-                    symbol, date,
-                    rec.get("open"), rec.get("high"), rec.get("low"), rec.get("close"),
-                    rec.get("adj_close"), rec.get("volume"),
-                    rec.get("dividends"), rec.get("stock_splits")
-                ))
+                key = (symbol, date)
+                if key not in existing:
+                    inserts.append((
+                        symbol, date,
+                        rec.get("open"), rec.get("high"), rec.get("low"), rec.get("close"),
+                        rec.get("adj_close"), rec.get("volume"),
+                        rec.get("dividends"), rec.get("stock_splits")
+                    ))
+                elif existing[key] == 0 and (rec.get("volume") or 0) > 0:
+                    updates.append((
+                        rec.get("open"), rec.get("high"), rec.get("low"), rec.get("close"),
+                        rec.get("adj_close"), rec.get("volume"),
+                        rec.get("dividends"), rec.get("stock_splits"),
+                        symbol, date
+                    ))
 
             cursor.fast_executemany = True
-            cursor.executemany(f"""
-                INSERT INTO {table} (
-                    symbol, date, [open], high, low, [close],
-                    adj_close, volume, dividends, stock_splits
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, rows)
-            inserted = len(rows)
+            if inserts:
+                cursor.executemany(f"""
+                    INSERT INTO {table} (
+                        symbol, date, [open], high, low, [close],
+                        adj_close, volume, dividends, stock_splits
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, inserts)
+            if updates:
+                cursor.executemany(f"""
+                    UPDATE {table}
+                    SET [open] = ?, high = ?, low = ?, [close] = ?,
+                        adj_close = ?, volume = ?, dividends = ?, stock_splits = ?
+                    WHERE symbol = ? AND date = ?
+                """, updates)
             conn.commit()
 
-        log_info(logger, "OHLCV load complete — merged new rows into bronze, skipped existing",
-                 step="load", table=table, records_inserted=inserted,
-                 records_skipped=skipped, records_total=len(records),
+        log_info(logger, "OHLCV load complete — merged new rows and updated stale volumes in bronze",
+                 step="load", table=table, records_inserted=len(inserts),
+                 records_updated=len(updates), records_total=len(records),
                  duration_ms=timer.duration_ms)
     except Exception:
         conn.rollback()

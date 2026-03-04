@@ -12,7 +12,7 @@ Scenarios:
 
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -113,7 +113,8 @@ def fetch_ohlcv(index_key):
 
             try:
                 tkr = yf.Ticker(symbol)
-                df = tkr.history(start=start_date, end=today, interval="1d",
+                end_date = (datetime.now(ZoneInfo(tz_name)) + timedelta(days=1)).strftime("%Y-%m-%d")
+                df = tkr.history(start=start_date, end=end_date, interval="1d",
                                  auto_adjust=False, actions=True)
 
                 if df.empty:

@@ -172,7 +172,7 @@ def run():
                                LAG([close], 1) OVER (PARTITION BY symbol ORDER BY date) AS prev_close,
                                LAG([close], 5) OVER (PARTITION BY symbol ORDER BY date) AS close_5d_ago
                         FROM {table}
-                        WHERE ISNULL(volume, 0) > 0
+                        WHERE [close] IS NOT NULL
                     ),
                     ytd AS (
                         SELECT symbol,

@@ -64,7 +64,7 @@ public class StockRepository
                        COUNT(adj_close) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS cnt_30,
                        COUNT(adj_close) OVER (ORDER BY date ROWS BETWEEN 89 PRECEDING AND CURRENT ROW) AS cnt_90
                 FROM {table}
-                WHERE symbol = @Symbol AND ISNULL(volume, 0) > 0
+                WHERE symbol = @Symbol AND adj_close IS NOT NULL
             )
             SELECT symbol AS Symbol, date AS Date,
                    [open] * adj_ratio AS [Open], high * adj_ratio AS High,
@@ -91,7 +91,7 @@ public class StockRepository
             SELECT symbol AS Symbol, date AS Date, adj_close AS [Close]
             FROM {table}
             WHERE symbol IN @Symbols AND date >= @From
-              AND adj_close IS NOT NULL AND ISNULL(volume, 0) > 0
+              AND adj_close IS NOT NULL
             ORDER BY symbol, date
             """;
         return await conn.QueryAsync<SymbolClose>(sql, new { Symbols = symbols, From = from });

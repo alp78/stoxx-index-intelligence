@@ -67,11 +67,11 @@ def _transform_index(cursor, conn, index_name, bronze_table, silver_table):
                             step="transform", index=index_name)
                 return
 
-            # Get existing silver (symbol, date) to skip
+            # Get existing silver (symbol, date) with fill flag
             cursor.execute(f"""
-                SELECT symbol, CONVERT(VARCHAR(10), date, 120) FROM {silver_table}
+                SELECT symbol, CONVERT(VARCHAR(10), date, 120), is_filled FROM {silver_table}
             """)
-            existing = set((r[0], r[1]) for r in cursor.fetchall())
+            existing = {(r[0], r[1]): r[2] for r in cursor.fetchall()}
 
             inserted = 0
             filled = 0
@@ -120,9 +120,22 @@ def _transform_index(cursor, conn, index_name, bronze_table, silver_table):
                     if td_str > today_str:
                         break
 
-                    if (symbol, td_str) in existing:
+                    key = (symbol, td_str)
+                    if key in existing:
                         if td_str in bronze_rows:
                             last_fill = bronze_rows[td_str]
+                            # Replace gap-filled row with real bronze data
+                            if existing[key]:
+                                r = bronze_rows[td_str]
+                                cursor.execute(f"""
+                                    UPDATE {silver_table}
+                                    SET [open] = ?, high = ?, low = ?, [close] = ?,
+                                        adj_close = ?, volume = ?, dividends = ?,
+                                        stock_splits = ?, is_filled = 0
+                                    WHERE symbol = ? AND date = ?
+                                """, r[1], r[2], r[3], r[4], r[5],
+                                    r[6], r[7], r[8], symbol, td_str)
+                                inserted += 1
                         continue
 
                     if td_str in bronze_rows:
