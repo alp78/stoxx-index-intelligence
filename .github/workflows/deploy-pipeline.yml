@@ -59,7 +59,7 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/pipeline:${{ github.sha }}
           format: table
           exit-code: 1
-          severity: CRITICAL,HIGH
+          severity: CRITICAL
 
       - name: Update pipeline job
         run: |

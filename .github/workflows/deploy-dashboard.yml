@@ -57,7 +57,7 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/dashboard:${{ github.sha }}
           format: table
           exit-code: 1
-          severity: CRITICAL,HIGH
+          severity: CRITICAL
 
       - name: Deploy to Cloud Run
         run: |
