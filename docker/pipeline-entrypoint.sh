@@ -14,4 +14,9 @@ if [ "$(id -u)" = "0" ] && id appuser &>/dev/null; then
     exec su -s /bin/bash appuser -c "exec $*"
 fi
 
+# If no command given (or args start with --), prepend the default CMD
+if [ $# -eq 0 ] || [ "${1#-}" != "$1" ]; then
+    set -- ddtrace-run python utils/run_pipeline.py "$@"
+fi
+
 exec "$@"
