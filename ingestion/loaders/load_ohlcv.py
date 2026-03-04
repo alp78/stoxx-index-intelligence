@@ -13,6 +13,20 @@ from utils.logger import get_logger, log_info, log_error, StepTimer
 logger = get_logger(__name__)
 
 
+def _float(val):
+    """Convert to float, treating empty strings and None as None."""
+    if val is None or val == "":
+        return None
+    return float(val)
+
+
+def _int(val):
+    """Convert to int, treating empty strings and None as None."""
+    if val is None or val == "":
+        return None
+    return int(val)
+
+
 def load(json_file, table):
     log_info(logger, "Loading OHLCV prices from JSON into bronze (merge — insert missing rows only)",
              step="load", table=table)
@@ -46,20 +60,17 @@ def load(json_file, table):
                     continue
 
                 key = (symbol, date)
+                vals = (
+                    _float(rec.get("open")), _float(rec.get("high")),
+                    _float(rec.get("low")), _float(rec.get("close")),
+                    _float(rec.get("adj_close")), _int(rec.get("volume")),
+                    _float(rec.get("dividends")), _float(rec.get("stock_splits"))
+                )
+
                 if key not in existing:
-                    inserts.append((
-                        symbol, date,
-                        rec.get("open"), rec.get("high"), rec.get("low"), rec.get("close"),
-                        rec.get("adj_close"), rec.get("volume"),
-                        rec.get("dividends"), rec.get("stock_splits")
-                    ))
-                elif existing[key] == 0 and (rec.get("volume") or 0) > 0:
-                    updates.append((
-                        rec.get("open"), rec.get("high"), rec.get("low"), rec.get("close"),
-                        rec.get("adj_close"), rec.get("volume"),
-                        rec.get("dividends"), rec.get("stock_splits"),
-                        symbol, date
-                    ))
+                    inserts.append((symbol, date) + vals)
+                elif existing[key] == 0 and (_int(rec.get("volume")) or 0) > 0:
+                    updates.append(vals + (symbol, date))
 
             cursor.fast_executemany = True
             if inserts:
