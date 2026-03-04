@@ -86,11 +86,29 @@ Three DAGs handle the workload:
 
 | DAG | Schedule | Scope |
 |-----|----------|-------|
-| `stoxx_daily` | 09:00, 17:00, 22:00 UTC (Mon-Fri) | Full 16-step pipeline |
+| `stoxx_daily` | 09:00, 17:00, 22:00 UTC (Mon-Fri) | Full 16-step pipeline (7 task groups) |
 | `stoxx_tickers` | Hourly (Mon-Fri) | Active ticker discovery |
 | `stoxx_pulse` | Every 5 minutes (Mon-Fri) | Real-time pulse snapshots |
 
 All DAGs use `CloudRunExecuteJobOperator` to trigger the pipeline as a Cloud Run job. Airflow itself does not run any data processing; it only schedules and monitors. This decouples scheduling from execution and keeps the VM lightweight.
+
+### Daily pipeline DAG
+
+![Daily DAG Graph](docs/images/daily_dag.png)
+
+The `stoxx_daily` DAG decomposes the 16-step pipeline into 7 task groups, each spawning its own Cloud Run job execution. Independent groups run in parallel while downstream tasks wait for their dependencies:
+
+| Task | Steps | Depends on |
+|------|-------|------------|
+| `ohlcv` | 1, 2, 3 | — |
+| `signals_daily` | 4, 5, 8 | — |
+| `signals_quarterly` | 6, 7, 9 | — |
+| `pulse_tickers` | 10, 11 | — |
+| `pulse` | 12, 13 | `pulse_tickers` |
+| `gold_scores` | 14, 15 | `ohlcv`, `signals_daily`, `signals_quarterly` |
+| `gold_performance` | 16 | `gold_scores` |
+
+This granularity provides per-group visibility in the Airflow UI, allows individual task retries on failure, and reduces end-to-end runtime through parallel execution.
 
 > **Airflow vs Cloud Scheduler + Pub/Sub?** Airflow provides a UI for monitoring DAG runs, task retries and execution history. For a multi-step pipeline with dependencies between fetchers, loaders and transforms, having visibility into which step failed and why is valuable. Cloud Scheduler would work for simple cron triggers but would require custom tooling for the orchestration layer that Airflow provides out of the box.
 
