@@ -86,7 +86,7 @@ Three DAGs handle the workload:
 
 | DAG | Schedule | Scope |
 |-----|----------|-------|
-| `stoxx_daily` | 09:00, 17:00, 22:00 UTC (Mon-Fri) | Full 16-step pipeline (7 task groups) |
+| `stoxx_daily` | 09:00, 17:00, 22:00 UTC (Mon-Fri) | Full pipeline: ingest + score (5 task groups) |
 | `stoxx_tickers` | Hourly (Mon-Fri) | Active ticker discovery |
 | `stoxx_pulse` | Every 5 minutes (Mon-Fri) | Real-time pulse snapshots |
 
@@ -96,15 +96,13 @@ All DAGs use `CloudRunExecuteJobOperator` to trigger the pipeline as a Cloud Run
 
 ![Daily DAG Graph](docs/images/daily_dag.png)
 
-The `stoxx_daily` DAG decomposes the 16-step pipeline into 7 task groups, each spawning its own Cloud Run job execution. Independent groups run in parallel while downstream tasks wait for their dependencies:
+The `stoxx_daily` DAG decomposes the pipeline into 5 task groups, each spawning its own Cloud Run job execution. Independent groups run in parallel while downstream tasks wait for their dependencies. Pulse steps (10–13) are excluded here as they are handled by dedicated DAGs (`stoxx_tickers` and `stoxx_pulse`).
 
 | Task | Steps | Depends on |
 |------|-------|------------|
 | `ohlcv` | 1, 2, 3 | — |
 | `signals_daily` | 4, 5, 8 | — |
 | `signals_quarterly` | 6, 7, 9 | — |
-| `pulse_tickers` | 10, 11 | — |
-| `pulse` | 12, 13 | `pulse_tickers` |
 | `gold_scores` | 14, 15 | `ohlcv`, `signals_daily`, `signals_quarterly` |
 | `gold_performance` | 16 | `gold_scores` |
 
