@@ -108,8 +108,6 @@ The `stoxx_daily` DAG decomposes the pipeline into 5 task groups, each spawning 
 
 This granularity provides per-group visibility in the Airflow UI, allows individual task retries on failure, and reduces end-to-end runtime through parallel execution.
 
-> **Airflow vs Cloud Scheduler + Pub/Sub?** Airflow provides a UI for monitoring DAG runs, task retries and execution history. For a multi-step pipeline with dependencies between fetchers, loaders and transforms, having visibility into which step failed and why is valuable. Cloud Scheduler would work for simple cron triggers but would require custom tooling for the orchestration layer that Airflow provides out of the box.
-
 **[Airflow Guide](docs/guides/airflow.md)**
 
 ---
@@ -135,8 +133,6 @@ Observability is handled by Datadog with three pillars:
 
 The entire Datadog integration is opt-in. Setting `dd_api_key = ""` in Terraform disables all observability resources in a single apply.
 
-> **Datadog vs Cloud Monitoring + Cloud Logging** GCP's native tools are capable, but Datadog unifies metrics, logs and traces in a single pane with built-in correlation. The APM trace waterfall showing each pipeline step, the SQL queries it ran, and the logs it emitted, all linked together, is genuinely useful for debugging data pipeline issues. The cost (~$50-80/month after trial) is reasonable for the visibility it provides.
-
 **[Datadog Guide](docs/guides/datadog.md)**
 
 ---
@@ -156,8 +152,6 @@ Cloud Run performs rolling updates: new instances are spun up before old ones ar
 ![GitHub Actions](docs/images/github_actions.png)
 
 Infrastructure is managed separately through Terraform. The `infra/` directory contains ~25 resources covering networking, compute, database, IAM, and secrets. Infrastructure changes are applied manually (`terraform apply`), not through CI, to maintain explicit control over production resources.
-
-> **GitHub Actions vs Cloud Build** GitHub Actions is where the code already lives, and it handles the build-push-deploy cycle well. Cloud Build could replace it entirely, but the GitHub Actions marketplace and workflow syntax are more accessible for a small team. Terraform is deliberately kept out of CI to avoid accidental infrastructure changes on every push.
 
 **[Terraform Guide](docs/guides/terraform.md)**
 
