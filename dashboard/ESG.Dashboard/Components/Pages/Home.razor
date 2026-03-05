@@ -606,10 +606,13 @@ else
            && localNow.TimeOfDay >= ex.Open && localNow.TimeOfDay < ex.Close;
 
     // ── LightweightCharts (synthetic portfolio, rolling 30d, volatility) ──
+    // Each chart uses a single series — on index switch, SetData replaces the data in-place.
+    // TimeScale refs are cached at init to avoid extra JS interop round-trips on every update.
     private ChartShell? _chartShell;
     private ChartComponent? _chartRef => _chartShell?.Chart;
     private ElementReference _chartContainer;
-    private Dictionary<string, ISeriesApi<long>?> _seriesRefs = new();
+    private ISeriesApi<long>? _chartSeries;
+    private ITimeScaleApi<long>? _chartTimeScale;
     private bool _chartReady;
     private string _selectedPeriod = "3Y";
     private IJSObjectReference? _jsModule;
@@ -619,14 +622,16 @@ else
     private ChartShell? _rollShell;
     private ChartComponent? _rollRef => _rollShell?.Chart;
     private ElementReference _rollContainer;
-    private Dictionary<string, ISeriesApi<long>?> _rollSeriesRefs = new();
+    private ISeriesApi<long>? _rollSeries;
+    private ITimeScaleApi<long>? _rollTimeScale;
     private bool _rollReady;
 
     // Volatility chart
     private ChartShell? _volShell;
     private ChartComponent? _volRef => _volShell?.Chart;
     private ElementReference _volContainer;
-    private Dictionary<string, ISeriesApi<long>?> _volSeriesRefs = new();
+    private ISeriesApi<long>? _volSeries;
+    private ITimeScaleApi<long>? _volTimeScale;
     private bool _volReady;
 
     // Tooltip state
@@ -762,13 +767,6 @@ else
 
         _indexKeys = keys.Count != 0 ? keys.ToArray() : _snapshots.Select(s => s.Index).OrderBy(k => k).ToArray();
 
-        foreach (var key in _indexKeys)
-        {
-            _seriesRefs[key] = null;
-            _rollSeriesRefs[key] = null;
-            _volSeriesRefs[key] = null;
-        }
-
         await LoadMomentumCloses();
         _loading = false;
 
@@ -858,7 +856,8 @@ else
     {
         await InitChartOptions(_chartRef!);
         _chartRef!.CrosshairMoved += OnMainCrosshair;
-        await AddLineSeries(_chartRef!, _seriesRefs, "#FFFFFF", 1);
+        _chartSeries = await AddLineSeries(_chartRef!);
+        _chartTimeScale = await _chartRef!.TimeScale();
         _chartReady = true;
     }
 
@@ -866,7 +865,8 @@ else
     {
         await InitChartOptions(_rollRef!);
         _rollRef!.CrosshairMoved += OnRollCrosshair;
-        await AddLineSeries(_rollRef!, _rollSeriesRefs, "#FFFFFF", 1);
+        _rollSeries = await AddLineSeries(_rollRef!);
+        _rollTimeScale = await _rollRef!.TimeScale();
         _rollReady = true;
     }
 
@@ -874,23 +874,21 @@ else
     {
         await InitChartOptions(_volRef!);
         _volRef!.CrosshairMoved += OnVolCrosshair;
-        await AddLineSeries(_volRef!, _volSeriesRefs, "#FFFFFF", 1);
+        _volSeries = await AddLineSeries(_volRef!);
+        _volTimeScale = await _volRef!.TimeScale();
         _volReady = true;
     }
 
-    // Pre-creates a line series for every index so switching only needs SetData, not re-init.
-    private async Task AddLineSeries(ChartComponent chart, Dictionary<string, ISeriesApi<long>?> refs, string color, int width)
+    private async Task<ISeriesApi<long>> AddLineSeries(ChartComponent chart)
     {
-        var opts = new LineStyleOptions
+        return await chart.AddSeries<LineStyleOptions>(SeriesType.Line, new LineStyleOptions
         {
-            Color = Clr(color),
-            LineWidth = width,
+            Color = Clr("#FFFFFF"),
+            LineWidth = 1,
             CrosshairMarkerVisible = false,
             LastValueVisible = false,
             PriceLineVisible = false
-        };
-        foreach (var key in _indexKeys)
-            refs[key] = await chart.AddSeries<LineStyleOptions>(SeriesType.Line, opts);
+        });
     }
 
     private async Task InitMomentumChart()
@@ -1186,76 +1184,52 @@ else
     // JS interop calls are sequential to avoid SignalR circuit deadlock.
     private async Task UpdateChartData()
     {
-        if (_chartRef is null) return;
+        if (_chartSeries is null || _chartTimeScale is null) return;
         _lastHoverTime = null;
         _tsLookup.Clear();
 
         var cutoff = GetPeriodCutoff();
+        var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
+        var filtered = cutoff.HasValue
+            ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
+            : allData;
 
-        // Phase 1: prepare data for selected index only, clear others
-        var prepared = new Dictionary<string, LineData<long>[]>();
-        foreach (var key in _indexKeys)
+        LineData<long>[] data;
+        if (filtered.Count == 0)
         {
-            if (!_seriesRefs.ContainsKey(key) || _seriesRefs[key] is null) continue;
-
-            if (key != _selectedSignalIndex)
-            {
-                prepared[key] = Array.Empty<LineData<long>>();
-                continue;
-            }
-
-            var allData = _perfByIndex.GetValueOrDefault(key) ?? [];
-            var filtered = cutoff.HasValue
-                ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
-                : allData;
-            if (filtered.Count == 0) { prepared[key] = Array.Empty<LineData<long>>(); continue; }
-
+            data = [];
+        }
+        else
+        {
             var baseVal = filtered[0].CumulativeFactor ?? 1;
-
-            var data = filtered.Select(p => new LineData<long>
+            data = filtered.Select(p => new LineData<long>
             {
                 Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
                 Value = ((p.CumulativeFactor ?? 1) / baseVal - 1) * 100
             }).ToArray();
-            prepared[key] = data;
 
             foreach (var d in data)
             {
                 if (!_tsLookup.ContainsKey(d.Time))
                     _tsLookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
-                _tsLookup[d.Time].Values[key] = d.Value;
+                _tsLookup[d.Time].Values[_selectedSignalIndex] = d.Value;
             }
         }
 
-        // Phase 2: push all series data + set visible range in one batch
-        long minTime = long.MaxValue, maxTime = long.MinValue;
-        foreach (var arr in prepared.Values)
-        {
-            if (arr.Length > 0)
-            {
-                if (arr[0].Time < minTime) minTime = arr[0].Time;
-                if (arr[^1].Time > maxTime) maxTime = arr[^1].Time;
-            }
-        }
-
-        // Sequential JS interop to avoid flooding the SignalR channel
-        foreach (var kv in prepared.Where(kv => _seriesRefs[kv.Key] is not null))
-            await _seriesRefs[kv.Key]!.SetData(kv.Value);
-
-        var timeScale = await _chartRef.TimeScale();
-        if (minTime < long.MaxValue)
-            await timeScale.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
+        // Single SetData + cached TimeScale = 3 JS interop calls total
+        await _chartSeries.SetData(data);
+        if (data.Length > 0)
+            await _chartTimeScale.SetVisibleRange(new TimeRange { From = data[0].Time, To = data[^1].Time });
         else
-            await timeScale.FitContent();
-
+            await _chartTimeScale.FitContent();
         await SendTooltipData(_chartContainer, _tsLookup, true);
     }
 
     // ── Shared helper for rolling return / volatility charts ──
 
     private async Task UpdateSimpleSeries(
-        ChartComponent chart,
-        Dictionary<string, ISeriesApi<long>?> seriesRefs,
+        ISeriesApi<long> series,
+        ITimeScaleApi<long> timeScale,
         Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> lookup,
         ElementReference container,
         Func<IndexPerformance, double?> valueSelector,
@@ -1264,71 +1238,40 @@ else
         var cutoff = GetPeriodCutoff();
         lookup.Clear();
 
-        // Phase 1: prepare data for selected index only, clear others
-        var prepared = new Dictionary<string, LineData<long>[]>();
-        foreach (var key in _indexKeys)
+        var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
+        var filtered = cutoff.HasValue
+            ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
+            : allData.ToList();
+
+        var data = filtered
+            .Where(p => valueSelector(p).HasValue)
+            .Select(p => new LineData<long>
+            {
+                Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
+                Value = (valueSelector(p) ?? 0) * 100
+            }).ToArray();
+
+        foreach (var d in data)
         {
-            var series = seriesRefs.GetValueOrDefault(key);
-            if (series is null) continue;
-
-            if (key != _selectedSignalIndex)
-            {
-                prepared[key] = Array.Empty<LineData<long>>();
-                continue;
-            }
-
-            var allData = _perfByIndex.GetValueOrDefault(key) ?? [];
-            var filtered = cutoff.HasValue
-                ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
-                : allData.ToList();
-
-            var points = filtered
-                .Where(p => valueSelector(p).HasValue)
-                .Select(p => new LineData<long>
-                {
-                    Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
-                    Value = (valueSelector(p) ?? 0) * 100
-                }).ToArray();
-            prepared[key] = points;
-
-            foreach (var d in points)
-            {
-                if (!lookup.ContainsKey(d.Time))
-                    lookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
-                lookup[d.Time].Values[key] = d.Value;
-            }
+            if (!lookup.ContainsKey(d.Time))
+                lookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
+            lookup[d.Time].Values[_selectedSignalIndex] = d.Value;
         }
 
-        // Phase 2: push all series data + set visible range in one batch
-        long minTime = long.MaxValue, maxTime = long.MinValue;
-        foreach (var arr in prepared.Values)
-        {
-            if (arr.Length > 0)
-            {
-                if (arr[0].Time < minTime) minTime = arr[0].Time;
-                if (arr[^1].Time > maxTime) maxTime = arr[^1].Time;
-            }
-        }
-
-        // Sequential JS interop to avoid flooding the SignalR channel
-        foreach (var kv in prepared.Where(kv => seriesRefs[kv.Key] is not null))
-            await seriesRefs[kv.Key]!.SetData(kv.Value);
-
-        var ts = await chart.TimeScale();
-        if (minTime < long.MaxValue)
-            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
+        await series.SetData(data);
+        if (data.Length > 0)
+            await timeScale.SetVisibleRange(new TimeRange { From = data[0].Time, To = data[^1].Time });
         else
-            await ts.FitContent();
-
+            await timeScale.FitContent();
         await SendTooltipData(container, lookup, colorBySign);
     }
 
     private Task UpdateRollingData() =>
-        UpdateSimpleSeries(_rollRef!, _rollSeriesRefs, _rollLookup, _rollContainer,
+        UpdateSimpleSeries(_rollSeries!, _rollTimeScale!, _rollLookup, _rollContainer,
             p => p.Rolling30dReturn, true);
 
     private Task UpdateVolatilityData() =>
-        UpdateSimpleSeries(_volRef!, _volSeriesRefs, _volLookup, _volContainer,
+        UpdateSimpleSeries(_volSeries!, _volTimeScale!, _volLookup, _volContainer,
             p => p.Rolling30dVolatility, false);
 
     // ── Period & tooltip helpers ──
