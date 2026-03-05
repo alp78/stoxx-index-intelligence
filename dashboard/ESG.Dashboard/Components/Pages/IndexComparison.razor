@@ -129,7 +129,9 @@ else
         await Task.WhenAll(perfTask, latestTask);
 
         _allPerf = (await perfTask).ToList();
-        // Trim trailing rows with no actual trading (daily_return = 0)
+        // Trim trailing zero-return rows: the pipeline may insert placeholder rows for dates
+        // where no trading occurred yet (e.g., today before market open). These would flatten
+        // the chart tail, so we cut everything after the last row with real movement.
         var maxValid = _allPerf
             .Where(p => p.DailyReturn.HasValue && Math.Abs(p.DailyReturn.Value) > 0.0001)
             .Max(p => (DateTime?)p.PerfDate);
@@ -146,6 +148,8 @@ else
         BuildCharts();
     }
 
+    // Rebuilds all three chart datasets (cumulative, rolling return, volatility)
+    // for the currently selected time range, delegating to BuildLineSeries.
     private void BuildCharts()
     {
         var data = _allPerf.ToList();
@@ -170,6 +174,10 @@ else
             out _volSeries, out _volLabels);
     }
 
+    // Builds aligned line series for MudChart. Steps:
+    // 1. Group by index, sort by date  2. Union all dates across indices
+    // 3. Forward-fill gaps (indices have different trading calendars)
+    // 4. Optionally rebase to 100 at first value  5. Downsample to maxPoints
     private static void BuildLineSeries(
         List<IndexPerformance> data, int maxPoints,
         Func<IndexPerformance, double> valueSelector,
@@ -193,7 +201,7 @@ else
         var allDates = byIndex.Values.SelectMany(sl => sl.Keys).Distinct().OrderBy(d => d).ToList();
         var step = Math.Max(1, allDates.Count / maxPoints);
 
-        // Forward-fill per index across all dates
+        // Forward-fill: carry last known value for dates where an index has no data point
         var filled = new Dictionary<string, double[]>();
         foreach (var (key, sl) in byIndex)
         {
@@ -221,7 +229,7 @@ else
             }
         }
 
-        // Sample at step intervals
+        // Downsample to ~maxPoints evenly spaced entries to keep MudChart responsive
         var sampledIdx = Enumerable.Range(0, allDates.Count).Where(i => i % step == 0).ToList();
         var sampledDates = sampledIdx.Select(i => allDates[i]).ToList();
 

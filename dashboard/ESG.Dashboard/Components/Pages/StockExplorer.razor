@@ -21,6 +21,9 @@
     }
 </style>
 
+@* ── Layout: detail panel (8 cols) + nav panel (4 cols).
+   On mobile, detail renders first (DOM order); on desktop, CSS order: -1
+   pushes the nav panel to the left so the wider detail sits on the right. ─ *@
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -41,7 +44,7 @@ else
             }
             else
             {
-                <!-- Header with price info -->
+                <!-- Stock identity + latest OHLCV summary bar -->
                 <MudPaper Class="pa-3 mb-3" Elevation="2" Style="min-width: 0; overflow: hidden;">
                     <div class="d-flex align-center flex-wrap" style="gap: 12px;">
                         <!-- Stock identity -->
@@ -94,9 +97,9 @@ else
                     </div>
                 </MudPaper>
 
-                <!-- Price Chart -->
+                <!-- OHLCV price chart (candlestick + area fill + MA lines + volume histogram) -->
                 <MudPaper Class="pa-4 mb-3" Elevation="2" Style="overflow: hidden; min-width: 0;">
-                    <!-- Period buttons + legend -->
+                    <!-- Chart legend + period range selector (1M / 3M / 6M / 1Y / 3Y / All) -->
                     <div class="d-flex align-center flex-wrap mb-2" style="gap: 6px; padding-right: 72px;">
                         <span style="font-size: 11px; opacity: 0.5; margin-right: 4px;">
                             <span style="color: #26A69A;">&FilledSmallSquare;</span><span style="color: #EF5350;">&FilledSmallSquare;</span> OHLC
@@ -114,7 +117,9 @@ else
                         }
                     </div>
 
-                    <!-- Chart with hover overlay -->
+                    @* Chart container: hidden (opacity 0) until series are initialized to
+                       prevent the empty chart flash. The hover tooltip is absolutely positioned
+                       inside this div — its x/y coordinates come from MeasureChartContainerAsync. *@
                     <div @ref="_chartContainer" style="position: relative; width: 100%; height: clamp(280px, 45vw, 520px); overflow: hidden; background: #1E1E2D; opacity: @(_chartReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
                         <ChartComponent @ref="_chart" CssStyle="width: 100%; height: 100%;" />
                         @if (_hoverCandle is not null)
@@ -157,7 +162,7 @@ else
                     </div>
                 </MudPaper>
 
-                <!-- Daily + Quarterly Analytics -->
+                <!-- Daily + Quarterly Analytics: score tables, z-scores, health flags, governance -->
                 <MudGrid Spacing="3">
                     @if (_detailDaily is not null)
                     {
@@ -424,7 +429,9 @@ else
             }
         </MudItem>
 
-        <!-- Nav panel (order: -1 on desktop pushes it left) -->
+        <!-- Nav panel: index selector, search filter, and market-cap-ranked stock table.
+             CSS order: -1 on desktop pushes it left of the detail panel. Sticky so it
+             stays visible while scrolling the detail panel on long pages. -->
         <MudItem xs="12" md="4" Class="stock-nav-panel">
             <MudPaper Elevation="2" Class="pa-0" Style="position: sticky; top: 80px;">
                 <div class="pa-3">
@@ -493,9 +500,9 @@ else
     private List<StockRow> _stockRows = [];
     private ElementReference _navScrollContainer;
     private IJSObjectReference? _jsModule;
-    private bool _scrollPending;
+    private bool _scrollPending; // set true when we need OnAfterRenderAsync to scroll the nav table to the selected row
     private DateTime? _lastRefresh;
-    private CancellationTokenSource? _refreshCts;
+    private CancellationTokenSource? _refreshCts; // cancelled in DisposeAsync to stop the auto-refresh PeriodicTimer
 
     // Nav highlight (updates on click), detail panel (updates after data loads)
     private StockInfo? _navSelected;
@@ -505,10 +512,11 @@ else
     private List<OhlcvPrice> _allPrices = [];
     private int _selectedMonths = 12;
 
-    // TradingView Lightweight Charts
+    // TradingView Lightweight Charts — series objects are created once in
+    // OnAfterRenderAsync and reused across stock changes (SetData replaces points).
     private ChartComponent? _chart;
     private bool _chartReady;
-    private bool _chartUpdatePending;
+    private bool _chartUpdatePending; // true when LoadStockDetail runs before the chart component is initialized
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _areaSeries;
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _candleSeries;
     private LightweightCharts.Blazor.Series.ISeriesApi<long>? _volumeSeries;
@@ -518,9 +526,12 @@ else
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _currentPriceLine;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _highPriceLine;
     private LightweightCharts.Blazor.Series.IPriceLine<long>? _lowPriceLine;
-    private int _chartUpdateId; // concurrency guard for overlapping UpdateChart calls
-    private int _priceLineUpdateId; // concurrency guard for visible range changes
-    private CancellationTokenSource? _priceLineCts; // debounce for pan/zoom
+    // Concurrency guards: rapid stock switches or pan/zoom can cause overlapping async
+    // calls. Each guard is an incrementing ID — if the ID has moved on by the time an
+    // await resumes, the continuation abandons itself so stale results aren't applied.
+    private int _chartUpdateId;
+    private int _priceLineUpdateId;
+    private CancellationTokenSource? _priceLineCts; // debounce: OnVisibleRangeChanged cancels/restarts a 120ms delay
 
     // Price header
     private OhlcvPrice? _latestCandle;
@@ -565,6 +576,7 @@ else
             ? "background: rgba(66,165,245,0.15); cursor: pointer;"
             : "cursor: pointer;";
 
+    // Resolve the clicked nav row back to a StockRow and load its detail panel.
     private async Task OnNavRowClick(TableRowClickEventArgs<ScoreDaily> args)
     {
         var stock = _stockRows.FirstOrDefault(r =>
@@ -582,6 +594,9 @@ else
             .ToList();
     }
 
+    // Loads all stocks, scores, and index keys in parallel. If the URL contains
+    // deep-link parameters (/stocks/{IndexKey}/{Symbol}), selects that stock;
+    // otherwise selects the largest stock by market cap in the active index.
     protected override async Task OnInitializedAsync()
     {
         _loading = true;
@@ -653,6 +668,10 @@ else
         _ = AutoRefreshLoop(_refreshCts.Token);
     }
 
+    // Refreshes daily + quarterly scores every 60 seconds to keep the nav table
+    // and detail panel current during market hours. The PeriodicTimer is cancelled
+    // via _refreshCts in DisposeAsync — WaitForNextTickAsync throws
+    // OperationCanceledException which breaks the loop cleanly.
     private async Task AutoRefreshLoop(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
@@ -695,6 +714,11 @@ else
         }
     }
 
+    // First render: import the co-located JS module and scroll to any deep-linked row.
+    // Also initializes the chart on first render: creates all five series objects once
+    // (they are reused across stock changes — only their data is replaced via SetData).
+    // If _chartUpdatePending is true, LoadStockDetail ran before the chart was ready,
+    // so we replay the pending UpdateChart call now.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -824,6 +848,9 @@ else
         }
     }
 
+    // Crosshair handler: looks up the hovered timestamp in _tsIndex to populate
+    // the OHLCV tooltip overlay. The _disposed guard prevents JS interop calls
+    // after the Blazor circuit has been torn down on navigation.
     private void OnCrosshairMoved(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
     {
         if (_disposed) return;
@@ -857,6 +884,9 @@ else
         }
     }
 
+    // Handles deep-link URL navigation (/stocks/{IndexKey}/{Symbol}) when the user
+    // clicks a link that changes route parameters without a full page reload.
+    // Skips if the same stock is already selected (early-exit guard).
     protected override async Task OnParametersSetAsync()
     {
         if (_stockRows.Count == 0) return;
@@ -878,6 +908,10 @@ else
 
     private async Task SelectStock(StockInfo stock) => await LoadStockDetail(stock);
 
+    // Fetches scores + full OHLCV history for the selected stock, then triggers
+    // chart rendering. If the chart component isn't initialized yet (e.g., on
+    // initial deep-link load), sets _chartUpdatePending so OnAfterRenderAsync
+    // will replay the update once the chart is ready.
     private async Task LoadStockDetail(StockInfo stock)
     {
         _navSelected = stock;
@@ -893,7 +927,6 @@ else
         _allPrices = (await pricesTask).ToList();
         _currencySymbol = CurrencySymbol(stock.Index);
 
-        // Latest candle + change %
         _latestCandle = _allPrices.Count > 0 ? _allPrices[^1] : null;
         if (_allPrices.Count >= 2)
         {
@@ -920,6 +953,8 @@ else
             await UpdateChart();
     }
 
+    // Measures the chart container's pixel dimensions via JS interop so the hover
+    // tooltip can flip sides when it would overflow the right or bottom edge.
     private async Task MeasureChartContainerAsync()
     {
         try
@@ -934,13 +969,22 @@ else
 
     private record BoundingRect(double Width, double Height);
 
+    // Pushes OHLCV + MA + volume data into the five chart series and sets the
+    // visible time range for the selected period. The _chartUpdateId concurrency
+    // guard prevents stale price lines: if a second call arrives while an earlier
+    // one is still awaiting JS interop, the earlier call detects its ID is stale
+    // and abandons itself.
+    //
+    // IMPORTANT: the five SetData calls below MUST be sequential (not Task.WhenAll).
+    // Parallel JS interop calls deadlock the Blazor Server SignalR circuit because
+    // the single-threaded synchronization context cannot process interleaved responses.
     private async Task UpdateChart()
     {
         if (_chart is null || !_chartReady) return;
-        var updateId = ++_chartUpdateId; // guard: if superseded, stop before creating price lines
+        var updateId = ++_chartUpdateId;
         await MeasureChartContainerAsync();
 
-        // Build lookup arrays from full data
+        // Build lookup arrays from full data (used by crosshair hover)
         _allMa30 = _allPrices.Select(p => p.Sma30).ToArray();
         _allMa90 = _allPrices.Select(p => p.Sma90).ToArray();
         _tsIndex.Clear();
@@ -995,7 +1039,8 @@ else
             .Select(p => new LineData<long> { Time = ToUnix(p.Date), Value = p.Sma90!.Value })
             .ToArray();
 
-        // Volume data — grey with intensity based on full range max
+        // Volume histogram: alpha scales linearly with the ratio to max volume
+        // (50 = baseline visibility, up to 230 for the highest-volume day).
         var maxVol = _allPrices.Max(p => p.Volume ?? 0);
         if (maxVol == 0) maxVol = 1;
         var volumeData = _allPrices.Select(p =>
@@ -1010,7 +1055,7 @@ else
             };
         }).ToArray();
 
-        // Sequential JS interop to avoid flooding the SignalR channel
+        // Sequential JS interop — see method comment above re: SignalR deadlock.
         await _areaSeries!.SetData(areaData);
         await _candleSeries!.SetData(candleData);
         await _ma30Series!.SetData(ma30Data);
@@ -1037,6 +1082,10 @@ else
         _lastHoverTime = null;
     }
 
+    // Fires rapidly during pan/zoom. Uses a cancel-and-restart debounce pattern:
+    // each call cancels the previous CTS and starts a 120ms delay. Only the last
+    // event in a burst actually reaches UpdatePriceLines, avoiding JS interop floods.
+    // The _disposed guard prevents calls after the Blazor circuit is torn down.
     private void OnVisibleRangeChanged(object? sender, LightweightCharts.Blazor.Models.TimeRange? e)
     {
         if (_disposed || e is null || _candleSeries is null) return;
@@ -1057,11 +1106,17 @@ else
         });
     }
 
+    // Draws three horizontal price lines on the visible range:
+    //   - Current close: white dashed
+    //   - Period high:   green dotted (hidden if within 0.1% of current — avoids overlap)
+    //   - Period low:    red dotted   (same proximity threshold)
+    // Uses _priceLineUpdateId as a concurrency guard — if a newer call has started by the
+    // time an await resumes, the stale continuation exits early to avoid ghost lines.
     private async Task UpdatePriceLines(long fromTs, long toTs)
     {
         var updateId = ++_priceLineUpdateId;
 
-        // Remove old price lines
+        // Remove old price lines before creating new ones
         if (_currentPriceLine is not null)
         {
             try { await _candleSeries!.RemovePriceLine(_currentPriceLine); } catch { }
@@ -1137,6 +1192,8 @@ else
         }
     }
 
+    // Switching the index filter: updates shared state, rebuilds the nav list,
+    // and auto-selects the largest stock by market cap in the new index.
     private async Task OnIndexFilterChanged(string? value)
     {
         _filterIndex = value;
@@ -1240,8 +1297,12 @@ else
     private static System.Drawing.Color Clr(string hex) => System.Drawing.ColorTranslator.FromHtml(hex);
     private static System.Drawing.Color Clr(int r, int g, int b, int a) => System.Drawing.Color.FromArgb(a, r, g, b);
 
-    private bool _disposed;
+    private bool _disposed; // guards crosshair + visible-range handlers after circuit teardown
 
+    // Cancels the auto-refresh timer, disposes the debounce CTS, unsubscribes chart
+    // event handlers, and releases the JS module. The _disposed flag is set first so
+    // any in-flight event handlers (OnCrosshairMoved, OnVisibleRangeChanged) bail out
+    // immediately instead of calling into a disconnected circuit.
     public async ValueTask DisposeAsync()
     {
         _disposed = true;

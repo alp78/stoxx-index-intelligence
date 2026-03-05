@@ -1,3 +1,6 @@
+@* Render-once wrapper for LightweightCharts. Renders the chart component exactly
+   once, then suppresses all subsequent Blazor re-renders so the JS-managed chart
+   state (series, crosshair, zoom) is never destroyed by a diffing pass. *@
 @using LightweightCharts.Blazor.Charts
 
 <ChartComponent @ref="Chart" CssStyle="width: 100%; height: 100%;" />
@@ -6,6 +9,8 @@
     public ChartComponent? Chart { get; private set; }
     private bool _rendered;
 
+    // After first render, always return false — re-rendering would tear down the
+    // JS interop chart and lose all client-side state (panning, zoom, series data).
     protected override bool ShouldRender() => !_rendered;
 
     protected override void OnAfterRender(bool firstRender)

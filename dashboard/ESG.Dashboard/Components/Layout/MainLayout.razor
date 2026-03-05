@@ -1,7 +1,9 @@
+@* App shell: top nav bar, MudBlazor theme, and error boundary around routed content. *@
 @inherits LayoutComponentBase
 @inject NavigationManager Nav
 @implements IDisposable
 
+@* MudBlazor infrastructure providers — must appear once at layout level *@
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -13,6 +15,7 @@
             STOXX Index Intelligence
         </MudText>
         <MudSpacer />
+        @* Nav buttons — highlight active page via prefix match on the current path *@
         @foreach (var nav in _navItems)
         {
             var n = nav;
@@ -28,6 +31,8 @@
     </MudAppBar>
 
     <MudMainContent Class="pa-4 mt-12">
+        @* ErrorBoundary catches unhandled exceptions in child pages and shows a recovery link
+           instead of crashing the entire Blazor circuit. *@
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>@Body</ChildContent>
             <ErrorContent>
@@ -52,6 +57,7 @@
     private ErrorBoundary? _errorBoundary;
     private string _currentPath = "/";
 
+    // Subscribe to navigation events so the active nav button updates on SPA transitions.
     protected override void OnInitialized()
     {
         _currentPath = GetPath();
@@ -66,6 +72,7 @@
 
     private string GetPath() => new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
 
+    // Root "/" is exact-match only; other routes use prefix match (e.g., "/stocks/..." highlights STOCKS).
     private bool IsActive(string href)
     {
         if (href == "/") return _currentPath is "" or "/";
@@ -74,8 +81,10 @@
 
     private void Recover() => _errorBoundary?.Recover();
 
+    // Unsubscribe to prevent memory leaks — layout outlives individual pages.
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 
+    // Dark-first theme — PaletteLight is set for completeness but IsDarkMode is always true.
     private readonly MudTheme _theme = new()
     {
         PaletteLight = new PaletteLight

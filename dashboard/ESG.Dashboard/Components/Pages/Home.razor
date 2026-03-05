@@ -28,7 +28,7 @@
 }
 else
 {
-    <!-- Exchange clocks -->
+    <!-- Exchange clocks — live local time for major exchanges, green dot when market is open -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 4px 0;">
         @foreach (var ex in _exchanges)
         {
@@ -49,7 +49,7 @@ else
         }
     </div>
 
-    <!-- Index selector -->
+    <!-- Index selector — switching drives all charts, signals, and composition views via OnSignalIndexChanged -->
     <div class="d-flex align-center mb-3" style="gap: 12px;">
         <MudSelect T="string" Value="_selectedSignalIndex" ValueChanged="OnSignalIndexChanged"
                    Variant="Variant.Outlined" Dense="true" Style="max-width: 300px;" Margin="Margin.Dense">
@@ -60,7 +60,7 @@ else
         </MudSelect>
     </div>
 
-    <!-- Index snapshot strip -->
+    <!-- Index snapshot strip — cap-weighted aggregate metrics (YTD, rolling returns, vol, valuation) -->
     @if (SelectedSnap is not null)
     {
         <div class="mb-2">
@@ -103,10 +103,11 @@ else
         </MudPaper>
     }
 
-    <!-- Charts: 50/50 split — left: 3 LightweightCharts stacked, right: radar + donut -->
+    <!-- Charts: 50/50 split — left: 3 LightweightCharts stacked, right: Chart.js radar + donut.
+         Left charts use LightweightCharts Blazor wrapper; right charts use vanilla Chart.js via JS module. -->
     <MudGrid Spacing="3" Class="mb-4" Style="align-items: stretch;">
         <MudItem xs="12" md="6" Style="display: flex; flex-direction: column;">
-            <!-- Rolling 30d Return -->
+            <!-- Rolling 30d Return — period buttons re-filter pre-loaded data, no DB call needed -->
             <MudPaper Class="pa-3 mb-3" Elevation="2">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
@@ -143,7 +144,7 @@ else
                 </div>
             </MudPaper>
 
-            <!-- Synthetic portfolio return -->
+            <!-- Synthetic portfolio return — cumulative return rebased to 0% at period start -->
             <MudPaper Class="pa-3 mb-3" Elevation="2">
                 <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                     <ChildContent>
@@ -167,7 +168,7 @@ else
                 </div>
             </MudPaper>
 
-            <!-- 30d Annualized Volatility -->
+            <!-- 30d Annualized Volatility — stddev * sqrt(252), color-banded thresholds in tooltip -->
             <MudPaper Class="pa-3" Elevation="2" Style="flex: 1;">
                 <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                     <ChildContent>
@@ -193,7 +194,8 @@ else
             </MudPaper>
         </MudItem>
 
-        <!-- Right column: Radar + Donut -->
+        <!-- Right column: Radar + Donut — rendered via Chart.js, initialized with retry
+             because canvas elements may not be in the DOM on first OnAfterRenderAsync -->
         <MudItem xs="12" md="6" Style="display: flex; flex-direction: column;">
             <div class="chart-split-col">
                 <MudPaper Class="pa-3 mb-3" Elevation="2">
@@ -245,8 +247,9 @@ else
         </MudItem>
     </MudGrid>
 
+    <!-- Signal tables: daily scores (2/3 width) and quarterly scores (1/3 width) -->
     <MudGrid Style="margin-top: 12px;">
-        <!-- Daily Signals (2/3) -->
+        <!-- Daily Signals — refreshed daily from cross-sectional z-scores across index constituents -->
         <MudItem xs="12" lg="8">
             <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 4px;">DAILY SIGNALS</MudText>
             <MudGrid>
@@ -461,7 +464,7 @@ else
             </MudGrid>
         </MudItem>
 
-        <!-- Quarterly Signals (1/3) -->
+        <!-- Quarterly Signals — updated with earnings; quality scores and health flags from balance sheet data -->
         <MudItem xs="12" lg="4">
             <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 4px;">QUARTERLY SIGNALS</MudText>
             <div style="display: flex; flex-direction: column; gap: 16px;">
@@ -584,7 +587,7 @@ else
     private Dictionary<string, List<IndexPerformance>> _perfByIndex = [];
     private string[] _indexKeys = [];
 
-    // ── Exchange clocks ──────────────────────────────────────────────
+    // ── Exchange clocks — timer ticks every 10s to refresh displayed times ──
     private System.Threading.Timer? _clockTimer;
 
     private record ExchangeInfo(string Symbol, string City, TimeZoneInfo Tz, TimeSpan Open, TimeSpan Close);
@@ -640,6 +643,7 @@ else
     private List<ScoreQuarterly> _quarterly = [];
 
     // ── Chart.js (radar factor profile, donut composition) ──────────
+    // Init returns false if the canvas isn't in the DOM yet; _chartInitRetries caps retry attempts.
     private bool _radarReady;
     private bool _donutReady;
     private int _chartInitRetries;
@@ -724,6 +728,7 @@ else
 
     // ── Lifecycle ─────────────────────────────────────────────────────
 
+    // Loads all data in parallel, then picks the remembered index (or first available).
     protected override async Task OnInitializedAsync()
     {
         var snapshotsTask = PerfRepo.GetLatestSnapshotAsync();
@@ -749,6 +754,7 @@ else
             .ToDictionary(g => g.Key, g =>
             {
                 var ordered = g.OrderBy(p => p.PerfDate).ToList();
+                // Trim trailing zero-return rows — stale placeholder data from the pipeline
                 while (ordered.Count > 1 && Math.Abs(ordered[^1].DailyReturn ?? 0) < 0.0001)
                     ordered.RemoveAt(ordered.Count - 1);
                 return ordered;
@@ -766,6 +772,7 @@ else
         await LoadMomentumCloses();
         _loading = false;
 
+        // _disposed guard: timer fires on a threadpool thread and can race with DisposeAsync
         _clockTimer = new System.Threading.Timer(_ =>
         {
             if (!_disposed) InvokeAsync(StateHasChanged);
@@ -778,6 +785,8 @@ else
         return p.GetStart?.Invoke(DateTime.UtcNow);
     }
 
+    // Pre-loads 3 years of close data for top-5 momentum stocks so period switches
+    // (1M/3M/6M/1Y) only re-filter in memory — no additional DB calls needed.
     private async Task LoadMomentumCloses()
     {
         var indexDaily = _daily.Where(d => d.Index == _selectedSignalIndex).ToList();
@@ -786,7 +795,6 @@ else
             .Select(d => d.Symbol).ToArray();
         if (top5.Length == 0) { _momClosesData.Clear(); return; }
 
-        // Pre-load 3Y + buffer so period switches are instant (just re-filter)
         var latestDate = indexDaily.Max(d => d.ScoreDate);
         var from = latestDate.AddYears(-3).AddMonths(-1);
         var closes = (await StockRepo.GetBatchClosesAsync(_selectedSignalIndex, top5, from)).ToList();
@@ -794,6 +802,12 @@ else
             .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Date).ToList());
     }
 
+    // Two-phase chart init pattern:
+    //   Phase 1 — chart shell creation runs in parallel (Task.WhenAll) because each init
+    //             only touches its own DOM element and doesn't conflict.
+    //   Phase 2 — data push runs sequentially (await one by one) because Blazor Server
+    //             funnels all JS interop through a single SignalR pipe; parallel calls
+    //             deadlock the circuit.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -802,7 +816,7 @@ else
                 "./Components/Pages/Home.razor.js");
         }
 
-        // Init is one-time per page load — safe to parallelize
+        // Phase 1: init chart shells in parallel — each shell is independent
         var tasks = new List<Task>();
 
         if (!_chartReady && _chartRef is not null)
@@ -823,11 +837,17 @@ else
             await Task.WhenAll(tasks);
             if (!_radarReady || !_donutReady)
                 _chartInitRetries++;
+
+            // Phase 2: push data sequentially — parallel JS interop deadlocks the SignalR circuit
+            if (_chartReady) await UpdateChartData();
+            if (_rollReady) await UpdateRollingData();
+            if (_volReady) await UpdateVolatilityData();
+            if (_momReady) await UpdateMomData();
             StateHasChanged();
         }
         else if (_jsModule is not null && (!_radarReady || !_donutReady) && _chartInitRetries < 5)
         {
-            // Canvas elements may not be in the DOM yet — trigger another render cycle
+            // Radar/donut canvas may not be in the DOM yet on first render — retry up to 5 times
             _chartInitRetries++;
             await Task.Delay(50);
             StateHasChanged();
@@ -838,20 +858,7 @@ else
     {
         await InitChartOptions(_chartRef!);
         _chartRef!.CrosshairMoved += OnMainCrosshair;
-        foreach (var key in _indexKeys)
-        {
-            _seriesRefs[key] = await _chartRef!.AddSeries<LineStyleOptions>(
-                SeriesType.Line,
-                new LineStyleOptions
-                {
-                    Color = Clr("#FFFFFF"),
-                    LineWidth = 1,
-                    CrosshairMarkerVisible = false,
-                    LastValueVisible = false,
-                    PriceLineVisible = false
-                });
-        }
-        await UpdateChartData();
+        await AddLineSeries(_chartRef!, _seriesRefs, "#FFFFFF", 1);
         _chartReady = true;
     }
 
@@ -859,20 +866,7 @@ else
     {
         await InitChartOptions(_rollRef!);
         _rollRef!.CrosshairMoved += OnRollCrosshair;
-        foreach (var key in _indexKeys)
-        {
-            _rollSeriesRefs[key] = await _rollRef!.AddSeries<LineStyleOptions>(
-                SeriesType.Line,
-                new LineStyleOptions
-                {
-                    Color = Clr("#FFFFFF"),
-                    LineWidth = 1,
-                    CrosshairMarkerVisible = false,
-                    LastValueVisible = false,
-                    PriceLineVisible = false
-                });
-        }
-        await UpdateRollingData();
+        await AddLineSeries(_rollRef!, _rollSeriesRefs, "#FFFFFF", 1);
         _rollReady = true;
     }
 
@@ -880,21 +874,23 @@ else
     {
         await InitChartOptions(_volRef!);
         _volRef!.CrosshairMoved += OnVolCrosshair;
-        foreach (var key in _indexKeys)
-        {
-            _volSeriesRefs[key] = await _volRef!.AddSeries<LineStyleOptions>(
-                SeriesType.Line,
-                new LineStyleOptions
-                {
-                    Color = Clr("#FFFFFF"),
-                    LineWidth = 1,
-                    CrosshairMarkerVisible = false,
-                    LastValueVisible = false,
-                    PriceLineVisible = false
-                });
-        }
-        await UpdateVolatilityData();
+        await AddLineSeries(_volRef!, _volSeriesRefs, "#FFFFFF", 1);
         _volReady = true;
+    }
+
+    // Pre-creates a line series for every index so switching only needs SetData, not re-init.
+    private async Task AddLineSeries(ChartComponent chart, Dictionary<string, ISeriesApi<long>?> refs, string color, int width)
+    {
+        var opts = new LineStyleOptions
+        {
+            Color = Clr(color),
+            LineWidth = width,
+            CrosshairMarkerVisible = false,
+            LastValueVisible = false,
+            PriceLineVisible = false
+        };
+        foreach (var key in _indexKeys)
+            refs[key] = await chart.AddSeries<LineStyleOptions>(SeriesType.Line, opts);
     }
 
     private async Task InitMomentumChart()
@@ -914,7 +910,6 @@ else
                     PriceLineVisible = false
                 });
         }
-        await UpdateMomData();
         _momReady = true;
     }
 
@@ -961,7 +956,7 @@ else
         var top5 = TopMomentum.Take(5).ToList();
         var cutoff = GetMomCutoff();
 
-        // Phase 1: prepare all data arrays — filtered by calendar cutoff
+        // Phase 1: prepare all data arrays — rebased to 0% at cutoff start
         var prepared = new LineData<long>[5][];
         long minTime = long.MaxValue, maxTime = long.MinValue;
 
@@ -1007,7 +1002,7 @@ else
             }
         }
 
-        // Sequential JS interop to avoid flooding the SignalR channel
+        // Sequential JS interop — parallel SetData calls deadlock the Blazor Server SignalR circuit
         for (var i = 0; i < 5; i++)
         {
             if (_momSeriesRefs[i] is not null)
@@ -1035,9 +1030,11 @@ else
 
     // ── Radar + Donut ──
 
+    // Returns [Value, Momentum, Sentiment, Quality, Governance] as 0–100 values for the radar chart.
     private double[] ComputeRadarData()
     {
-        // % of stocks above the global median — genuinely differs per index
+        // breadth = percentage of the index's stocks scoring above the global (all-index) median.
+        // This measures how "tilted" an index is toward a factor vs the full universe.
         static double breadth(IEnumerable<double?> indexScores, IEnumerable<double?> allScores)
         {
             var all = allScores.Where(s => s.HasValue).Select(s => s!.Value).OrderBy(x => x).ToList();
@@ -1085,10 +1082,9 @@ else
         return (labels, names, displayWeights, realWeights, colors, sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors);
     }
 
-    /// <summary>
-    /// Cube-root scaling so tiny slices remain visible while large ones stay dominant.
-    /// Rescales cbrt(w) values to sum to the same total as the original array.
-    /// </summary>
+    // Cube-root scaling for donut slices: without this, small-cap stocks are invisible slivers.
+    // cbrt compresses the range so a 0.1% weight still renders as a visible arc, while large
+    // weights stay dominant. Rescales so the total still sums to the original.
     private static double[] NormalizeForDisplay(double[] weights)
     {
         if (weights.Length == 0) return weights;
@@ -1119,6 +1115,8 @@ else
         ["Real Estate"] = "#5C6BC0", ["Basic Materials"] = "#EC407A",
     };
 
+    // JS init returns false if the canvas element isn't found (not yet in DOM).
+    // The caller in OnAfterRenderAsync will retry on the next render cycle.
     private async Task InitRadarChart()
     {
         var data = ComputeRadarData();
@@ -1184,7 +1182,8 @@ else
     }
 
     // ── Main chart series (rebased cumulative return) ──
-
+    // Clears non-selected indices (empty array) and pushes data for the active one.
+    // JS interop calls are sequential to avoid SignalR circuit deadlock.
     private async Task UpdateChartData()
     {
         if (_chartRef is null) return;
@@ -1351,15 +1350,16 @@ else
         await _jsModule.InvokeVoidAsync("setTooltipData", container, jsLookup, indices, new { colorBySign });
     }
 
+    // Switches the active index: fires DB load for momentum closes in parallel, then updates
+    // each chart sequentially (parallel JS interop deadlocks the SignalR circuit).
     private async Task OnSignalIndexChanged(string newIndex)
     {
         _selectedSignalIndex = newIndex;
         IdxState.SelectedIndex = newIndex;
 
-        // DB call runs in parallel with chart updates but on a separate path
         var momTask = LoadMomentumCloses();
 
-        // Update charts sequentially to avoid flooding the JS interop channel
+        // Sequential: each await must complete before the next JS interop call
         if (_chartReady) await UpdateChartData();
         if (_rollReady) await UpdateRollingData();
         if (_volReady) await UpdateVolatilityData();
@@ -1371,6 +1371,8 @@ else
             await UpdateMomData();
     }
 
+    // Period switch re-filters the pre-loaded 3Y data — no DB call.
+    // Brief opacity transition (_momTransitioning) avoids a jarring visual snap.
     private async Task SetMomPeriod(string period)
     {
         _selectedMomPeriod = period;
@@ -1406,6 +1408,9 @@ else
     private void OnMomCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
         => HandleCrosshair(e, ref _momLastHover, _momContainer);
 
+    // Crosshair events fire from JS on a non-UI thread. Fire-and-forget (_ = InvokeAsync)
+    // is intentional — awaiting would block the event pipeline. _disposed guard prevents
+    // JS calls after the component starts tearing down.
     private void HandleCrosshair(LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e,
         ref long? lastHover, ElementReference container)
     {
@@ -1430,6 +1435,7 @@ else
         _disposed = true;
         if (_clockTimer is not null)
         {
+            // Stop the timer before disposing — prevents callbacks firing during teardown
             _clockTimer.Change(Timeout.Infinite, Timeout.Infinite);
             await _clockTimer.DisposeAsync();
         }
@@ -1444,6 +1450,8 @@ else
         {
             try
             {
+                // Destroy Chart.js instances to free canvas memory.
+                // JSDisconnectedException is expected when the circuit is already gone (e.g. tab close).
                 if (_radarReady) await _jsModule.InvokeVoidAsync("destroyRadarChart");
                 if (_donutReady) await _jsModule.InvokeVoidAsync("destroyDonutChart");
                 await _jsModule.DisposeAsync();

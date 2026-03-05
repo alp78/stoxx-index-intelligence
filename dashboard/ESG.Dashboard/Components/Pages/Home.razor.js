@@ -1,17 +1,27 @@
+// ── Home.razor.js ──────────────────────────────────────────────────────
+// JS interop for Home page charts (LightweightCharts tooltip, Chart.js
+// radar + donut, scrollbar sync).  Module-level variables (_radarChart,
+// _donutChart, etc.) do NOT survive across Blazor JS module re-imports —
+// Chart.getChart(ctx) is used to detect and destroy orphaned instances.
+
 // ── HTML escape helper (prevents XSS in innerHTML) ──
 
 const _esc = s => typeof s === 'string'
     ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     : s;
 
-// ── Tooltip (managed entirely in JS to avoid Blazor re-renders) ──
+// ── Tooltip (managed entirely in JS to avoid Blazor re-renders) ──────
+// Tooltip DOM is manipulated directly — calling back into Blazor would
+// trigger StateHasChanged on every crosshair move and kill performance.
 
+// Stores lookup data on the container element for later use by show/hide.
 export function setTooltipData(container, lookup, indices, options) {
     container._ttLookup = lookup;
     container._ttIndices = indices;
     container._ttOptions = options || {};
 }
 
+// Positions and populates the tooltip div at (x,y) for the given timestamp key.
 export function showTooltip(container, x, y, timestamp) {
     const data = container._ttLookup;
     const indices = container._ttIndices;
@@ -62,13 +72,15 @@ export function showTooltip(container, x, y, timestamp) {
     tooltip.style.display = 'block';
 }
 
+// Hides the tooltip when the crosshair leaves the chart area.
 export function hideTooltip(container) {
     const tooltip = container.querySelector('.chart-tooltip');
     if (tooltip) tooltip.style.display = 'none';
 }
 
-// ── Chart.js: Radar ──
+// ── Chart.js: Radar ─────────────────────────────────────────────────
 
+// Module-scoped ref; set on init, nulled on destroy.
 let _radarChart = null;
 
 const _chartJsTooltip = {
@@ -81,10 +93,11 @@ const _chartJsTooltip = {
     bodyFont: { family: 'Inter' }
 };
 
+// Creates a radar chart with score dimensions as spokes (0–100 scale).
 export function initRadarChart(canvasId, labels, data, indexName) {
     const ctx = document.getElementById(canvasId);
     if (!ctx) return false;
-    // Destroy any existing Chart.js instance on this canvas (survives module re-import)
+    // Chart.getChart(ctx) finds orphaned instances that survived a JS module re-import
     const existing = Chart.getChart(ctx);
     if (existing) existing.destroy();
     if (_radarChart) _radarChart.destroy();
@@ -131,6 +144,7 @@ export function initRadarChart(canvasId, labels, data, indexName) {
     return true;
 }
 
+// Hot-swaps data without destroying/recreating the chart (smooth transition).
 export function updateRadarChart(data, indexName) {
     if (!_radarChart) return;
     _radarChart.data.datasets[0].data = data;
@@ -142,9 +156,13 @@ export function destroyRadarChart() {
     if (_radarChart) { _radarChart.destroy(); _radarChart = null; }
 }
 
-// ── Chart.js: Donut ──
+// ── Chart.js: Donut (dual-ring doughnut) ────────────────────────────
+// Inner ring = individual stocks, outer ring = sectors (weight 0.6 for thinner band).
+// Uses an external tooltip positioned radially outward from the donut center.
+// Clicking a stock segment navigates to its detail page.
 
 let _donutChart = null;
+// Parallel arrays for tooltip lookup — kept in sync with chart dataset order.
 let _donutStockLabels = [];
 let _donutStockNames = [];
 let _donutSectorLabels = [];
@@ -153,6 +171,7 @@ let _donutSectorRealWeights = [];
 
 let _donutIndex = '';
 
+// Lazily creates the external tooltip div as a sibling of the canvas.
 function _getOrCreateDonutTooltip(canvas) {
     const wrap = canvas.parentElement;
     let el = wrap.querySelector('.donut-ext-tooltip');
@@ -168,11 +187,13 @@ function _getOrCreateDonutTooltip(canvas) {
     return el;
 }
 
+// Initializes the dual-ring doughnut. Display weights may be capped for visual balance;
+// real weights are shown in the tooltip for accuracy.
 export function initDonutChart(canvasId, stockLabels, stockNames, stockDisplayWeights, stockRealWeights, stockColors,
                                 sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors, indexKey) {
     const ctx = document.getElementById(canvasId);
     if (!ctx) return false;
-    // Destroy any existing Chart.js instance on this canvas (survives module re-import)
+    // Chart.getChart(ctx) finds orphaned instances that survived a JS module re-import
     const existing = Chart.getChart(ctx);
     if (existing) existing.destroy();
     if (_donutChart) _donutChart.destroy();
@@ -184,7 +205,7 @@ export function initDonutChart(canvasId, stockLabels, stockNames, stockDisplayWe
     _donutSectorRealWeights = sectorRealWeights;
     _donutIndex = indexKey || '';
 
-    // Click handler — navigate to stock page
+    // Click on inner ring (stocks only) navigates to the stock detail page.
     ctx.onclick = function (evt) {
         if (!_donutChart) return;
         const pts = _donutChart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
@@ -239,7 +260,9 @@ export function initDonutChart(canvasId, stockLabels, stockNames, stockDisplayWe
                             (name ? `<div style="font-size:10px;opacity:0.6;">${_esc(name)}</div>` : '') +
                             `<div>Weight: ${value}</div>`;
 
-                        // Position outside the donut: push outward from center
+                        // Position tooltip radially outward from donut center so it
+                        // never overlaps the chart. Compute direction vector from center
+                        // to caret, then push to just past the outer radius.
                         const chart = context.chart;
                         const cx = (chart.chartArea.left + chart.chartArea.right) / 2;
                         const cy = (chart.chartArea.top + chart.chartArea.bottom) / 2;
@@ -294,8 +317,10 @@ export function destroyDonutChart() {
     if (_donutChart) { _donutChart.destroy(); _donutChart = null; }
 }
 
-// ── Scrollbar sync ──
-
+// ── Scrollbar sync ──────────────────────────────────────────────────
+// Mirrors horizontal scroll between a hidden top scrollbar div (.top-scroll-mirror)
+// and the MudTable's scroll container below it. This gives users a top scrollbar
+// for wide tables. Clone-and-replace removes stale event listeners on re-init.
 export function syncTopScrollbars() {
     document.querySelectorAll('.top-scroll-mirror').forEach(mirror => {
         const wrapper = mirror.nextElementSibling;
@@ -313,6 +338,7 @@ export function syncTopScrollbars() {
         const newSpacer = newMirror.querySelector('.top-scroll-spacer');
         if (newSpacer) newSpacer.style.width = table.scrollWidth + 'px';
 
+        // Guard flag prevents infinite scroll event ping-pong between the two elements.
         let syncing = false;
         newMirror.addEventListener('scroll', () => {
             if (syncing) return;

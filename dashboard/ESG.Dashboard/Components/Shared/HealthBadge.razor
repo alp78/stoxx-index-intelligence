@@ -1,3 +1,4 @@
+@* Color-coded chip showing health level (healthy/watch/warning/critical) with flag count. *@
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
     <MudChip T="string" Size="Size.Medium" Color="@GetColor(Level)" Variant="Variant.Filled">
         @(Level ?? "unknown")
