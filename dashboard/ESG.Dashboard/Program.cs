@@ -26,8 +26,13 @@ builder.Services.AddScoped<StockRepository>();
 builder.Services.AddScoped<PulseRepository>();
 builder.Services.AddScoped<IndexSelectionState>();
 
-// SignalR
-builder.Services.AddSignalR();
+// SignalR — explicit timeouts to prevent silent circuit death
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.MaximumReceiveMessageSize = 64 * 1024; // 64 KB
+});
 
 // Blazor
 builder.Services.AddRazorComponents()

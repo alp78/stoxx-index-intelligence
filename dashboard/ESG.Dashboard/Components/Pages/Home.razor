@@ -766,7 +766,9 @@ else
         _loading = false;
 
         _clockTimer = new System.Threading.Timer(_ =>
-            InvokeAsync(StateHasChanged), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        {
+            if (!_disposed) InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
     }
 
     private DateTime? GetMomCutoff()
@@ -1425,7 +1427,11 @@ else
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
-        if (_clockTimer is not null) await _clockTimer.DisposeAsync();
+        if (_clockTimer is not null)
+        {
+            _clockTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            await _clockTimer.DisposeAsync();
+        }
 
         // Unsubscribe crosshair events before chart components dispose themselves
         if (_chartRef is not null) _chartRef.CrosshairMoved -= OnMainCrosshair;
