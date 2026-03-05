@@ -11,6 +11,7 @@
 @inject ScoresRepository ScoresRepo
 @inject IJSRuntime JS
 @inject IndexSelectionState IdxState
+@inject NavigationManager Nav
 @implements IAsyncDisposable
 
 <PageTitle>Stocks - STOXX Index Intelligence</PageTitle>
@@ -943,6 +944,8 @@ else
         _hoverCandle = null;
         _lastHoverTime = null;
         _selectedStock = stock;
+
+        Nav.NavigateTo($"/stocks/{stock.Index}/{stock.Symbol}", replace: true);
 
         if (_chartReady)
             await UpdateChart();
