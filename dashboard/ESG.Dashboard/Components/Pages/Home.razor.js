@@ -30,6 +30,10 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
         const chart = _resolve(e.chartRef);
         // Apply chart-wide options (layout, grid, timescale, crosshair)
         chart.applyOptions(chartOptions);
+        // Remove any pre-existing series (e.g. orphaned from a prior init)
+        for (const pane of chart.panes()) {
+            for (const s of pane.getSeries()) chart.removeSeries(s);
+        }
         // Add a single line series
         const series = chart.addSeries(LightweightCharts.LineSeries, seriesOptions);
         // Push data and set visible range
@@ -63,7 +67,18 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
 // `tooltips`: [{ container, lookup, indices, options }]
 export function batchUpdateCharts(charts, tooltips) {
     for (const c of charts) {
-        _resolve(c.series).setData(c.data);
+        const series = _resolve(c.series);
+        // Guard: if the chart somehow accumulated extra series, remove them so
+        // only our tracked series survives (prevents the "double line" ghost).
+        if (c.chartRef) {
+            const chart = _resolve(c.chartRef);
+            for (const pane of chart.panes()) {
+                for (const s of pane.getSeries()) {
+                    if (s !== series) chart.removeSeries(s);
+                }
+            }
+        }
+        series.setData(c.data);
         const ts = _resolve(c.timeScale);
         if (c.from != null && c.to != null) ts.setVisibleRange({ from: c.from, to: c.to });
         else ts.fitContent();

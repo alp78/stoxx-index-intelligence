@@ -612,6 +612,7 @@ else
     private ChartComponent? _chartRef => _chartShell?.Chart;
     private ElementReference _chartContainer;
     // Stored as { __uniqueJavascriptId: "..." } objects — passed directly to JS _resolve()
+    private object? _chartJsRef;      // chart object ref (for rogue-series cleanup)
     private object? _chartSeriesRef;
     private object? _chartTimeScaleRef;
     private bool _chartReady;
@@ -623,6 +624,7 @@ else
     private ChartShell? _rollShell;
     private ChartComponent? _rollRef => _rollShell?.Chart;
     private ElementReference _rollContainer;
+    private object? _rollJsRef;
     private object? _rollSeriesRef;
     private object? _rollTimeScaleRef;
     private bool _rollReady;
@@ -631,6 +633,7 @@ else
     private ChartShell? _volShell;
     private ChartComponent? _volRef => _volShell?.Chart;
     private ElementReference _volContainer;
+    private object? _volJsRef;
     private object? _volSeriesRef;
     private object? _volTimeScaleRef;
     private bool _volReady;
@@ -962,16 +965,17 @@ else
         {
             var s = new { __uniqueJavascriptId = results[i].Series.__uniqueJavascriptId };
             var ts = new { __uniqueJavascriptId = results[i].TimeScale.__uniqueJavascriptId };
+            var chartJsRef = charts[i].chart.JsObjectReference;
             switch (charts[i].role)
             {
                 case "chart":
-                    _chartSeriesRef = s; _chartTimeScaleRef = ts; _chartReady = true;
+                    _chartJsRef = chartJsRef; _chartSeriesRef = s; _chartTimeScaleRef = ts; _chartReady = true;
                     break;
                 case "roll":
-                    _rollSeriesRef = s; _rollTimeScaleRef = ts; _rollReady = true;
+                    _rollJsRef = chartJsRef; _rollSeriesRef = s; _rollTimeScaleRef = ts; _rollReady = true;
                     break;
                 case "vol":
-                    _volSeriesRef = s; _volTimeScaleRef = ts; _volReady = true;
+                    _volJsRef = chartJsRef; _volSeriesRef = s; _volTimeScaleRef = ts; _volReady = true;
                     break;
             }
         }
@@ -1340,6 +1344,7 @@ else
         {
             var (from, to) = chartData.Length > 0 ? (chartData[0].Time, chartData[^1].Time) : (0L, 0L);
             charts.Add(new {
+                chartRef = _chartJsRef,
                 series = _chartSeriesRef!,
                 timeScale = _chartTimeScaleRef!,
                 data = chartData,
@@ -1353,6 +1358,7 @@ else
         {
             var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
             charts.Add(new {
+                chartRef = _rollJsRef,
                 series = _rollSeriesRef!,
                 timeScale = _rollTimeScaleRef!,
                 data = rollData,
@@ -1366,6 +1372,7 @@ else
         {
             var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
             charts.Add(new {
+                chartRef = _volJsRef,
                 series = _volSeriesRef!,
                 timeScale = _volTimeScaleRef!,
                 data = volData,
@@ -1387,6 +1394,7 @@ else
         var (from, to) = data.Length > 0 ? (data[0].Time, data[^1].Time) : (0L, 0L);
         await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
             new[] { new {
+                chartRef = _chartJsRef,
                 series = _chartSeriesRef,
                 timeScale = _chartTimeScaleRef,
                 data,
@@ -1407,6 +1415,7 @@ else
         var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
         await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
             new[] { new {
+                chartRef = _rollJsRef,
                 series = _rollSeriesRef!,
                 timeScale = _rollTimeScaleRef!,
                 data,
@@ -1427,6 +1436,7 @@ else
         var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
         await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
             new[] { new {
+                chartRef = _volJsRef,
                 series = _volSeriesRef!,
                 timeScale = _volTimeScaleRef!,
                 data,
