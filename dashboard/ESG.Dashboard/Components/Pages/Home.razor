@@ -802,24 +802,25 @@ else
                 "./Components/Pages/Home.razor.js");
         }
 
-        // Sequential JS interop to avoid flooding the SignalR channel
-        var anyInit = false;
+        // Init is one-time per page load — safe to parallelize
+        var tasks = new List<Task>();
 
         if (!_chartReady && _chartRef is not null)
-            { await InitSyntheticChart(); anyInit = true; }
+            tasks.Add(InitSyntheticChart());
         if (!_rollReady && _rollRef is not null)
-            { await InitRollingChart(); anyInit = true; }
+            tasks.Add(InitRollingChart());
         if (!_volReady && _volRef is not null)
-            { await InitVolatilityChart(); anyInit = true; }
+            tasks.Add(InitVolatilityChart());
         if (!_momReady && _momRef is not null)
-            { await InitMomentumChart(); anyInit = true; }
+            tasks.Add(InitMomentumChart());
         if (!_radarReady && _jsModule is not null && _daily.Count > 0)
-            { await InitRadarChart(); anyInit = true; }
+            tasks.Add(InitRadarChart());
         if (!_donutReady && _jsModule is not null && _daily.Count > 0)
-            { await InitDonutChart(); anyInit = true; }
+            tasks.Add(InitDonutChart());
 
-        if (anyInit)
+        if (tasks.Count > 0)
         {
+            await Task.WhenAll(tasks);
             if (!_radarReady || !_donutReady)
                 _chartInitRetries++;
             StateHasChanged();
