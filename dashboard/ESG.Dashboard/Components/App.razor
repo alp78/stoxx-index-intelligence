@@ -24,6 +24,41 @@
     <script src="_content/LightweightCharts.Blazor/lightweight-charts.scripts.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script>
+        // Auto-reload when Blazor Server circuit is lost and cannot reconnect
+        (() => {
+            let retries = 0;
+            const maxRetries = 8;
+            const observer = new MutationObserver(() => {
+                const modal = document.getElementById('components-reconnect-modal');
+                if (!modal) return;
+                if (modal.classList.contains('components-reconnect-rejected') ||
+                    modal.classList.contains('components-reconnect-failed')) {
+                    location.reload();
+                }
+                if (modal.classList.contains('components-reconnect-show')) {
+                    retries++;
+                    if (retries > maxRetries) location.reload();
+                }
+                if (modal.classList.contains('components-reconnect-hide')) {
+                    retries = 0;
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        })();
+    </script>
+    <div id="components-reconnect-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);justify-content:center;align-items:center;font-family:Inter,sans-serif;color:#e0e0e0;">
+        <div style="text-align:center;">
+            <div style="font-size:1.2rem;margin-bottom:8px;">Reconnecting...</div>
+            <div style="opacity:0.5;font-size:0.85rem;">If this persists, refresh the page.</div>
+        </div>
+    </div>
+    <style>
+        #components-reconnect-modal.components-reconnect-show { display: flex !important; }
+        #components-reconnect-modal.components-reconnect-hide { display: none !important; }
+        #components-reconnect-modal.components-reconnect-failed { display: flex !important; }
+        #components-reconnect-modal.components-reconnect-rejected { display: flex !important; }
+    </style>
 </body>
 
 </html>

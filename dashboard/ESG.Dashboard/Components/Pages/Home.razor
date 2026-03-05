@@ -802,24 +802,24 @@ else
                 "./Components/Pages/Home.razor.js");
         }
 
-        var tasks = new List<Task>();
+        // Sequential JS interop to avoid flooding the SignalR channel
+        var anyInit = false;
 
         if (!_chartReady && _chartRef is not null)
-            tasks.Add(InitSyntheticChart());
+            { await InitSyntheticChart(); anyInit = true; }
         if (!_rollReady && _rollRef is not null)
-            tasks.Add(InitRollingChart());
+            { await InitRollingChart(); anyInit = true; }
         if (!_volReady && _volRef is not null)
-            tasks.Add(InitVolatilityChart());
+            { await InitVolatilityChart(); anyInit = true; }
         if (!_momReady && _momRef is not null)
-            tasks.Add(InitMomentumChart());
+            { await InitMomentumChart(); anyInit = true; }
         if (!_radarReady && _jsModule is not null && _daily.Count > 0)
-            tasks.Add(InitRadarChart());
+            { await InitRadarChart(); anyInit = true; }
         if (!_donutReady && _jsModule is not null && _daily.Count > 0)
-            tasks.Add(InitDonutChart());
+            { await InitDonutChart(); anyInit = true; }
 
-        if (tasks.Count > 0)
+        if (anyInit)
         {
-            await Task.WhenAll(tasks);
             if (!_radarReady || !_donutReady)
                 _chartInitRetries++;
             StateHasChanged();
@@ -1006,19 +1006,18 @@ else
             }
         }
 
-        // Phase 2: push all series data + set visible range in one batch (no intermediate render)
-        var ts = await _momRef.TimeScale();
-        var setTasks = new List<Task>(6);
+        // Sequential JS interop to avoid flooding the SignalR channel
         for (var i = 0; i < 5; i++)
         {
             if (_momSeriesRefs[i] is not null)
-                setTasks.Add(_momSeriesRefs[i]!.SetData(prepared[i]));
+                await _momSeriesRefs[i]!.SetData(prepared[i]);
         }
+
+        var ts = await _momRef.TimeScale();
         if (minTime < long.MaxValue)
-            setTasks.Add(ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime }));
+            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
         else
-            setTasks.Add(ts.FitContent());
-        await Task.WhenAll(setTasks);
+            await ts.FitContent();
         await SendMomTooltipData();
     }
 
@@ -1239,16 +1238,15 @@ else
             }
         }
 
+        // Sequential JS interop to avoid flooding the SignalR channel
+        foreach (var kv in prepared.Where(kv => _seriesRefs[kv.Key] is not null))
+            await _seriesRefs[kv.Key]!.SetData(kv.Value);
+
         var timeScale = await _chartRef.TimeScale();
-        var setTasks = prepared
-            .Where(kv => _seriesRefs[kv.Key] is not null)
-            .Select(kv => _seriesRefs[kv.Key]!.SetData(kv.Value))
-            .ToList();
         if (minTime < long.MaxValue)
-            setTasks.Add(timeScale.SetVisibleRange(new TimeRange { From = minTime, To = maxTime }));
+            await timeScale.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
         else
-            setTasks.Add(timeScale.FitContent());
-        await Task.WhenAll(setTasks);
+            await timeScale.FitContent();
 
         await SendTooltipData(_chartContainer, _tsLookup, true);
     }
@@ -1312,16 +1310,15 @@ else
             }
         }
 
+        // Sequential JS interop to avoid flooding the SignalR channel
+        foreach (var kv in prepared.Where(kv => seriesRefs[kv.Key] is not null))
+            await seriesRefs[kv.Key]!.SetData(kv.Value);
+
         var ts = await chart.TimeScale();
-        var setTasks = prepared
-            .Where(kv => seriesRefs[kv.Key] is not null)
-            .Select(kv => seriesRefs[kv.Key]!.SetData(kv.Value))
-            .ToList();
         if (minTime < long.MaxValue)
-            setTasks.Add(ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime }));
+            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
         else
-            setTasks.Add(ts.FitContent());
-        await Task.WhenAll(setTasks);
+            await ts.FitContent();
 
         await SendTooltipData(container, lookup, colorBySign);
     }

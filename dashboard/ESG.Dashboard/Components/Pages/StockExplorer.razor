@@ -1010,13 +1010,12 @@ else
             };
         }).ToArray();
 
-        // Update all series in parallel (single JS batch, no intermediate renders)
-        await Task.WhenAll(
-            _areaSeries!.SetData(areaData),
-            _candleSeries!.SetData(candleData),
-            _ma30Series!.SetData(ma30Data),
-            _ma90Series!.SetData(ma90Data),
-            _volumeSeries!.SetData(volumeData));
+        // Sequential JS interop to avoid flooding the SignalR channel
+        await _areaSeries!.SetData(areaData);
+        await _candleSeries!.SetData(candleData);
+        await _ma30Series!.SetData(ma30Data);
+        await _ma90Series!.SetData(ma90Data);
+        await _volumeSeries!.SetData(volumeData);
 
         // Set visible range: zoom to period, or fit all for MAX
         // (VisibleTimeRangeChanged will fire and update price lines)
