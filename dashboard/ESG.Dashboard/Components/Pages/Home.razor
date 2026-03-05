@@ -1358,18 +1358,17 @@ else
         _selectedSignalIndex = newIndex;
         IdxState.SelectedIndex = newIndex;
 
-        // Update line charts to show only the selected index
-        var chartTasks = new List<Task>();
-        if (_chartReady) chartTasks.Add(UpdateChartData());
-        if (_rollReady) chartTasks.Add(UpdateRollingData());
-        if (_volReady) chartTasks.Add(UpdateVolatilityData());
-        if (_radarReady) chartTasks.Add(UpdateRadarChart());
-        if (_donutReady) chartTasks.Add(UpdateDonutChart());
+        // DB call runs in parallel with chart updates but on a separate path
+        var momTask = LoadMomentumCloses();
 
-        // LoadMomentumCloses must complete before UpdateMomData
-        chartTasks.Add(LoadMomentumCloses());
-        await Task.WhenAll(chartTasks);
+        // Update charts sequentially to avoid flooding the JS interop channel
+        if (_chartReady) await UpdateChartData();
+        if (_rollReady) await UpdateRollingData();
+        if (_volReady) await UpdateVolatilityData();
+        if (_radarReady) await UpdateRadarChart();
+        if (_donutReady) await UpdateDonutChart();
 
+        await momTask;
         if (_momReady)
             await UpdateMomData();
     }
@@ -1390,10 +1389,9 @@ else
     private async Task SetPeriod(string period)
     {
         _selectedPeriod = period;
-        var tasks = new List<Task> { UpdateChartData() };
-        if (_rollReady) tasks.Add(UpdateRollingData());
-        if (_volReady) tasks.Add(UpdateVolatilityData());
-        await Task.WhenAll(tasks);
+        await UpdateChartData();
+        if (_rollReady) await UpdateRollingData();
+        if (_volReady) await UpdateVolatilityData();
     }
 
     // ── Crosshair handlers ──
