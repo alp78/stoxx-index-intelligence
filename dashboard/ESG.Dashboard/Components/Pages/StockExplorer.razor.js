@@ -67,6 +67,154 @@ export function batchInitStockChart(chartRef, chartOptions, seriesDefs, seriesDa
     };
 }
 
+// ── Chart.js: Stock Radar (per-stock factor profile) ──────────────
+
+const _chartJsTooltip = {
+    backgroundColor: '#1A1A2E',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    titleColor: '#fff',
+    bodyColor: '#A0AEC0',
+    titleFont: { family: 'Inter', weight: '600' },
+    bodyFont: { family: 'Inter' }
+};
+
+let _stockRadarChart = null;
+
+export function initStockRadar(canvasId, labels, data, stockName) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return false;
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
+    if (_stockRadarChart) _stockRadarChart.destroy();
+
+    _stockRadarChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels,
+            datasets: [{
+                label: stockName,
+                data,
+                backgroundColor: 'rgba(66, 165, 245, 0.15)',
+                borderColor: '#42A5F5',
+                borderWidth: 2,
+                pointBackgroundColor: '#42A5F5',
+                pointBorderColor: '#1E1E2D',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { display: false, stepSize: 25 },
+                    grid: { color: 'rgba(255,255,255,0.06)' },
+                    angleLines: { color: 'rgba(255,255,255,0.06)' },
+                    pointLabels: { color: '#A0AEC0', font: { family: 'Inter', size: 11 } }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ..._chartJsTooltip,
+                    callbacks: { label: ctx => `${ctx.label}: ${ctx.raw.toFixed(0)}` }
+                }
+            }
+        }
+    });
+    return true;
+}
+
+export function updateStockRadar(data, stockName) {
+    if (!_stockRadarChart) return;
+    _stockRadarChart.data.datasets[0].data = data;
+    _stockRadarChart.data.datasets[0].label = stockName;
+    _stockRadarChart.update('none');
+}
+
+export function destroyStockRadar() {
+    if (_stockRadarChart) { _stockRadarChart.destroy(); _stockRadarChart = null; }
+}
+
+// ── Chart.js: Governance Risk Breakdown (horizontal bar) ──────────
+
+let _govChart = null;
+
+function _govColor(val) {
+    if (val <= 3) return '#26A69A';
+    if (val <= 6) return '#FFA726';
+    return '#EF5350';
+}
+
+export function initGovChart(canvasId, labels, data) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return false;
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
+    if (_govChart) _govChart.destroy();
+
+    _govChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                backgroundColor: data.map(_govColor),
+                borderRadius: 4,
+                barPercentage: 0.6,
+                categoryPercentage: 0.8
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    min: 0,
+                    max: 10,
+                    ticks: { stepSize: 2, color: '#A0AEC0', font: { family: 'Inter', size: 10 } },
+                    grid: { color: 'rgba(255,255,255,0.04)' }
+                },
+                y: {
+                    ticks: { color: '#A0AEC0', font: { family: 'Inter', size: 11 } },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    ..._chartJsTooltip,
+                    callbacks: {
+                        label: ctx => {
+                            const v = ctx.raw;
+                            const level = v <= 3 ? 'Low' : v <= 6 ? 'Moderate' : 'High';
+                            return `${ctx.label}: ${v.toFixed(1)} (${level})`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    return true;
+}
+
+export function updateGovChart(data) {
+    if (!_govChart) return;
+    _govChart.data.datasets[0].data = data;
+    _govChart.data.datasets[0].backgroundColor = data.map(_govColor);
+    _govChart.update('none');
+}
+
+export function destroyGovChart() {
+    if (_govChart) { _govChart.destroy(); _govChart = null; }
+}
+
 // Scrolls the nav table so the selected row is vertically centered.
 export function scrollToSelectedRow(container) {
     if (!container) return;

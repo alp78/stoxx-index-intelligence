@@ -163,6 +163,68 @@ else
                     </div>
                 </MudPaper>
 
+                <!-- Chart.js: Stock Radar + Governance Risk — rendered above daily/quarterly analytics -->
+                <MudGrid Spacing="3" Class="mb-3">
+                    @if (_detailDaily is not null)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="2" Style="min-height: 240px;">
+                                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                                    <ChildContent>
+                                        <span style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2); width: fit-content;">
+                                            <MudText Typo="Typo.subtitle1" Style="margin: 0; font-weight: 600;">Factor Profile</MudText>
+                                        </span>
+                                    </ChildContent>
+                                    <TooltipContent>
+                                        <div style="@_tipStyle">
+                                            <div style="@_tipHead">Stock Factor Profile</div>
+                                            <div style="@_tipDesc">Percentile rank within the index on five dimensions (100 = top of index):</div>
+                                            <ul style="@_tipList">
+                                                <li><b>Value</b> &mdash; relative cheapness vs peers</li>
+                                                <li><b>Momentum</b> &mdash; trend strength</li>
+                                                <li><b>Sentiment</b> &mdash; analyst conviction</li>
+                                                <li><b>Quality</b> &mdash; profitability + balance sheet</li>
+                                                <li><b>Governance</b> &mdash; ISS risk (inverted: higher = better)</li>
+                                            </ul>
+                                        </div>
+                                    </TooltipContent>
+                                </MudTooltip>
+                                <div style="position: relative; height: 200px;">
+                                    <canvas id="stockRadarChart"></canvas>
+                                </div>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                    @if (_detailQuarterly is not null)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="2" Style="min-height: 240px;">
+                                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                                    <ChildContent>
+                                        <span style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2); width: fit-content;">
+                                            <MudText Typo="Typo.subtitle1" Style="margin: 0; font-weight: 600;">Governance Risk</MudText>
+                                        </span>
+                                    </ChildContent>
+                                    <TooltipContent>
+                                        <div style="@_tipStyle">
+                                            <div style="@_tipHead">ISS Governance Risk</div>
+                                            <div style="@_tipDesc">Risk scores on a 1&ndash;10 scale:</div>
+                                            <ul style="@_tipColorList">
+                                                <li><span style="color: #26A69A;">1&ndash;3</span> Low risk</li>
+                                                <li><span style="color: #FFA726;">4&ndash;6</span> Moderate risk</li>
+                                                <li><span style="color: #EF5350;">7&ndash;10</span> High risk</li>
+                                            </ul>
+                                        </div>
+                                    </TooltipContent>
+                                </MudTooltip>
+                                <div style="position: relative; height: 200px;">
+                                    <canvas id="govChart"></canvas>
+                                </div>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+
                 <!-- Daily + Quarterly Analytics: score tables, z-scores, health flags, governance -->
                 <MudGrid Spacing="3">
                     @if (_detailDaily is not null)
@@ -534,6 +596,11 @@ else
     private int _priceLineUpdateId;
     private CancellationTokenSource? _priceLineCts; // debounce: OnVisibleRangeChanged cancels/restarts a 120ms delay
 
+    // Chart.js — stock radar + governance bar (init returns false if canvas not in DOM yet)
+    private bool _stockRadarReady;
+    private bool _govChartReady;
+    private bool _chartJsPending; // true when LoadStockDetail runs before Chart.js canvases are ready
+
     // Price header
     private OhlcvPrice? _latestCandle;
     private double? _priceChangePct;
@@ -850,6 +917,21 @@ else
 
             StateHasChanged();
         }
+
+        // Chart.js radar + governance: canvases appear after _detailDaily/_detailQuarterly are set
+        if (_jsModule is not null && _selectedStock is not null)
+        {
+            if (!_stockRadarReady && _detailDaily is not null)
+                await InitStockRadar();
+            if (!_govChartReady && _detailQuarterly is not null)
+                await InitGovChart();
+            if (_chartJsPending)
+            {
+                _chartJsPending = false;
+                if (_stockRadarReady) await UpdateStockRadar();
+                if (_govChartReady) await UpdateGovChart();
+            }
+        }
     }
 
     // Crosshair handler: looks up the hovered timestamp in _tsIndex to populate
@@ -952,6 +1034,14 @@ else
             await UpdateChart();
         else
             _chartUpdatePending = true;
+
+        // Update Chart.js charts (or defer to OnAfterRenderAsync if canvases aren't in DOM yet)
+        if (_stockRadarReady)
+            await UpdateStockRadar();
+        if (_govChartReady)
+            await UpdateGovChart();
+        if (!_stockRadarReady || !_govChartReady)
+            _chartJsPending = true;
     }
 
     private async Task SetPriceRange(int months)
@@ -1223,6 +1313,70 @@ else
             await LoadStockDetail(top.Stock);
     }
 
+    // ── Chart.js: Stock Radar + Governance ─────────────────────────────
+
+    // Returns [Value, Momentum, Sentiment, Quality, Governance] as 0–100 percentile ranks within the index.
+    private double[] ComputeStockRadarData()
+    {
+        if (_selectedStock is null || _detailDaily is null) return [50, 50, 50, 50, 50];
+
+        var peers = _stockRows.Where(r => r.Stock.Index == _selectedStock.Index).ToList();
+        var n = peers.Count;
+        if (n == 0) return [50, 50, 50, 50, 50];
+
+        static double percentile(double? rank, int total)
+            => rank.HasValue && total > 0 ? (1.0 - (rank.Value - 1.0) / total) * 100.0 : 50.0;
+
+        return
+        [
+            percentile(_detailDaily.RelativeValueRank, n),
+            percentile(_detailDaily.MomentumRank, n),
+            percentile(_detailDaily.SentimentRank, n),
+            _detailQuarterly is not null ? percentile(_detailQuarterly.QualityRank, n) : 50,
+            _detailQuarterly is not null ? percentile(_detailQuarterly.GovernanceRank, n) : 50,
+        ];
+    }
+
+    private double[] ComputeGovChartData()
+    {
+        if (_detailQuarterly is null) return [0, 0, 0, 0];
+        return
+        [
+            _detailQuarterly.AuditRisk ?? 0,
+            _detailQuarterly.BoardRisk ?? 0,
+            _detailQuarterly.CompensationRisk ?? 0,
+            _detailQuarterly.ShareholderRightsRisk ?? 0,
+        ];
+    }
+
+    private async Task InitStockRadar()
+    {
+        var data = ComputeStockRadarData();
+        var labels = new[] { "Value", "Momentum", "Sentiment", "Quality", "Governance" };
+        var created = await _jsModule!.InvokeAsync<bool>("initStockRadar", "stockRadarChart", labels, data, _selectedStock?.Symbol ?? "");
+        _stockRadarReady = created;
+    }
+
+    private async Task InitGovChart()
+    {
+        var data = ComputeGovChartData();
+        var labels = new[] { "Audit", "Board", "Compensation", "Shareholder" };
+        var created = await _jsModule!.InvokeAsync<bool>("initGovChart", "govChart", labels, data);
+        _govChartReady = created;
+    }
+
+    private async Task UpdateStockRadar()
+    {
+        var data = ComputeStockRadarData();
+        await _jsModule!.InvokeVoidAsync("updateStockRadar", data, _selectedStock?.Symbol ?? "");
+    }
+
+    private async Task UpdateGovChart()
+    {
+        var data = ComputeGovChartData();
+        await _jsModule!.InvokeVoidAsync("updateGovChart", data);
+    }
+
     // --- Tooltip styles ---
     private const string _tipStyle = "text-align: left; background: #1A1A2E; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; max-width: 340px; font-size: 0.75rem; line-height: 1.6; color: #E0E0E0; box-shadow: 0 4px 20px rgba(0,0,0,0.5);";
     private const string _tipHead = "font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: #fff;";
@@ -1330,7 +1484,12 @@ else
         if (_chart is not null) _chart.CrosshairMoved -= OnCrosshairMoved;
         if (_jsModule is not null)
         {
-            try { await _jsModule.DisposeAsync(); }
+            try
+            {
+                if (_stockRadarReady) await _jsModule.InvokeVoidAsync("destroyStockRadar");
+                if (_govChartReady) await _jsModule.InvokeVoidAsync("destroyGovChart");
+                await _jsModule.DisposeAsync();
+            }
             catch (Microsoft.JSInterop.JSDisconnectedException) { }
         }
     }
