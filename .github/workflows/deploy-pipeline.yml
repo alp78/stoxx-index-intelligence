@@ -9,6 +9,7 @@ on:
       - "utils/**"
       - "db/**"
       - "docker/pipeline.Dockerfile"
+      - "docker/pipeline-entrypoint.sh"
       - ".github/workflows/deploy-pipeline.yml"
   workflow_dispatch:
   workflow_call:
