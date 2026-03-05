@@ -642,6 +642,7 @@ else
     // ── Chart.js (radar factor profile, donut composition) ──────────
     private bool _radarReady;
     private bool _donutReady;
+    private int _chartInitRetries;
 
     // Momentum sparkline chart
     private ChartShell? _momShell;
@@ -819,11 +820,15 @@ else
         if (tasks.Count > 0)
         {
             await Task.WhenAll(tasks);
+            if (!_radarReady || !_donutReady)
+                _chartInitRetries++;
             StateHasChanged();
         }
-        else if (_jsModule is not null && (!_radarReady || !_donutReady))
+        else if (_jsModule is not null && (!_radarReady || !_donutReady) && _chartInitRetries < 5)
         {
             // Canvas elements may not be in the DOM yet — trigger another render cycle
+            _chartInitRetries++;
+            await Task.Delay(50);
             StateHasChanged();
         }
     }
@@ -1118,8 +1123,8 @@ else
     {
         var data = ComputeRadarData();
         var labels = new[] { "Value", "Momentum", "Sentiment", "Quality", "Governance" };
-        await _jsModule!.InvokeVoidAsync("initRadarChart", "radarChart", labels, data, FormatIndexName(_selectedSignalIndex));
-        _radarReady = true;
+        var created = await _jsModule!.InvokeAsync<bool>("initRadarChart", "radarChart", labels, data, FormatIndexName(_selectedSignalIndex));
+        _radarReady = created;
     }
 
     private async Task UpdateRadarChart()
@@ -1131,10 +1136,10 @@ else
     private async Task InitDonutChart()
     {
         var (labels, names, displayWeights, realWeights, colors, sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors) = ComputeDonutData();
-        await _jsModule!.InvokeVoidAsync("initDonutChart", "donutChart",
+        var created = await _jsModule!.InvokeAsync<bool>("initDonutChart", "donutChart",
             labels, names, displayWeights, realWeights, colors,
             sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors, _selectedSignalIndex);
-        _donutReady = true;
+        _donutReady = created;
     }
 
     private async Task UpdateDonutChart()

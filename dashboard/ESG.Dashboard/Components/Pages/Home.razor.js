@@ -83,7 +83,10 @@ const _chartJsTooltip = {
 
 export function initRadarChart(canvasId, labels, data, indexName) {
     const ctx = document.getElementById(canvasId);
-    if (!ctx) return;
+    if (!ctx) return false;
+    // Destroy any existing Chart.js instance on this canvas (survives module re-import)
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
     if (_radarChart) _radarChart.destroy();
 
     _radarChart = new Chart(ctx, {
@@ -125,6 +128,7 @@ export function initRadarChart(canvasId, labels, data, indexName) {
             }
         }
     });
+    return true;
 }
 
 export function updateRadarChart(data, indexName) {
@@ -167,7 +171,10 @@ function _getOrCreateDonutTooltip(canvas) {
 export function initDonutChart(canvasId, stockLabels, stockNames, stockDisplayWeights, stockRealWeights, stockColors,
                                 sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors, indexKey) {
     const ctx = document.getElementById(canvasId);
-    if (!ctx) return;
+    if (!ctx) return false;
+    // Destroy any existing Chart.js instance on this canvas (survives module re-import)
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
     if (_donutChart) _donutChart.destroy();
 
     _donutStockLabels = stockLabels;
@@ -264,6 +271,7 @@ export function initDonutChart(canvasId, stockLabels, stockNames, stockDisplayWe
             }
         }
     });
+    return true;
 }
 
 export function updateDonutChart(stockLabels, stockNames, stockDisplayWeights, stockRealWeights, stockColors,
