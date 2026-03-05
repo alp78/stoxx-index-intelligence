@@ -611,8 +611,9 @@ else
     private ChartShell? _chartShell;
     private ChartComponent? _chartRef => _chartShell?.Chart;
     private ElementReference _chartContainer;
-    private ISeriesApi<long>? _chartSeries;
-    private ITimeScaleApi<long>? _chartTimeScale;
+    // Stored as { __uniqueJavascriptId: "..." } objects — passed directly to JS _resolve()
+    private object? _chartSeriesRef;
+    private object? _chartTimeScaleRef;
     private bool _chartReady;
     private string _selectedPeriod = "3Y";
     private IJSObjectReference? _jsModule;
@@ -622,16 +623,16 @@ else
     private ChartShell? _rollShell;
     private ChartComponent? _rollRef => _rollShell?.Chart;
     private ElementReference _rollContainer;
-    private ISeriesApi<long>? _rollSeries;
-    private ITimeScaleApi<long>? _rollTimeScale;
+    private object? _rollSeriesRef;
+    private object? _rollTimeScaleRef;
     private bool _rollReady;
 
     // Volatility chart
     private ChartShell? _volShell;
     private ChartComponent? _volRef => _volShell?.Chart;
     private ElementReference _volContainer;
-    private ISeriesApi<long>? _volSeries;
-    private ITimeScaleApi<long>? _volTimeScale;
+    private object? _volSeriesRef;
+    private object? _volTimeScaleRef;
     private bool _volReady;
 
     // Tooltip state
@@ -773,7 +774,7 @@ else
         // _disposed guard: timer fires on a threadpool thread and can race with DisposeAsync
         _clockTimer = new System.Threading.Timer(_ =>
         {
-            if (!_disposed) InvokeAsync(StateHasChanged);
+            if (!_disposed) try { InvokeAsync(StateHasChanged); } catch (ObjectDisposedException) { }
         }, null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
     }
 
@@ -808,92 +809,179 @@ else
     //             deadlock the circuit.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        try
         {
-            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import",
-                "./Components/Pages/Home.razor.js");
-        }
+            // Import on first render, or re-import if a prior render cycle disposed the module
+            if (_jsModule is null)
+            {
+                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import",
+                    "./Components/Pages/Home.razor.js");
+            }
 
-        // Phase 1: init chart shells in parallel — each shell is independent
-        var tasks = new List<Task>();
+            if (_disposed) return;
 
-        if (!_chartReady && _chartRef is not null)
-            tasks.Add(InitSyntheticChart());
-        if (!_rollReady && _rollRef is not null)
-            tasks.Add(InitRollingChart());
-        if (!_volReady && _volRef is not null)
-            tasks.Add(InitVolatilityChart());
-        if (!_momReady && _momRef is not null)
-            tasks.Add(InitMomentumChart());
-        if (!_radarReady && _jsModule is not null && _daily.Count > 0)
-            tasks.Add(InitRadarChart());
-        if (!_donutReady && _jsModule is not null && _daily.Count > 0)
-            tasks.Add(InitDonutChart());
+            // Batch-init line charts: wait for all ChartComponent shells to be ready,
+            // then init + load data for all 3 in a SINGLE JS interop call.
+            var lineChartsToInit = new List<(ChartComponent chart, string role)>();
+            if (!_chartReady && _chartRef is not null) lineChartsToInit.Add((_chartRef, "chart"));
+            if (!_rollReady && _rollRef is not null) lineChartsToInit.Add((_rollRef, "roll"));
+            if (!_volReady && _volRef is not null) lineChartsToInit.Add((_volRef, "vol"));
 
-        if (tasks.Count > 0)
-        {
-            await Task.WhenAll(tasks);
-            if (!_radarReady || !_donutReady)
+            // Other charts init in parallel via wrapper (momentum uses 5 series, can't batch easily)
+            var otherTasks = new List<Task>();
+            if (!_momReady && _momRef is not null)
+                otherTasks.Add(InitMomentumChart());
+            if (!_radarReady && _jsModule is not null && _daily.Count > 0)
+                otherTasks.Add(InitRadarChart());
+            if (!_donutReady && _jsModule is not null && _daily.Count > 0)
+                otherTasks.Add(InitDonutChart());
+
+            if (lineChartsToInit.Count > 0 || otherTasks.Count > 0)
+            {
+                // Wait for all ChartComponent canvases to be ready (parallel)
+                if (lineChartsToInit.Count > 0)
+                    await Task.WhenAll(lineChartsToInit.Select(c => c.chart.InitializationCompleted));
+
+                if (_disposed) return;
+
+                // Batch-init all line charts + push data in ONE JS call
+                if (lineChartsToInit.Count > 0)
+                    await BatchInitLineCharts(lineChartsToInit);
+
+                if (_disposed) return;
+
+                // Wait for other chart inits
+                if (otherTasks.Count > 0)
+                    await Task.WhenAll(otherTasks);
+
+                if (_disposed) return;
+
+                if (!_radarReady || !_donutReady)
+                    _chartInitRetries++;
+
+                if (_momReady) await UpdateMomData();
+                StateHasChanged();
+            }
+            else if (_jsModule is not null && (!_radarReady || !_donutReady) && _chartInitRetries < 5)
+            {
+                // Radar/donut canvas may not be in the DOM yet on first render — retry up to 5 times
                 _chartInitRetries++;
-
-            // Phase 2: push data sequentially — parallel JS interop deadlocks the SignalR circuit
-            if (_chartReady) await UpdateChartData();
-            if (_rollReady) await UpdateRollingData();
-            if (_volReady) await UpdateVolatilityData();
-            if (_momReady) await UpdateMomData();
-            StateHasChanged();
+                await Task.Delay(50);
+                if (!_disposed) StateHasChanged();
+            }
         }
-        else if (_jsModule is not null && (!_radarReady || !_donutReady) && _chartInitRetries < 5)
+        catch (ObjectDisposedException) { }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    // Batch-init all 3 line charts in a SINGLE JS interop call.
+    // Bypasses the wrapper's per-chart ApplyOptions/AddSeries/TimeScale round-trips
+    // (~9 sequential SignalR calls) by driving the LightweightCharts API directly in JS.
+    private async Task BatchInitLineCharts(List<(ChartComponent chart, string role)> charts)
+    {
+        if (_jsModule is null || _disposed) return;
+
+        // Subscribe crosshair events (C#-only, no interop)
+        foreach (var (chart, role) in charts)
         {
-            // Radar/donut canvas may not be in the DOM yet on first render — retry up to 5 times
-            _chartInitRetries++;
-            await Task.Delay(50);
-            StateHasChanged();
+            switch (role)
+            {
+                case "chart": chart.CrosshairMoved += OnMainCrosshair; break;
+                case "roll": chart.CrosshairMoved += OnRollCrosshair; break;
+                case "vol": chart.CrosshairMoved += OnVolCrosshair; break;
+            }
         }
-    }
 
-    private async Task InitSyntheticChart()
-    {
-        await InitChartOptions(_chartRef!);
-        _chartRef!.CrosshairMoved += OnMainCrosshair;
-        _chartSeries = await AddLineSeries(_chartRef!);
-        _chartTimeScale = await _chartRef!.TimeScale();
-        _chartReady = true;
-    }
+        // Prepare data for all charts
+        var chartData = PrepareChartData();
+        var rollData = PrepareSimpleSeriesData(_rollLookup, p => p.Rolling30dReturn, out _rollMinTime, out _rollMaxTime);
+        var volData = PrepareSimpleSeriesData(_volLookup, p => p.Rolling30dVolatility, out _volMinTime, out _volMaxTime);
+        var ttIndices = new[] { new { key = _selectedSignalIndex, name = FormatIndexName(_selectedSignalIndex), color = IndexColor(_selectedSignalIndex) } };
 
-    private async Task InitRollingChart()
-    {
-        await InitChartOptions(_rollRef!);
-        _rollRef!.CrosshairMoved += OnRollCrosshair;
-        _rollSeries = await AddLineSeries(_rollRef!);
-        _rollTimeScale = await _rollRef!.TimeScale();
-        _rollReady = true;
-    }
-
-    private async Task InitVolatilityChart()
-    {
-        await InitChartOptions(_volRef!);
-        _volRef!.CrosshairMoved += OnVolCrosshair;
-        _volSeries = await AddLineSeries(_volRef!);
-        _volTimeScale = await _volRef!.TimeScale();
-        _volReady = true;
-    }
-
-    private async Task<ISeriesApi<long>> AddLineSeries(ChartComponent chart)
-    {
-        return await chart.AddSeries<LineStyleOptions>(SeriesType.Line, new LineStyleOptions
+        // Build per-chart entries and tooltip entries
+        var entries = new List<object>();
+        var tooltips = new List<object>();
+        foreach (var (chart, role) in charts)
         {
-            Color = Clr("#FFFFFF"),
-            LineWidth = 1,
-            CrosshairMarkerVisible = false,
-            LastValueVisible = false,
-            PriceLineVisible = false
-        });
+            var (data, container, colorBySign) = role switch
+            {
+                "chart" => (chartData, _chartContainer, true),
+                "roll" => (rollData, _rollContainer, true),
+                _ => (volData, _volContainer, false)
+            };
+            var (from, to) = role == "chart"
+                ? (data.Length > 0 ? data[0].Time : 0L, data.Length > 0 ? data[^1].Time : 0L)
+                : GetVisibleRange(role == "roll" ? _rollMinTime : _volMinTime, role == "roll" ? _rollMaxTime : _volMaxTime);
+
+            entries.Add(new
+            {
+                chartRef = chart.JsObjectReference,
+                data,
+                from = data.Length > 0 ? (long?)from : null,
+                to = data.Length > 0 ? (long?)to : null
+            });
+            tooltips.Add(new
+            {
+                container,
+                lookup = BuildTooltipLookup(role == "chart" ? _tsLookup : role == "roll" ? _rollLookup : _volLookup),
+                indices = ttIndices,
+                options = new { colorBySign }
+            });
+        }
+
+        // Chart options matching InitChartOptions
+        var chartOptions = new
+        {
+            autoSize = true,
+            layout = new { background = new { type = "solid", color = "#1E1E2D" }, textColor = "#A0AEC0", fontFamily = "Inter", fontSize = 11 },
+            grid = new
+            {
+                vertLines = new { color = "rgba(255,255,255,0.06)" },
+                horzLines = new { color = "rgba(255,255,255,0.06)" }
+            },
+            rightPriceScale = new { borderVisible = false },
+            timeScale = new { borderVisible = false, fixLeftEdge = true, fixRightEdge = true, rightOffset = 0, lockVisibleTimeRangeOnResize = true },
+            crosshair = new { mode = 1 }
+        };
+        var seriesOptions = new
+        {
+            color = "#FFFFFF",
+            lineWidth = 1,
+            crosshairMarkerVisible = false,
+            lastValueVisible = false,
+            priceLineVisible = false
+        };
+
+        // Single JS call: init + data + visible range + tooltips for all 3 charts.
+        // Returns [{ series: { __uniqueJavascriptId }, timeScale: { __uniqueJavascriptId } }]
+        var results = await _jsModule!.InvokeAsync<ChartInitResult[]>("batchInitLineCharts", entries, tooltips, chartOptions, seriesOptions);
+
+        // Store the returned IDs as objects that _resolve() can look up in later batch calls
+        for (int i = 0; i < charts.Count; i++)
+        {
+            var s = new { __uniqueJavascriptId = results[i].Series.__uniqueJavascriptId };
+            var ts = new { __uniqueJavascriptId = results[i].TimeScale.__uniqueJavascriptId };
+            switch (charts[i].role)
+            {
+                case "chart":
+                    _chartSeriesRef = s; _chartTimeScaleRef = ts; _chartReady = true;
+                    break;
+                case "roll":
+                    _rollSeriesRef = s; _rollTimeScaleRef = ts; _rollReady = true;
+                    break;
+                case "vol":
+                    _volSeriesRef = s; _volTimeScaleRef = ts; _volReady = true;
+                    break;
+            }
+        }
     }
 
     private async Task InitMomentumChart()
     {
+        if (_disposed) return;
         await InitSparklineOptions(_momRef!);
+        if (_disposed) return;
         _momRef!.CrosshairMoved += OnMomCrosshair;
         for (int i = 0; i < 5; i++)
         {
@@ -913,7 +1001,9 @@ else
 
     private async Task InitSparklineOptions(ChartComponent chart)
     {
+        if (_disposed) return;
         await chart.InitializationCompleted;
+        if (_disposed) return;
         await chart.ApplyOptions(new LightweightCharts.Blazor.Customization.Chart.ChartOptions
         {
             AutoSize = true,
@@ -947,7 +1037,7 @@ else
 
     private async Task UpdateMomData()
     {
-        if (_momRef is null) return;
+        if (_momRef is null || _disposed) return;
         _momLastHover = null;
         _momLookup.Clear();
 
@@ -1146,45 +1236,20 @@ else
             sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors, _selectedSignalIndex);
     }
 
-    // ── LightweightCharts init / update ─────────────────────────────
+    // ── Batched line chart updates ──
+    // All 3 line charts (synthetic, rolling, volatility) are updated in a SINGLE JS interop
+    // call via batchUpdateCharts(). This bypasses the Blazor wrapper's per-call overhead
+    // (each SetData/SetVisibleRange/setTooltipData was a separate SignalR round-trip).
+    // IJSObjectReferences are extracted via the library's IJsObjectWrapper.JsObjectReference
+    // property and passed to our JS module, which resolves them through the library's
+    // stored-reference map and calls the LightweightCharts API directly.
 
-    private async Task InitChartOptions(ChartComponent chart)
-    {
-        await chart.InitializationCompleted;
-        await chart.ApplyOptions(new LightweightCharts.Blazor.Customization.Chart.ChartOptions
-        {
-            AutoSize = true,
-            Layout = new LayoutOptions
-            {
-                Background = new SolidColor { Color = Clr("#1E1E2D") },
-                TextColor = Clr("#A0AEC0"),
-                FontFamily = "Inter",
-                FontSize = 11
-            },
-            Grid = new GridOptions
-            {
-                VerticalLines = new GridLineOptions { Color = Clr(255, 255, 255, 6) },
-                HorizontalLines = new GridLineOptions { Color = Clr(255, 255, 255, 6) }
-            },
-            RightPriceScale = new PriceScaleOptions { BorderVisible = false },
-            TimeScale = new TimeScaleOptions
-            {
-                BorderVisible = false,
-                FixLeftEdge = true,
-                FixRightEdge = true,
-                RightOffset = 0,
-                LockVisibleTimeRangeOnResize = true
-            },
-            Crosshair = new CrosshairOptions { Mode = CrosshairMode.Magnet }
-        });
-    }
+    private long _rollMinTime, _rollMaxTime;
+    private long _volMinTime, _volMaxTime;
 
-    // ── Main chart series (rebased cumulative return) ──
-    // Clears non-selected indices (empty array) and pushes data for the active one.
-    // JS interop calls are sequential to avoid SignalR circuit deadlock.
-    private async Task UpdateChartData()
+    // Prepares chart data in C# (no interop), returns the arrays for batch push.
+    private LineData<long>[] PrepareChartData()
     {
-        if (_chartSeries is null || _chartTimeScale is null) return;
         _lastHoverTime = null;
         _tsLookup.Clear();
 
@@ -1194,56 +1259,34 @@ else
             ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
             : allData;
 
-        LineData<long>[] data;
-        if (filtered.Count == 0)
-        {
-            data = [];
-        }
-        else
-        {
-            var baseVal = filtered[0].CumulativeFactor ?? 1;
-            data = filtered.Select(p => new LineData<long>
-            {
-                Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
-                Value = ((p.CumulativeFactor ?? 1) / baseVal - 1) * 100
-            }).ToArray();
+        if (filtered.Count == 0) return [];
 
-            foreach (var d in data)
-            {
-                if (!_tsLookup.ContainsKey(d.Time))
-                    _tsLookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
-                _tsLookup[d.Time].Values[_selectedSignalIndex] = d.Value;
-            }
-        }
+        var baseVal = filtered[0].CumulativeFactor ?? 1;
+        var data = filtered.Select(p => new LineData<long>
+        {
+            Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
+            Value = ((p.CumulativeFactor ?? 1) / baseVal - 1) * 100
+        }).ToArray();
 
-        // Single SetData + cached TimeScale = 3 JS interop calls total
-        await _chartSeries.SetData(data);
-        if (data.Length > 0)
-            await _chartTimeScale.SetVisibleRange(new TimeRange { From = data[0].Time, To = data[^1].Time });
-        else
-            await _chartTimeScale.FitContent();
-        await SendTooltipData(_chartContainer, _tsLookup, true);
+        foreach (var d in data)
+        {
+            if (!_tsLookup.ContainsKey(d.Time))
+                _tsLookup[d.Time] = (DateTimeOffset.FromUnixTimeSeconds(d.Time).DateTime, new());
+            _tsLookup[d.Time].Values[_selectedSignalIndex] = d.Value;
+        }
+        return data;
     }
 
-    // ── Shared helper for rolling return / volatility charts ──
-
-    private async Task UpdateSimpleSeries(
-        ISeriesApi<long> series,
-        ITimeScaleApi<long> timeScale,
+    private LineData<long>[] PrepareSimpleSeriesData(
         Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> lookup,
-        ElementReference container,
         Func<IndexPerformance, double?> valueSelector,
-        bool colorBySign)
+        out long minTime, out long maxTime)
     {
-        var cutoff = GetPeriodCutoff();
         lookup.Clear();
+        minTime = long.MaxValue; maxTime = long.MinValue;
 
         var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
-        var filtered = cutoff.HasValue
-            ? allData.Where(p => p.PerfDate >= cutoff.Value).ToList()
-            : allData.ToList();
-
-        var data = filtered
+        var data = allData
             .Where(p => valueSelector(p).HasValue)
             .Select(p => new LineData<long>
             {
@@ -1258,21 +1301,145 @@ else
             lookup[d.Time].Values[_selectedSignalIndex] = d.Value;
         }
 
-        await series.SetData(data);
-        if (data.Length > 0)
-            await timeScale.SetVisibleRange(new TimeRange { From = data[0].Time, To = data[^1].Time });
-        else
-            await timeScale.FitContent();
-        await SendTooltipData(container, lookup, colorBySign);
+        if (data.Length > 0) { minTime = data[0].Time; maxTime = data[^1].Time; }
+        return data;
     }
 
-    private Task UpdateRollingData() =>
-        UpdateSimpleSeries(_rollSeries!, _rollTimeScale!, _rollLookup, _rollContainer,
-            p => p.Rolling30dReturn, true);
+    private object BuildTooltipLookup(Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> lookup)
+    {
+        return lookup.ToDictionary(
+            k => k.Key.ToString(),
+            k => new { date = k.Value.Date.ToString("dd MMM yyyy"), values = k.Value.Values });
+    }
 
-    private Task UpdateVolatilityData() =>
-        UpdateSimpleSeries(_volSeries!, _volTimeScale!, _volLookup, _volContainer,
-            p => p.Rolling30dVolatility, false);
+    private (long From, long To) GetVisibleRange(long dataMin, long dataMax)
+    {
+        var cutoff = GetPeriodCutoff();
+        if (cutoff.HasValue)
+        {
+            var cutoffTs = new DateTimeOffset(cutoff.Value, TimeSpan.Zero).ToUnixTimeSeconds();
+            return (Math.Max(cutoffTs, dataMin), dataMax);
+        }
+        return (dataMin, dataMax);
+    }
+
+    // Pushes all 3 line charts in a single JS interop call.
+    private async Task BatchUpdateAllLineCharts()
+    {
+        if (_jsModule is null) return;
+
+        var chartData = PrepareChartData();
+        var rollData = PrepareSimpleSeriesData(_rollLookup, p => p.Rolling30dReturn, out _rollMinTime, out _rollMaxTime);
+        var volData = PrepareSimpleSeriesData(_volLookup, p => p.Rolling30dVolatility, out _volMinTime, out _volMaxTime);
+
+        var charts = new List<object>();
+        var tooltips = new List<object>();
+        var ttIndices = new[] { new { key = _selectedSignalIndex, name = FormatIndexName(_selectedSignalIndex), color = IndexColor(_selectedSignalIndex) } };
+
+        if (_chartReady)
+        {
+            var (from, to) = chartData.Length > 0 ? (chartData[0].Time, chartData[^1].Time) : (0L, 0L);
+            charts.Add(new {
+                series = _chartSeriesRef!,
+                timeScale = _chartTimeScaleRef!,
+                data = chartData,
+                from = chartData.Length > 0 ? (long?)from : null,
+                to = chartData.Length > 0 ? (long?)to : null
+            });
+            tooltips.Add(new { container = _chartContainer, lookup = BuildTooltipLookup(_tsLookup), indices = ttIndices, options = new { colorBySign = true } });
+        }
+
+        if (_rollReady)
+        {
+            var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
+            charts.Add(new {
+                series = _rollSeriesRef!,
+                timeScale = _rollTimeScaleRef!,
+                data = rollData,
+                from = rollData.Length > 0 ? (long?)from : null,
+                to = rollData.Length > 0 ? (long?)to : null
+            });
+            tooltips.Add(new { container = _rollContainer, lookup = BuildTooltipLookup(_rollLookup), indices = ttIndices, options = new { colorBySign = true } });
+        }
+
+        if (_volReady)
+        {
+            var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
+            charts.Add(new {
+                series = _volSeriesRef!,
+                timeScale = _volTimeScaleRef!,
+                data = volData,
+                from = volData.Length > 0 ? (long?)from : null,
+                to = volData.Length > 0 ? (long?)to : null
+            });
+            tooltips.Add(new { container = _volContainer, lookup = BuildTooltipLookup(_volLookup), indices = ttIndices, options = new { colorBySign = false } });
+        }
+
+        if (charts.Count > 0)
+            await _jsModule.InvokeVoidAsync("batchUpdateCharts", charts, tooltips);
+    }
+
+    // Legacy single-chart update (used only by OnAfterRenderAsync when charts init at different times)
+    private async Task UpdateChartData()
+    {
+        if (_chartSeriesRef is null || _chartTimeScaleRef is null) return;
+        var data = PrepareChartData();
+        var (from, to) = data.Length > 0 ? (data[0].Time, data[^1].Time) : (0L, 0L);
+        await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
+            new[] { new {
+                series = _chartSeriesRef,
+                timeScale = _chartTimeScaleRef,
+                data,
+                from = data.Length > 0 ? (long?)from : null,
+                to = data.Length > 0 ? (long?)to : null
+            }},
+            new[] { new {
+                container = _chartContainer,
+                lookup = BuildTooltipLookup(_tsLookup),
+                indices = new[] { new { key = _selectedSignalIndex, name = FormatIndexName(_selectedSignalIndex), color = IndexColor(_selectedSignalIndex) } },
+                options = new { colorBySign = true }
+            }});
+    }
+
+    private async Task UpdateRollingData()
+    {
+        var data = PrepareSimpleSeriesData(_rollLookup, p => p.Rolling30dReturn, out _rollMinTime, out _rollMaxTime);
+        var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
+        await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
+            new[] { new {
+                series = _rollSeriesRef!,
+                timeScale = _rollTimeScaleRef!,
+                data,
+                from = data.Length > 0 ? (long?)from : null,
+                to = data.Length > 0 ? (long?)to : null
+            }},
+            new[] { new {
+                container = _rollContainer,
+                lookup = BuildTooltipLookup(_rollLookup),
+                indices = new[] { new { key = _selectedSignalIndex, name = FormatIndexName(_selectedSignalIndex), color = IndexColor(_selectedSignalIndex) } },
+                options = new { colorBySign = true }
+            }});
+    }
+
+    private async Task UpdateVolatilityData()
+    {
+        var data = PrepareSimpleSeriesData(_volLookup, p => p.Rolling30dVolatility, out _volMinTime, out _volMaxTime);
+        var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
+        await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
+            new[] { new {
+                series = _volSeriesRef!,
+                timeScale = _volTimeScaleRef!,
+                data,
+                from = data.Length > 0 ? (long?)from : null,
+                to = data.Length > 0 ? (long?)to : null
+            }},
+            new[] { new {
+                container = _volContainer,
+                lookup = BuildTooltipLookup(_volLookup),
+                indices = new[] { new { key = _selectedSignalIndex, name = FormatIndexName(_selectedSignalIndex), color = IndexColor(_selectedSignalIndex) } },
+                options = new { colorBySign = false }
+            }});
+    }
 
     // ── Period & tooltip helpers ──
 
@@ -1297,44 +1464,75 @@ else
     // each chart sequentially (parallel JS interop deadlocks the SignalR circuit).
     private async Task OnSignalIndexChanged(string newIndex)
     {
+        if (_disposed) return;
         _selectedSignalIndex = newIndex;
         IdxState.SelectedIndex = newIndex;
 
-        var momTask = LoadMomentumCloses();
+        try
+        {
+            var momTask = LoadMomentumCloses();
 
-        // Sequential: each await must complete before the next JS interop call
-        if (_chartReady) await UpdateChartData();
-        if (_rollReady) await UpdateRollingData();
-        if (_volReady) await UpdateVolatilityData();
-        if (_radarReady) await UpdateRadarChart();
-        if (_donutReady) await UpdateDonutChart();
+            // Single JS call updates all 3 line charts at once (synthetic + rolling + vol).
+            await BatchUpdateAllLineCharts();
+            if (_radarReady) await UpdateRadarChart();
+            if (_donutReady) await UpdateDonutChart();
 
-        await momTask;
-        if (_momReady)
-            await UpdateMomData();
+            await momTask;
+            if (_momReady)
+                await UpdateMomData();
+        }
+        catch (ObjectDisposedException) { }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
     }
 
     // Period switch re-filters the pre-loaded 3Y data — no DB call.
     // Brief opacity transition (_momTransitioning) avoids a jarring visual snap.
     private async Task SetMomPeriod(string period)
     {
+        if (_disposed) return;
         _selectedMomPeriod = period;
-        if (_momReady)
+        try
         {
-            _momTransitioning = true;
-            StateHasChanged();
-            await Task.Delay(20);
-            await UpdateMomData();
-            _momTransitioning = false;
+            if (_momReady)
+            {
+                _momTransitioning = true;
+                StateHasChanged();
+                await Task.Delay(20);
+                await UpdateMomData();
+                _momTransitioning = false;
+            }
         }
+        catch (ObjectDisposedException) { }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
     }
 
     private async Task SetPeriod(string period)
     {
+        if (_disposed) return;
         _selectedPeriod = period;
-        await UpdateChartData();
-        if (_rollReady) await UpdateRollingData();
-        if (_volReady) await UpdateVolatilityData();
+        try
+        {
+            // Synthetic chart needs SetData (rebase changes all values).
+            // Rolling/vol just need their visible range moved — data is already loaded in full.
+            await UpdateChartData();
+
+            // Batch-adjust visible range for rolling + volatility in a single JS call.
+            var rangeEntries = new List<object>();
+            if (_rollReady)
+            {
+                var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
+                rangeEntries.Add(new { timeScale = _rollTimeScaleRef!, from = (long?)from, to = (long?)to });
+            }
+            if (_volReady)
+            {
+                var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
+                rangeEntries.Add(new { timeScale = _volTimeScaleRef!, from = (long?)from, to = (long?)to });
+            }
+            if (rangeEntries.Count > 0)
+                await _jsModule!.InvokeVoidAsync("batchSetVisibleRange", rangeEntries);
+        }
+        catch (ObjectDisposedException) { }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
     }
 
     // ── Crosshair handlers ──
@@ -1358,19 +1556,24 @@ else
         ref long? lastHover, ElementReference container)
     {
         if (_disposed) return;
-        if (e.Time is null)
+        try
         {
-            if (lastHover is not null)
+            if (e.Time is null)
             {
-                lastHover = null;
-                _ = InvokeAsync(() => _jsModule?.InvokeVoidAsync("hideTooltip", container));
+                if (lastHover is not null)
+                {
+                    lastHover = null;
+                    _ = InvokeAsync(() => _jsModule?.InvokeVoidAsync("hideTooltip", container));
+                }
+                return;
             }
-            return;
+            if (e.Time == lastHover) return;
+            lastHover = e.Time;
+            if (e.Point is not null)
+                _ = InvokeAsync(() => _jsModule?.InvokeVoidAsync("showTooltip", container, e.Point.X, e.Point.Y, e.Time.Value));
         }
-        if (e.Time == lastHover) return;
-        lastHover = e.Time;
-        if (e.Point is not null)
-            _ = InvokeAsync(() => _jsModule?.InvokeVoidAsync("showTooltip", container, e.Point.X, e.Point.Y, e.Time.Value));
+        catch (ObjectDisposedException) { }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
     }
 
     public async ValueTask DisposeAsync()
@@ -1495,4 +1698,8 @@ else
         if (maxAbs < 0.001) return "0%";
         return $"{Math.Abs(upside.Value) / maxAbs * 100:F0}%";
     }
+
+    // DTO for deserializing batchInitLineCharts JS return value
+    private class JsRef { public string __uniqueJavascriptId { get; set; } = ""; }
+    private class ChartInitResult { public JsRef Series { get; set; } = new(); public JsRef TimeScale { get; set; } = new(); }
 }

@@ -6,9 +6,9 @@ using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Suppress JSDisconnectedException warnings from LightweightCharts disposal
-builder.Logging.AddFilter("Microsoft.AspNetCore.Components.Server.Circuits.RemoteRenderer", LogLevel.Critical);
-builder.Logging.AddFilter("Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost", LogLevel.Critical);
+// Suppress JSDisconnectedException warnings from LightweightCharts disposal (temporarily disabled for debugging)
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Components.Server.Circuits.RemoteRenderer", LogLevel.Critical);
+// builder.Logging.AddFilter("Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost", LogLevel.Critical);
 
 // MudBlazor
 builder.Services.AddMudServices();
@@ -36,7 +36,8 @@ builder.Services.AddSignalR(options =>
 
 // Blazor
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddCircuitOptions(options => options.DetailedErrors = builder.Environment.IsDevelopment());
 
 var app = builder.Build();
 

@@ -854,34 +854,38 @@ else
     private void OnCrosshairMoved(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
     {
         if (_disposed) return;
-        if (e.Time is null || e.Time == _lastHoverTime)
+        try
         {
-            if (e.Time is null && _hoverCandle is not null)
+            if (e.Time is null || e.Time == _lastHoverTime)
             {
-                _hoverCandle = null;
-                _hoverPrevCandle = null;
-                _hoverMa30 = null;
-                _hoverMa90 = null;
-                _lastHoverTime = null;
+                if (e.Time is null && _hoverCandle is not null)
+                {
+                    _hoverCandle = null;
+                    _hoverPrevCandle = null;
+                    _hoverMa30 = null;
+                    _hoverMa90 = null;
+                    _lastHoverTime = null;
+                    InvokeAsync(StateHasChanged);
+                }
+                return;
+            }
+
+            _lastHoverTime = e.Time;
+            if (e.Point is not null)
+            {
+                _hoverX = e.Point.X;
+                _hoverY = e.Point.Y;
+            }
+            if (_tsIndex.TryGetValue(e.Time.Value, out var idx))
+            {
+                _hoverCandle = _allPrices[idx];
+                _hoverPrevCandle = idx > 0 ? _allPrices[idx - 1] : null;
+                _hoverMa30 = _allMa30[idx];
+                _hoverMa90 = _allMa90[idx];
                 InvokeAsync(StateHasChanged);
             }
-            return;
         }
-
-        _lastHoverTime = e.Time;
-        if (e.Point is not null)
-        {
-            _hoverX = e.Point.X;
-            _hoverY = e.Point.Y;
-        }
-        if (_tsIndex.TryGetValue(e.Time.Value, out var idx))
-        {
-            _hoverCandle = _allPrices[idx];
-            _hoverPrevCandle = idx > 0 ? _allPrices[idx - 1] : null;
-            _hoverMa30 = _allMa30[idx];
-            _hoverMa90 = _allMa90[idx];
-            InvokeAsync(StateHasChanged);
-        }
+        catch (ObjectDisposedException) { }
     }
 
     // Handles deep-link URL navigation (/stocks/{IndexKey}/{Symbol}) when the user
@@ -1003,11 +1007,16 @@ else
 
         if (_allPrices.Count == 0)
         {
-            await _candleSeries!.SetData(Array.Empty<CandlestickData<long>>());
-            await _areaSeries!.SetData(Array.Empty<AreaData<long>>());
-            await _ma30Series!.SetData(Array.Empty<LineData<long>>());
-            await _ma90Series!.SetData(Array.Empty<LineData<long>>());
-            await _volumeSeries!.SetData(Array.Empty<HistogramData<long>>());
+            await _jsModule!.InvokeVoidAsync("batchUpdateStockChart",
+                new object[]
+                {
+                    new { series = _areaSeries!.JsObjectReference, data = Array.Empty<object>() },
+                    new { series = _candleSeries!.JsObjectReference, data = Array.Empty<object>() },
+                    new { series = _ma30Series!.JsObjectReference, data = Array.Empty<object>() },
+                    new { series = _ma90Series!.JsObjectReference, data = Array.Empty<object>() },
+                    new { series = _volumeSeries!.JsObjectReference, data = Array.Empty<object>() }
+                },
+                _timeScale!.JsObjectReference, null, null);
             return;
         }
 
@@ -1055,27 +1064,24 @@ else
             };
         }).ToArray();
 
-        // Sequential JS interop — see method comment above re: SignalR deadlock.
-        await _areaSeries!.SetData(areaData);
-        await _candleSeries!.SetData(candleData);
-        await _ma30Series!.SetData(ma30Data);
-        await _ma90Series!.SetData(ma90Data);
-        await _volumeSeries!.SetData(volumeData);
-
-        // Set visible range: zoom to period, or fit all for MAX
-        // (VisibleTimeRangeChanged will fire and update price lines)
+        // Batch all 5 SetData + SetVisibleRange into a single JS interop call.
+        // Replaces 6 sequential SignalR round-trips with 1 on every stock switch.
+        var seriesData = new object[]
+        {
+            new { series = _areaSeries!.JsObjectReference, data = (object)areaData },
+            new { series = _candleSeries!.JsObjectReference, data = (object)candleData },
+            new { series = _ma30Series!.JsObjectReference, data = (object)ma30Data },
+            new { series = _ma90Series!.JsObjectReference, data = (object)ma90Data },
+            new { series = _volumeSeries!.JsObjectReference, data = (object)volumeData }
+        };
+        long? from = null, to = null;
         if (_selectedMonths > 0 && _filteredPrices.Count > 0)
         {
-            await _timeScale!.SetVisibleRange(new LightweightCharts.Blazor.Models.TimeRange
-            {
-                From = ToUnix(_filteredPrices[0].Date),
-                To = ToUnix(_filteredPrices[^1].Date)
-            });
+            from = ToUnix(_filteredPrices[0].Date);
+            to = ToUnix(_filteredPrices[^1].Date);
         }
-        else
-        {
-            await _timeScale!.FitContent();
-        }
+        await _jsModule!.InvokeVoidAsync("batchUpdateStockChart",
+            seriesData, _timeScale!.JsObjectReference, from, to);
 
         // Reset hover
         _hoverCandle = null;
@@ -1089,21 +1095,27 @@ else
     private void OnVisibleRangeChanged(object? sender, LightweightCharts.Blazor.Models.TimeRange? e)
     {
         if (_disposed || e is null || _candleSeries is null) return;
-        _priceLineCts?.Cancel();
-        _priceLineCts = new CancellationTokenSource();
-        var cts = _priceLineCts;
-        var from = e.From;
-        var to = e.To;
-        InvokeAsync(async () =>
+        try
         {
-            try
+            _priceLineCts?.Cancel();
+            _priceLineCts = new CancellationTokenSource();
+            var cts = _priceLineCts;
+            var from = e.From;
+            var to = e.To;
+            InvokeAsync(async () =>
             {
-                await Task.Delay(120, cts.Token);
-                if (!cts.IsCancellationRequested)
-                    await UpdatePriceLines(from, to);
-            }
-            catch (TaskCanceledException) { }
-        });
+                try
+                {
+                    await Task.Delay(120, cts.Token);
+                    if (!cts.IsCancellationRequested && !_disposed)
+                        await UpdatePriceLines(from, to);
+                }
+                catch (TaskCanceledException) { }
+                catch (ObjectDisposedException) { }
+                catch (Microsoft.JSInterop.JSDisconnectedException) { }
+            });
+        }
+        catch (ObjectDisposedException) { }
     }
 
     // Draws three horizontal price lines on the visible range:

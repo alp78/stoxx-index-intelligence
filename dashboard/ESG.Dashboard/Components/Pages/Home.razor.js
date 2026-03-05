@@ -10,6 +10,81 @@ const _esc = s => typeof s === 'string'
     ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     : s;
 
+// ── Batch data push for LightweightCharts ────────────────────────────
+// Each SetData / SetVisibleRange through the Blazor wrapper is a separate
+// SignalR round-trip (~10-20ms).  These functions collapse N interop calls
+// into 1 by accepting IJSObjectReferences (resolved via the library's
+// stored-reference map) and driving the chart API directly in JS.
+
+function _resolve(ref) {
+    return window.lightweightChartsBlazor.getStoredReference(ref);
+}
+
+// Initializes multiple line charts in a single JS call — replaces N×(ApplyOptions +
+// AddSeries + TimeScale + SetData + SetVisibleRange) wrapper round-trips with 1 call.
+// Each entry: { chartRef, data, from?, to? }
+// Returns: [{ series: IJSObjectReference, timeScale: IJSObjectReference }] for each chart.
+export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptions) {
+    const results = [];
+    for (const e of entries) {
+        const chart = _resolve(e.chartRef);
+        // Apply chart-wide options (layout, grid, timescale, crosshair)
+        chart.applyOptions(chartOptions);
+        // Add a single line series
+        const series = chart.addSeries(LightweightCharts.LineSeries, seriesOptions);
+        // Push data and set visible range
+        series.setData(e.data);
+        const ts = chart.timeScale();
+        if (e.from != null && e.to != null) ts.setVisibleRange({ from: e.from, to: e.to });
+        else ts.fitContent();
+        // Generate unique IDs so the stored-reference map can track them
+        if (!series.uniqueJavascriptId) series.uniqueJavascriptId = crypto.randomUUID();
+        if (!ts.uniqueJavascriptId) ts.uniqueJavascriptId = crypto.randomUUID();
+        // Store in the library's map so _resolve() works in later batch calls
+        lightweightChartsBlazor.storedReferencesMap = lightweightChartsBlazor.storedReferencesMap || new Map();
+        lightweightChartsBlazor.storedReferencesMap.set(series.uniqueJavascriptId, series);
+        lightweightChartsBlazor.storedReferencesMap.set(ts.uniqueJavascriptId, ts);
+        // Return DotNet-compatible references (with __uniqueJavascriptId)
+        results.push({
+            series: { __uniqueJavascriptId: series.uniqueJavascriptId },
+            timeScale: { __uniqueJavascriptId: ts.uniqueJavascriptId }
+        });
+    }
+    for (const t of tooltips) {
+        t.container._ttLookup = t.lookup;
+        t.container._ttIndices = t.indices;
+        t.container._ttOptions = t.options || {};
+    }
+    return results;
+}
+
+// Full update: sets data + visible range + tooltip for multiple charts in ONE call.
+// `charts`: [{ series, timeScale, data, from?, to? }]
+// `tooltips`: [{ container, lookup, indices, options }]
+export function batchUpdateCharts(charts, tooltips) {
+    for (const c of charts) {
+        _resolve(c.series).setData(c.data);
+        const ts = _resolve(c.timeScale);
+        if (c.from != null && c.to != null) ts.setVisibleRange({ from: c.from, to: c.to });
+        else ts.fitContent();
+    }
+    for (const t of tooltips) {
+        t.container._ttLookup = t.lookup;
+        t.container._ttIndices = t.indices;
+        t.container._ttOptions = t.options || {};
+    }
+}
+
+// Range-only update: moves visible window without replacing data or tooltips.
+// `entries`: [{ timeScale, from?, to? }]
+export function batchSetVisibleRange(entries) {
+    for (const e of entries) {
+        const ts = _resolve(e.timeScale);
+        if (e.from != null && e.to != null) ts.setVisibleRange({ from: e.from, to: e.to });
+        else ts.fitContent();
+    }
+}
+
 // ── Tooltip (managed entirely in JS to avoid Blazor re-renders) ──────
 // Tooltip DOM is manipulated directly — calling back into Blazor would
 // trigger StateHasChanged on every crosshair move and kill performance.
