@@ -583,7 +583,10 @@ else
         var stock = _stockRows.FirstOrDefault(r =>
             r.Stock.Index == _filterIndex && r.Stock.Symbol == args.Item!.Symbol);
         if (stock is not null)
+        {
             await SelectStock(stock.Stock);
+            Nav.NavigateTo($"/stocks/{stock.Stock.Index}/{stock.Stock.Symbol}", replace: true);
+        }
     }
 
     private void UpdateNavScores()
@@ -944,8 +947,6 @@ else
         _hoverCandle = null;
         _lastHoverTime = null;
         _selectedStock = stock;
-
-        Nav.NavigateTo($"/stocks/{stock.Index}/{stock.Symbol}", replace: true);
 
         if (_chartReady)
             await UpdateChart();
