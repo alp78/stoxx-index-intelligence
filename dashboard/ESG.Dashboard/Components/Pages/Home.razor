@@ -809,9 +809,9 @@ else
             tasks.Add(InitVolatilityChart());
         if (!_momReady && _momRef is not null)
             tasks.Add(InitMomentumChart());
-        if (!_radarReady && _jsModule is not null && !firstRender && _daily.Count > 0)
+        if (!_radarReady && _jsModule is not null && _daily.Count > 0)
             tasks.Add(InitRadarChart());
-        if (!_donutReady && _jsModule is not null && !firstRender && _daily.Count > 0)
+        if (!_donutReady && _jsModule is not null && _daily.Count > 0)
             tasks.Add(InitDonutChart());
 
         if (tasks.Count > 0)
@@ -819,9 +819,9 @@ else
             await Task.WhenAll(tasks);
             StateHasChanged();
         }
-        else if (firstRender)
+        else if (_jsModule is not null && (!_radarReady || !_donutReady))
         {
-            // Trigger a second render cycle so Chart.js canvases are in the DOM
+            // Canvas elements may not be in the DOM yet — trigger another render cycle
             StateHasChanged();
         }
     }
