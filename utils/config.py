@@ -49,6 +49,8 @@ def _load_definitions():
             "file_prefix": file_prefix,
             "ohlcv_table": ohlcv_table,
             "history_start": history_start,
+            "color": defn.get("color"),
+            "currency": defn.get("currency", ""),
         })
 
     return indices

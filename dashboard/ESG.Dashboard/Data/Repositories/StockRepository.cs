@@ -7,16 +7,13 @@ namespace ESG.Dashboard.Data.Repositories;
 public class StockRepository
 {
     private readonly DbConnectionFactory _db;
+    private readonly IndexRegistry _registry;
 
-    // Maps index keys to their silver OHLCV table names
-    private static readonly Dictionary<string, string> OhlcvTables = new()
+    public StockRepository(DbConnectionFactory db, IndexRegistry registry)
     {
-        ["euro_stoxx_50"] = "silver.eurostoxx50_ohlcv",
-        ["stoxx_usa_50"] = "silver.stoxxusa50_ohlcv",
-        ["stoxx_asia_50"] = "silver.stoxxasia50_ohlcv",
-    };
-
-    public StockRepository(DbConnectionFactory db) => _db = db;
+        _db = db;
+        _registry = registry;
+    }
 
     /// <summary>All current index constituents from silver.index_dim.</summary>
     public async Task<IEnumerable<StockInfo>> GetStocksAsync(string? index = null)
@@ -54,11 +51,11 @@ public class StockRepository
     public async Task<IEnumerable<OhlcvPrice>> GetOhlcvAsync(
         string index, string symbol, DateTime? from = null, DateTime? to = null)
     {
-        if (!OhlcvTables.TryGetValue(index, out var table))
-            return [];
+        var table = _registry.GetOhlcvTable(index);
+        if (table is null) return [];
 
         using var conn = _db.Create();
-        // Table name is from a fixed dictionary, not user input
+        // Table name is from IndexRegistry (loaded from DB), not user input
         // Compute MA 30/90 via SQL window functions (server-side, avoids client recalc)
         // CTE computes over full history; outer query filters by date range
         var sql = $"""
@@ -90,7 +87,8 @@ public class StockRepository
     public async Task<IEnumerable<SymbolClose>> GetBatchClosesAsync(
         string index, string[] symbols, DateTime from)
     {
-        if (!OhlcvTables.TryGetValue(index, out var table) || symbols.Length == 0)
+        var table = _registry.GetOhlcvTable(index);
+        if (table is null || symbols.Length == 0)
             return [];
 
         using var conn = _db.Create();

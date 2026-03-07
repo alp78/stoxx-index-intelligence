@@ -35,7 +35,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from utils.db import get_connection
 from utils.config import (
-    INDICES, definition_path, data_path, bronze_ohlcv, silver_ohlcv, safe_write_json
+    INDICES, definition_path, data_path, bronze_ohlcv, silver_ohlcv, safe_write_json,
+    get_index
 )
 from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 
@@ -166,8 +167,64 @@ def _ensure_ohlcv_tables(cursor, conn, idx):
 
 
 # ---------------------------------------------------------------------------
+# Index metadata upsert
+# ---------------------------------------------------------------------------
+
+def _upsert_dim_index(cursor, conn):
+    """Upsert all index metadata from definition files into bronze.dim_index."""
+    if not _table_exists(cursor, "bronze.dim_index"):
+        return
+
+    for idx in INDICES:
+        cursor.execute("""
+            MERGE bronze.dim_index AS t
+            USING (SELECT ? AS index_key, ? AS display_name, ? AS file_prefix,
+                          ? AS color, ? AS currency) AS s
+            ON t.index_key = s.index_key
+            WHEN MATCHED THEN UPDATE SET
+                display_name = s.display_name, file_prefix = s.file_prefix,
+                color = s.color, currency = s.currency
+            WHEN NOT MATCHED THEN INSERT (index_key, display_name, file_prefix, color, currency)
+                VALUES (s.index_key, s.display_name, s.file_prefix, s.color, s.currency);
+        """, idx["key"], idx["name"], idx["file_prefix"],
+             idx.get("color"), idx.get("currency", ""))
+
+    # Remove entries for deleted indices
+    definition_keys = {i["key"] for i in INDICES}
+    cursor.execute("SELECT index_key FROM bronze.dim_index")
+    for row in cursor.fetchall():
+        if row[0] not in definition_keys:
+            cursor.execute("DELETE FROM bronze.dim_index WHERE index_key = ?", row[0])
+
+    conn.commit()
+    log_info(logger, f"Synced {len(INDICES)} index(es) to bronze.dim_index", step="sync")
+
+
+# ---------------------------------------------------------------------------
 # Dimension fetch / update
 # ---------------------------------------------------------------------------
+
+def _export_db_dims(key):
+    """Export existing dimension records from bronze.index_dim to rebuild the dim JSON."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM bronze.index_dim WHERE _index = ? ORDER BY symbol", key
+    )
+    columns = [desc[0] for desc in cursor.description]
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    # Skip internal columns (_index, _ingested_at, id)
+    skip = {"id", "_index", "_ingested_at"}
+    records = []
+    for row in rows:
+        record = {col: val for col, val in zip(columns, row) if col not in skip and val is not None}
+        records.append(record)
+
+    return records
+
 
 def _fetch_new_symbols(key, new_symbols):
     """Fetch dimension data from yfinance for new symbols and append to dim JSON."""
@@ -181,7 +238,11 @@ def _fetch_new_symbols(key, new_symbols):
         with open(dim_path, "r", encoding="utf-8") as f:
             records = json.load(f)
     else:
-        records = []
+        # Dim JSON missing (e.g. ephemeral GCP container) — rebuild from DB
+        records = _export_db_dims(key)
+        if records:
+            log_info(logger, f"Rebuilt dim JSON from DB ({len(records)} existing records)",
+                     step="sync", index=key)
 
     added = []
     for symbol in sorted(new_symbols):
@@ -436,6 +497,9 @@ def run():
             _purge_index(cursor, conn, key)
             total_purged += 1
 
+        # --- Upsert index metadata (name, color, currency, etc.) ---
+        _upsert_dim_index(cursor, conn)
+
         # --- Sync each active index ---
         for idx in INDICES:
             key = idx["key"]
@@ -454,6 +518,17 @@ def run():
 
             dim_symbols, _ = _get_dim_symbols(key)
             db_symbols = _get_db_symbols(cursor, key)
+
+            # Rebuild dim JSON from DB if missing (e.g. ephemeral GCP container)
+            if dim_symbols is None and db_symbols:
+                records = _export_db_dims(key)
+                if records:
+                    dim_p = data_path(key, "dim")
+                    dim_p.parent.mkdir(parents=True, exist_ok=True)
+                    safe_write_json(dim_p, records)
+                    dim_symbols = {r["symbol"] for r in records if "symbol" in r}
+                    log_info(logger, f"Rebuilt dim JSON from DB ({len(records)} records)",
+                             step="sync", index=key)
 
             known_symbols = (dim_symbols or set()) | db_symbols
             new_symbols = def_symbols - known_symbols

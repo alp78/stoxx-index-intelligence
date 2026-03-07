@@ -1,5 +1,7 @@
 {
-    "name": "Stoxx USA 50",
+    "name": "STOXX USA 50",
+    "color": "#FFFFFF",
+    "currency": "$",
     "symbols": [
         "NVDA", "AAPL", "GOOGL", "MSFT", "AMZN", "META", "AVGO",
         "TSLA", "BRK-B", "WMT", "LLY", "JPM", "XOM", "V", "JNJ", "MU",

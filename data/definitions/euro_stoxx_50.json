@@ -1,5 +1,7 @@
 {
     "name": "Euro Stoxx 50",
+    "color": "#4285F4",
+    "currency": "€",
     "symbols": [
         "ASML.AS", "MC.PA", "RMS.PA", "OR.PA", "SAP.DE", "SIE.DE", "ITX.MC",
         "DTE.DE", "SAN.MC", "SU.PA", "ALV.DE", "AIR.PA", "TTE.PA", "ENR.DE",

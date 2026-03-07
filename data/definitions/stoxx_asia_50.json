@@ -1,5 +1,7 @@
 {
     "name": "STOXX Asia/Pacific 50",
+    "color": "#EF5350",
+    "currency": "",
     "symbols": [
         "7203.T", "BHP.AX", "6758.T", "1299.HK", "CBA.AX", "6861.T",
         "CSL.AX", "8306.T", "8058.T", "9432.T", "4063.T", "4568.T",

@@ -11,6 +11,7 @@
 @inject IJSRuntime JS
 @inject IndexSelectionState IdxState
 @inject CountryFlags Flags
+@inject IndexRegistry IdxReg
 @implements IAsyncDisposable
 @using LightweightCharts.Blazor.Charts
 @using LightweightCharts.Blazor.Customization
@@ -890,14 +891,7 @@ else
         ("ALL", _ => null),
     ];
 
-    private static readonly Dictionary<string, string> _indexColors = new()
-    {
-        ["euro_stoxx_50"] = "#4285F4",
-        ["stoxx_usa_50"] = "#FFFFFF",
-        ["stoxx_asia_50"] = "#EF5350",
-    };
-
-    private static string IndexColor(string key) => _indexColors.GetValueOrDefault(key, "#A0AEC0");
+    private string IndexColor(string key) => IdxReg.GetColor(key);
 
     // ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -1797,13 +1791,7 @@ else
 
     // ── Formatting helpers ────────────────────────────────────────────
 
-    private static string FormatIndexName(string key) => key switch
-    {
-        "euro_stoxx_50" => "Euro STOXX 50",
-        "stoxx_usa_50" => "STOXX USA 50",
-        "stoxx_asia_50" => "STOXX Asia/Pacific 50",
-        _ => key.Replace("_", " ").ToUpperInvariant()
-    };
+    private string FormatIndexName(string key) => IdxReg.GetDisplayName(key);
 
     private static string FormatPct(double? val) => val.HasValue ? $"{val.Value:P1}" : "--";
     private static string FormatNum(double? val) => val.HasValue ? $"{val.Value:F1}" : "--";

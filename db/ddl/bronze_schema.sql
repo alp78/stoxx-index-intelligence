@@ -298,5 +298,19 @@ CREATE TABLE bronze.dim_country (
 );
 GO
 
+-- ============================================================================
+-- 10. Index Dimension (reference data — index metadata from definition files)
+-- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'dim_index')
+CREATE TABLE bronze.dim_index (
+    index_key               VARCHAR(50)     NOT NULL PRIMARY KEY,
+    display_name            NVARCHAR(100)   NOT NULL,
+    file_prefix             VARCHAR(50)     NOT NULL,
+    color                   VARCHAR(10)     NULL,
+    currency                NVARCHAR(5)     NULL
+);
+GO
+
 PRINT 'Bronze layer created successfully.';
 GO

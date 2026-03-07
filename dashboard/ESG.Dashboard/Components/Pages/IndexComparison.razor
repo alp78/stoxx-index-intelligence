@@ -6,6 +6,7 @@
 @page "/indices"
 @rendermode InteractiveServer
 @inject IndexPerformanceRepository PerfRepo
+@inject IndexRegistry IdxReg
 
 <PageTitle>Index Comparison - STOXX Index Intelligence</PageTitle>
 
@@ -178,7 +179,7 @@ else
     // 1. Group by index, sort by date  2. Union all dates across indices
     // 3. Forward-fill gaps (indices have different trading calendars)
     // 4. Optionally rebase to 100 at first value  5. Downsample to maxPoints
-    private static void BuildLineSeries(
+    private void BuildLineSeries(
         List<IndexPerformance> data, int maxPoints,
         Func<IndexPerformance, double> valueSelector,
         out List<ChartSeries<double>> series, out string[] labels,
@@ -247,13 +248,7 @@ else
         series = result;
     }
 
-    private static string FormatIndexName(string key) => key switch
-    {
-        "euro_stoxx_50" => "Euro STOXX 50",
-        "stoxx_usa_50" => "STOXX USA 50",
-        "stoxx_asia_50" => "STOXX Asia/Pacific 50",
-        _ => key
-    };
+    private string FormatIndexName(string key) => IdxReg.GetDisplayName(key);
 
     private static string Pct(double? v) => v.HasValue ? $"{v.Value:P1}" : "--";
     private static string Num(double? v) => v.HasValue ? $"{v.Value:F1}" : "--";

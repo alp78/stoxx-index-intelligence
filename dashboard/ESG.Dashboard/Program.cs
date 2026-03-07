@@ -26,6 +26,7 @@ builder.Services.AddScoped<StockRepository>();
 builder.Services.AddScoped<PulseRepository>();
 builder.Services.AddScoped<IndexSelectionState>();
 builder.Services.AddSingleton<CountryFlags>();
+builder.Services.AddSingleton<IndexRegistry>();
 
 // SignalR — explicit timeouts to prevent silent circuit death
 builder.Services.AddSignalR(options =>
@@ -44,6 +45,7 @@ var app = builder.Build();
 
 // Eagerly load country codes from DB into the singleton cache
 await app.Services.GetRequiredService<CountryFlags>().EnsureLoadedAsync();
+await app.Services.GetRequiredService<IndexRegistry>().EnsureLoadedAsync();
 
 if (!app.Environment.IsDevelopment())
 {

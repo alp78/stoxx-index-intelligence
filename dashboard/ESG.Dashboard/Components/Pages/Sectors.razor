@@ -10,6 +10,7 @@
 @inject IndexSelectionState IdxState
 @inject IJSRuntime JS
 @inject CountryFlags Flags
+@inject IndexRegistry IdxReg
 @implements IAsyncDisposable
 
 <PageTitle>Sector Heatmap — STOXX Index Intelligence</PageTitle>
@@ -162,12 +163,6 @@ else
         }
     }
 
-    private static string FormatIndexName(string key) => key switch
-    {
-        "euro_stoxx_50" => "Euro STOXX 50",
-        "stoxx_usa_50" => "STOXX USA 50",
-        "stoxx_asia_50" => "STOXX Asia/Pacific 50",
-        _ => key.Replace("_", " ").ToUpperInvariant()
-    };
+    private string FormatIndexName(string key) => IdxReg.GetDisplayName(key);
 
 }
