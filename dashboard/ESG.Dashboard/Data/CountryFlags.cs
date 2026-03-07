@@ -30,9 +30,9 @@ public class CountryFlags
                 foreach (var (name, code) in rows)
                     _codes[name] = code.ToLowerInvariant();
             }
-            catch
+            catch (Exception ex)
             {
-                // Table may not exist yet (e.g. first deploy before seed runs) — start with empty cache
+                Console.WriteLine($"[CountryFlags] Failed to load dim_country: {ex}");
                 _codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
         }
