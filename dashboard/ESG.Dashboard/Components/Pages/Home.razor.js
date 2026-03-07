@@ -626,7 +626,8 @@ function _donutSetupEvents(container) {
                 highlightedSector = -1;
                 _donutResetHighlight();
             } else {
-                // Lock this sector
+                // Lock this sector (reset first to clear previous offset)
+                _donutResetHighlight();
                 lockedSector = idx;
                 highlightedSector = idx;
                 highlightedStock = -1;
