@@ -84,7 +84,7 @@ else
                     </div>
                 </TooltipContent>
             </MudTooltip>
-            <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">Updated @SelectedSnap.PerfDate.ToString("yyyy-MM-dd") &middot; @SelectedSnap.StocksCount stocks</MudText>
+            <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">Updated @SelectedSnap.PerfDate.ToString("yyyy-MM-dd") &middot; @_daily.Count(d => d.Index == _selectedSignalIndex) stocks</MudText>
         </div>
         <MudPaper Class="pa-2 px-3 mb-3" Elevation="1">
             <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; flex-wrap: wrap; gap: 4px 0;">
