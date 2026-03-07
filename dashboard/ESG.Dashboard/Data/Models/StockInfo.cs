@@ -9,4 +9,6 @@ public class StockInfo
     public string? Sector { get; set; }
     public string? Industry { get; set; }
     public string? Country { get; set; }
+    public string? City { get; set; }
+    public string? LongBusinessSummary { get; set; }
 }

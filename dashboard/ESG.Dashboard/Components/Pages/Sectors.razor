@@ -9,6 +9,7 @@
 @inject StockRepository StockRepo
 @inject IndexSelectionState IdxState
 @inject IJSRuntime JS
+@inject CountryFlags Flags
 @implements IAsyncDisposable
 
 <PageTitle>Sector Heatmap — STOXX Index Intelligence</PageTitle>
@@ -129,7 +130,9 @@ else
                         name = s.ShortName ?? s.Symbol,
                         cap = s.MarketCap ?? 0,
                         change = GetChangeValue(s),
-                        logo = $"logos/{_selectedIndex}/{s.Symbol}.png"
+                        logo = $"logos/{_selectedIndex}/{s.Symbol}.png",
+                        countryCode = Flags.GetCode(s.Country),
+                        href = $"/stocks/{_selectedIndex}/{s.Symbol}"
                     }).ToArray()
             }).ToArray();
 
@@ -152,9 +155,10 @@ else
             {
                 if (_treemapReady)
                     await _jsModule.InvokeVoidAsync("destroyTreemap");
+                await _jsModule.DisposeAsync();
             }
+            catch (JSDisconnectedException) { }
             catch { }
-            await _jsModule.DisposeAsync();
         }
     }
 
@@ -165,4 +169,5 @@ else
         "stoxx_asia_50" => "STOXX Asia/Pacific 50",
         _ => key.Replace("_", " ").ToUpperInvariant()
     };
+
 }

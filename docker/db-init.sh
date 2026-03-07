@@ -20,4 +20,7 @@ echo "Running silver schema..."
 echo "Running gold schema..."
 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -i /docker-entrypoint-initdb.d/gold_schema.sql
 
+echo "Seeding country dimension..."
+/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -i /docker-entrypoint-initdb.d/countries.sql
+
 echo "Database initialization complete."

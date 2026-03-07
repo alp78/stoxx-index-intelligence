@@ -25,7 +25,8 @@ public class StockRepository
         var sql = """
             SELECT _index AS [Index], symbol AS Symbol,
                    short_name AS ShortName, sector AS Sector,
-                   industry AS Industry, country AS Country
+                   industry AS Industry, country AS Country,
+                   city AS City, long_business_summary AS LongBusinessSummary
             FROM silver.index_dim
             WHERE is_current = 1
               AND (@Index IS NULL OR _index = @Index)
@@ -41,7 +42,8 @@ public class StockRepository
         var sql = """
             SELECT _index AS [Index], symbol AS Symbol,
                    short_name AS ShortName, sector AS Sector,
-                   industry AS Industry, country AS Country
+                   industry AS Industry, country AS Country,
+                   city AS City, long_business_summary AS LongBusinessSummary
             FROM silver.index_dim
             WHERE is_current = 1 AND _index = @Index AND symbol = @Symbol
             """;

@@ -20,6 +20,7 @@ services:
       - ./db/ddl/bronze_schema.sql:/docker-entrypoint-initdb.d/bronze_schema.sql
       - ./db/ddl/silver_schema.sql:/docker-entrypoint-initdb.d/silver_schema.sql
       - ./db/ddl/gold_schema.sql:/docker-entrypoint-initdb.d/gold_schema.sql
+      - ./db/seed/countries.sql:/docker-entrypoint-initdb.d/countries.sql
     entrypoint: /bin/bash /entrypoint.sh
     healthcheck:
       test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
@@ -40,11 +41,14 @@ services:
       SQL_DATABASE: ${SQL_DATABASE:-stoxx}
       SQL_USER: ${SQL_USER:-sa}
       SA_PASSWORD: ${SA_PASSWORD}
+      LOGO_DEV_TOKEN: ${LOGO_DEV_TOKEN:-}
+      LOGOS_DIR: /app/logos
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./data:/app/data
+      - ./dashboard/ESG.Dashboard/wwwroot/logos:/app/logos
       - pipeline_logs:/app/logs
 
   dashboard:

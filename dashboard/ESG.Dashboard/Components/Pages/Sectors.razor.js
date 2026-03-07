@@ -4,6 +4,11 @@
 
 let _container = null;
 
+/** Render a flag-icons span from a 2-letter country code (passed from C#). */
+function countryFlagHtml(code) {
+    return code ? `<span class="fi fi-${code}" style="margin-right:4px;"></span>` : '';
+}
+
 /** Color a tile by its change %: green (+) or red (-), intensity by magnitude. */
 function changeColor(pct) {
     const v = Math.abs(pct * 100);
@@ -157,6 +162,33 @@ function buildTreemap(data, containerW, containerH) {
     return tiles;
 }
 
+/** Custom tooltip element (shared across all tiles). */
+let _tooltip = null;
+function ensureTooltip() {
+    if (_tooltip) return _tooltip;
+    _tooltip = document.createElement('div');
+    _tooltip.style.cssText = `
+        position: fixed; z-index: 9999; pointer-events: none;
+        background: rgba(20,20,35,0.95); color: #e0e0e0;
+        border: 1px solid #444; border-radius: 6px;
+        padding: 8px 12px; font-size: 0.8rem; line-height: 1.5;
+        white-space: nowrap; display: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    `;
+    document.body.appendChild(_tooltip);
+    return _tooltip;
+}
+function showTooltip(e, html) {
+    const tt = ensureTooltip();
+    tt.innerHTML = html;
+    tt.style.display = 'block';
+    tt.style.left = (e.clientX + 14) + 'px';
+    tt.style.top = (e.clientY + 14) + 'px';
+}
+function hideTooltip() {
+    if (_tooltip) _tooltip.style.display = 'none';
+}
+
 /** Render tiles as DOM elements inside the container. */
 function renderTiles(container, tiles) {
     container.innerHTML = '';
@@ -210,9 +242,13 @@ function renderTiles(container, tiles) {
             cursor: pointer;
             transition: filter 0.15s;
         `;
-        el.title = `${s.name}\n${s.symbol}\n${formatPct(s.change)}`;
-        el.addEventListener('mouseenter', () => el.style.filter = 'brightness(1.3)');
-        el.addEventListener('mouseleave', () => el.style.filter = '');
+        const flagHtml = countryFlagHtml(s.countryCode);
+        const pctColor = s.change >= 0 ? '#4caf50' : '#ef5350';
+        const tooltipHtml = `${flagHtml}<strong>${s.name}</strong><br>${s.symbol} <span style="color:${pctColor};font-weight:600">${formatPct(s.change)}</span>`;
+        el.addEventListener('mouseenter', (e) => { el.style.filter = 'brightness(1.3)'; showTooltip(e, tooltipHtml); });
+        el.addEventListener('mousemove', (e) => showTooltip(e, tooltipHtml));
+        el.addEventListener('mouseleave', () => { el.style.filter = ''; hideTooltip(); });
+        el.addEventListener('click', () => { if (s.href) window.location.href = s.href; });
 
         // Adaptive content based on tile size
         if (minW > 50 && minH > 40) {
@@ -310,6 +346,10 @@ export function destroyTreemap() {
     if (_container) {
         _container.innerHTML = '';
         _container = null;
+    }
+    if (_tooltip) {
+        _tooltip.remove();
+        _tooltip = null;
     }
     _currentData = null;
 }

@@ -6,6 +6,8 @@
 @page "/live"
 @rendermode InteractiveServer
 @inject PulseRepository PulseRepo
+@inject StockRepository StockRepo
+@inject CountryFlags Flags
 @implements IAsyncDisposable
 
 <PageTitle>Pulse - STOXX Index Intelligence</PageTitle>
@@ -120,10 +122,39 @@ else
                                         _tickerLookup.TryGetValue((idx, p.Symbol), out var ticker);
 
                                         <tr style="height: 56px;">
-                                            <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(p.Country)" style="font-size: 0.7rem;"></span></td>
+                                            <td style="padding: 0 2px;"><img src="logos/@(idx)/@(p.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
                                             <td>
-                                                <MudLink Href="@StockLink(idx, p.Symbol)">@p.Symbol</MudLink>
-                                                <div style="font-size: 0.65em; opacity: 0.35; max-width: 90px; overflow: hidden; text-overflow: ellipsis;">@p.ShortName</div>
+                                                @{ var si = _stockLookup.TryGetValue((idx, p.Symbol), out var _si) ? _si : null; }
+                                                <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
+                                                    <TooltipContent>
+                                                        <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
+                                                            @if (si is not null)
+                                                            {
+                                                                <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
+                                                                    <img src="logos/@(idx)/@(p.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
+                                                                    <strong>@(si.ShortName ?? p.Symbol)</strong>
+                                                                </div>
+                                                                @if (si.Country is not null || si.City is not null)
+                                                                {
+                                                                    <div style="opacity: 0.85;">
+                                                                        @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
+                                                                        @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
+                                                                    </div>
+                                                                }
+                                                            }
+                                                            else
+                                                            {
+                                                                <strong>@p.Symbol</strong>
+                                                            }
+                                                        </div>
+                                                    </TooltipContent>
+                                                    <ChildContent>
+                                                        <div>
+                                                            <MudLink Href="@StockLink(idx, p.Symbol)">@p.Symbol</MudLink>
+                                                            <div style="font-size: 0.65em; opacity: 0.35; max-width: 90px; overflow: hidden; text-overflow: ellipsis;">@p.ShortName</div>
+                                                        </div>
+                                                    </ChildContent>
+                                                </MudTooltip>
                                             </td>
                                             <td style="text-align: right; font-weight: 600; font-size: 0.75rem;">@($"{currency}{p.CurrentPrice:N2}")</td>
                                             <td style="text-align: right; color: @ChgColor(p.PriceChangePct); font-size: 0.7rem;">
@@ -199,6 +230,7 @@ else
     // Data
     private Dictionary<string, List<PulseSnapshot>> _pulseByIndex = new();
     private Dictionary<(string, string), PulseTicker> _tickerLookup = new();
+    private Dictionary<(string, string), StockInfo> _stockLookup = new();
 
     // Fixed index order
     private static readonly string[] _indices =
@@ -209,7 +241,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         _loading = true;
-        await LoadAllData();
+        var stocksTask = StockRepo.GetStocksAsync();
+        await Task.WhenAll(LoadAllData(), stocksTask);
+        _stockLookup = (await stocksTask).ToDictionary(s => (s.Index, s.Symbol));
         _loading = false;
 
         _refreshCts = new CancellationTokenSource();
@@ -329,27 +363,6 @@ else
         _ => key
     };
 
-    private static readonly Dictionary<string, string> CountryCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Germany"] = "DE", ["France"] = "FR", ["Netherlands"] = "NL",
-        ["Spain"] = "ES", ["Italy"] = "IT", ["Belgium"] = "BE",
-        ["Finland"] = "FI", ["Ireland"] = "IE", ["Austria"] = "AT",
-        ["Luxembourg"] = "LU", ["Portugal"] = "PT", ["Greece"] = "GR",
-        ["United States"] = "US",
-        ["Japan"] = "JP", ["China"] = "CN", ["South Korea"] = "KR",
-        ["Australia"] = "AU", ["Hong Kong"] = "HK", ["Taiwan"] = "TW",
-        ["India"] = "IN", ["Singapore"] = "SG", ["Thailand"] = "TH",
-        ["Indonesia"] = "ID", ["Malaysia"] = "MY", ["Philippines"] = "PH",
-        ["United Kingdom"] = "GB", ["Switzerland"] = "CH", ["Sweden"] = "SE",
-        ["Denmark"] = "DK", ["Norway"] = "NO", ["New Zealand"] = "NZ",
-    };
-
-    private static string CountryFlagCode(string? country)
-    {
-        if (country is null || !CountryCodes.TryGetValue(country, out var code))
-            return "";
-        return code.ToLowerInvariant();
-    }
 
     private static string CurrencySymbol(string index) => index switch
     {

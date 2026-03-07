@@ -12,6 +12,7 @@
 @inject IJSRuntime JS
 @inject IndexSelectionState IdxState
 @inject NavigationManager Nav
+@inject CountryFlags Flags
 @implements IAsyncDisposable
 
 <PageTitle>Stocks - STOXX Index Intelligence</PageTitle>
@@ -49,20 +50,47 @@ else
                 <MudPaper Class="pa-3 mb-3" Elevation="2" Style="min-width: 0; overflow: hidden;">
                     <div class="d-flex align-center flex-wrap" style="gap: 12px;">
                         <!-- Stock identity -->
-                        <div style="flex-shrink: 0;">
-                            <div class="d-flex align-center" style="gap: 8px;">
-                                <MudText Typo="Typo.h5" Style="font-weight: 600;">@_selectedStock.Symbol</MudText>
-                                @if (_selectedStock.Country is not null)
-                                {
-                                    <MudChip T="string" Size="Size.Small"><span class="fi fi-@CountryFlagCode(_selectedStock.Country)" style="margin-right: 4px;"></span> @_selectedStock.Country</MudChip>
-                                }
-                            </div>
-                            <MudText Typo="Typo.body2" Style="opacity: 0.6;">@_selectedStock.ShortName</MudText>
-                            @if (_selectedStock.Sector is not null || _selectedStock.Industry is not null)
-                            {
-                                <MudText Typo="Typo.caption" Style="opacity: 0.35;">@(_selectedStock.Sector ?? "")@(_selectedStock.Industry is not null ? $": {_selectedStock.Industry}" : "")</MudText>
-                            }
-                        </div>
+                        <MudTooltip Arrow="true" Placement="Placement.Bottom" Color="Color.Dark">
+                            <TooltipContent>
+                                <div style="max-width: 360px; font-size: 0.8rem; line-height: 1.5; padding: 4px 0; text-align: left;">
+                                    <div style="margin-bottom: 6px;">
+                                        <strong>@_selectedStock.ShortName</strong>
+                                    </div>
+                                    @if (_selectedStock.Country is not null || _selectedStock.City is not null)
+                                    {
+                                        <div style="margin-bottom: 6px; opacity: 0.85;">
+                                            @if (_selectedStock.Country is not null)
+                                            {
+                                                <span class="fi fi-@Flags.GetCode(_selectedStock.Country)" style="margin-right: 4px;"></span>
+                                            }
+                                            @(_selectedStock.City is not null ? $"{_selectedStock.City}, " : "")@(_selectedStock.Country ?? "")
+                                        </div>
+                                    }
+                                    @if (_selectedStock.LongBusinessSummary is not null)
+                                    {
+                                        <div style="opacity: 0.7; white-space: normal;">@_selectedStock.LongBusinessSummary</div>
+                                    }
+                                </div>
+                            </TooltipContent>
+                            <ChildContent>
+                                <div style="flex-shrink: 0; cursor: help;">
+                                    <div class="d-flex align-center" style="gap: 10px;">
+                                        <img src="logos/@(_selectedStock.Index)/@(_selectedStock.Symbol).png"
+                                             alt="@_selectedStock.Symbol"
+                                             style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,0.1);"
+                                             onerror="this.style.display='none'" />
+                                        <div>
+                                            <MudText Typo="Typo.h5" Style="font-weight: 600;">@_selectedStock.Symbol</MudText>
+                                            <MudText Typo="Typo.body2" Style="opacity: 0.6;">@_selectedStock.ShortName</MudText>
+                                        </div>
+                                    </div>
+                                    @if (_selectedStock.Sector is not null || _selectedStock.Industry is not null)
+                                    {
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.35;">@(_selectedStock.Sector ?? "")@(_selectedStock.Industry is not null ? $": {_selectedStock.Industry}" : "")</MudText>
+                                    }
+                                </div>
+                            </ChildContent>
+                        </MudTooltip>
 
                         <!-- Price numbers fill remaining space -->
                         @if (_latestCandle is not null)
@@ -533,7 +561,7 @@ else
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="#" Style="font-size: 0.8em;">@(_mcapRank.GetValueOrDefault((_filterIndex ?? "", context.Symbol)))</MudTd>
-                            <MudTd Style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(context.Country)"></span></MudTd>
+                            <MudTd Style="padding: 0 2px;"><img src="logos/@(context.Index)/@(context.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></MudTd>
                             <MudTd DataLabel="Name">
                                 <span style="font-weight: 600; font-size: 0.8rem;">@context.Symbol</span>
                                 <div style="font-size: 0.7em; opacity: 0.5; max-width: 110px; overflow: hidden; text-overflow: ellipsis;">@context.ShortName</div>
@@ -1387,27 +1415,6 @@ else
 
     // --- Helpers ---
 
-    private static readonly Dictionary<string, string> CountryCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Germany"] = "DE", ["France"] = "FR", ["Netherlands"] = "NL",
-        ["Spain"] = "ES", ["Italy"] = "IT", ["Belgium"] = "BE",
-        ["Finland"] = "FI", ["Ireland"] = "IE", ["Austria"] = "AT",
-        ["Luxembourg"] = "LU", ["Portugal"] = "PT", ["Greece"] = "GR",
-        ["United States"] = "US",
-        ["Japan"] = "JP", ["China"] = "CN", ["South Korea"] = "KR",
-        ["Australia"] = "AU", ["Hong Kong"] = "HK", ["Taiwan"] = "TW",
-        ["India"] = "IN", ["Singapore"] = "SG", ["Thailand"] = "TH",
-        ["Indonesia"] = "ID", ["Malaysia"] = "MY", ["Philippines"] = "PH",
-        ["United Kingdom"] = "GB", ["Switzerland"] = "CH", ["Sweden"] = "SE",
-        ["Denmark"] = "DK", ["Norway"] = "NO", ["New Zealand"] = "NZ",
-    };
-
-    private static string CountryFlagCode(string? country)
-    {
-        if (country is null || !CountryCodes.TryGetValue(country, out var code))
-            return "";
-        return code.ToLowerInvariant();
-    }
 
     private static long ToUnix(DateTime dt) =>
         new DateTimeOffset(dt, TimeSpan.Zero).ToUnixTimeSeconds();

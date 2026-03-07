@@ -13,7 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.db import get_connection
 
 DDL_DIR = Path(__file__).resolve().parent / "ddl"
+SEED_DIR = Path(__file__).resolve().parent / "seed"
 SCRIPTS = ["bronze_schema.sql", "silver_schema.sql", "gold_schema.sql"]
+SEED_SCRIPTS = ["countries.sql"]
 
 
 def _run_script(cursor, script_path):
@@ -57,9 +59,12 @@ def run_ddl():
     for script_name in SCRIPTS:
         _run_script(cursor, DDL_DIR / script_name)
 
+    for script_name in SEED_SCRIPTS:
+        _run_script(cursor, SEED_DIR / script_name)
+
     cursor.close()
     conn.close()
-    print("All DDL scripts executed successfully.")
+    print("All DDL and seed scripts executed successfully.")
 
 
 if __name__ == "__main__":

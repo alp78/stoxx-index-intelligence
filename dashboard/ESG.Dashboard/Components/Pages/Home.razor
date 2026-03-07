@@ -10,6 +10,7 @@
 @inject StockRepository StockRepo
 @inject IJSRuntime JS
 @inject IndexSelectionState IdxState
+@inject CountryFlags Flags
 @implements IAsyncDisposable
 @using LightweightCharts.Blazor.Charts
 @using LightweightCharts.Blazor.Customization
@@ -311,8 +312,35 @@ else
                                 {
                                     <tr>
                                         <td>@s.MomentumRank</td>
-                                        <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
-                                        <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                        <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                        <td>
+                                            @{ var si = LookupStock(s.Index, s.Symbol); }
+                                            <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
+                                                <TooltipContent>
+                                                    <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
+                                                        @if (si is not null)
+                                                        {
+                                                            <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
+                                                                <img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
+                                                                <strong>@(si.ShortName ?? s.Symbol)</strong>
+                                                            </div>
+                                                            @if (si.Country is not null || si.City is not null)
+                                                            {
+                                                                <div style="opacity: 0.85;">
+                                                                    @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
+                                                                    @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <strong>@s.Symbol</strong>
+                                                        }
+                                                    </div>
+                                                </TooltipContent>
+                                                <ChildContent><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                            </MudTooltip>
+                                        </td>
                                         <td>@F(s.MomentumScore)</td>
                                         <td><span class="score-bar" style="width: @ScoreBarWidth(s.MomentumScore, TopMomentum.Select(x => x.MomentumScore)); background: #26A69A;"></span></td>
                                     </tr>
@@ -356,8 +384,35 @@ else
                                     @foreach (var s in DivergenceAlerts)
                                     {
                                         <tr>
-                                            <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
-                                            <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                            <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                            <td>
+                                            @{ var si = LookupStock(s.Index, s.Symbol); }
+                                            <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
+                                                <TooltipContent>
+                                                    <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
+                                                        @if (si is not null)
+                                                        {
+                                                            <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
+                                                                <img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
+                                                                <strong>@(si.ShortName ?? s.Symbol)</strong>
+                                                            </div>
+                                                            @if (si.Country is not null || si.City is not null)
+                                                            {
+                                                                <div style="opacity: 0.85;">
+                                                                    @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
+                                                                    @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <strong>@s.Symbol</strong>
+                                                        }
+                                                    </div>
+                                                </TooltipContent>
+                                                <ChildContent><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                            </MudTooltip>
+                                        </td>
                                             <td>
                                                 <span style="color: #EF5350; font-size: 0.75rem; font-weight: 600;">&#9660;</span>
                                                 <span style="color: #26A69A; font-size: 0.75rem; font-weight: 600;">&#9650;</span>
@@ -407,8 +462,35 @@ else
                                 {
                                     <tr>
                                         <td>@s.RelativeValueRank</td>
-                                        <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
-                                        <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                        <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                        <td>
+                                            @{ var si = LookupStock(s.Index, s.Symbol); }
+                                            <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
+                                                <TooltipContent>
+                                                    <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
+                                                        @if (si is not null)
+                                                        {
+                                                            <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
+                                                                <img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
+                                                                <strong>@(si.ShortName ?? s.Symbol)</strong>
+                                                            </div>
+                                                            @if (si.Country is not null || si.City is not null)
+                                                            {
+                                                                <div style="opacity: 0.85;">
+                                                                    @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
+                                                                    @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <strong>@s.Symbol</strong>
+                                                        }
+                                                    </div>
+                                                </TooltipContent>
+                                                <ChildContent><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                            </MudTooltip>
+                                        </td>
                                         <td>@F(s.RelativeValueScore)</td>
                                         <td><span class="score-bar" style="width: @ScoreBarWidth(s.RelativeValueScore, TopValue.Select(x => x.RelativeValueScore)); background: #42A5F5;"></span></td>
                                     </tr>
@@ -450,8 +532,35 @@ else
                                 {
                                     <tr>
                                         <td>@s.SentimentRank</td>
-                                        <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(s.Country)"></span></td>
-                                        <td><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></td>
+                                        <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                        <td>
+                                            @{ var si = LookupStock(s.Index, s.Symbol); }
+                                            <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
+                                                <TooltipContent>
+                                                    <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
+                                                        @if (si is not null)
+                                                        {
+                                                            <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
+                                                                <img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
+                                                                <strong>@(si.ShortName ?? s.Symbol)</strong>
+                                                            </div>
+                                                            @if (si.Country is not null || si.City is not null)
+                                                            {
+                                                                <div style="opacity: 0.85;">
+                                                                    @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
+                                                                    @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <strong>@s.Symbol</strong>
+                                                        }
+                                                    </div>
+                                                </TooltipContent>
+                                                <ChildContent><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                            </MudTooltip>
+                                        </td>
                                         <td style="color: @ReturnHex(s.ImpliedUpside);">@Pct(s.ImpliedUpside)</td>
                                         <td><span class="upside-bar" style="width: @UpsideBarWidth(s.ImpliedUpside, TopSentiment.Select(x => x.ImpliedUpside)); background: @(s.ImpliedUpside >= 0 ? "#26A69A" : "#EF5350");"></span></td>
                                         <td>@F(s.SentimentScore)</td>
@@ -499,8 +608,35 @@ else
                             {
                                 <tr>
                                     <td>@s.QualityRank</td>
-                                    <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(QuarterlyCountry(s))"></span></td>
-                                    <td><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></td>
+                                    <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                    <td>
+                                            @{ var si = LookupStock(s.Index, s.Symbol); }
+                                            <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
+                                                <TooltipContent>
+                                                    <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
+                                                        @if (si is not null)
+                                                        {
+                                                            <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
+                                                                <img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
+                                                                <strong>@(si.ShortName ?? s.Symbol)</strong>
+                                                            </div>
+                                                            @if (si.Country is not null || si.City is not null)
+                                                            {
+                                                                <div style="opacity: 0.85;">
+                                                                    @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
+                                                                    @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <strong>@s.Symbol</strong>
+                                                        }
+                                                    </div>
+                                                </TooltipContent>
+                                                <ChildContent><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                            </MudTooltip>
+                                        </td>
                                     <td>@F(s.QualityScore)</td>
                                     <td><span class="score-bar" style="width: @ScoreBarWidth(s.QualityScore, TopQuality.Select(x => x.QualityScore)); background: #26A69A;"></span></td>
                                 </tr>
@@ -550,8 +686,35 @@ else
                                 @foreach (var s in HealthWarnings)
                                 {
                                     <tr>
-                                        <td style="padding: 0 2px;"><span class="fi fi-@CountryFlagCode(QuarterlyCountry(s))"></span></td>
-                                        <td><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></td>
+                                        <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                        <td>
+                                            @{ var si = LookupStock(s.Index, s.Symbol); }
+                                            <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
+                                                <TooltipContent>
+                                                    <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
+                                                        @if (si is not null)
+                                                        {
+                                                            <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
+                                                                <img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
+                                                                <strong>@(si.ShortName ?? s.Symbol)</strong>
+                                                            </div>
+                                                            @if (si.Country is not null || si.City is not null)
+                                                            {
+                                                                <div style="opacity: 0.85;">
+                                                                    @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
+                                                                    @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <strong>@s.Symbol</strong>
+                                                        }
+                                                    </div>
+                                                </TooltipContent>
+                                                <ChildContent><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                            </MudTooltip>
+                                        </td>
                                         <td>
                                             <span class="flag-dot" style="background: @(s.FlagLiquidity == true ? "#42A5F5" : "#333");"></span>
                                             <span class="flag-dot" style="background: @(s.FlagLeverage == true ? "#FFA726" : "#333");"></span>
@@ -650,6 +813,7 @@ else
     private string _selectedSignalIndex = null!;
     private List<ScoreDaily> _daily = [];
     private List<ScoreQuarterly> _quarterly = [];
+    private Dictionary<(string Index, string Symbol), StockInfo> _stockLookup = new();
 
     // ── Chart.js (radar factor profile, donut composition) ──────────
     // Init returns false if the canvas isn't in the DOM yet; _chartInitRetries caps retry attempts.
@@ -745,12 +909,14 @@ else
         var dailyTask = ScoresRepo.GetDailyScoresAsync();
         var quarterlyTask = ScoresRepo.GetQuarterlyScoresAsync();
         var keysTask = StockRepo.GetIndexKeysAsync();
+        var stocksTask = StockRepo.GetStocksAsync();
 
-        await Task.WhenAll(snapshotsTask, perfTask, dailyTask, quarterlyTask, keysTask);
+        await Task.WhenAll(snapshotsTask, perfTask, dailyTask, quarterlyTask, keysTask, stocksTask);
 
         _snapshots = (await snapshotsTask).ToList();
         _daily = (await dailyTask).ToList();
         _quarterly = (await quarterlyTask).ToList();
+        _stockLookup = (await stocksTask).ToDictionary(s => (s.Index, s.Symbol));
 
         var keys = (await keysTask).ToList();
         _selectedSignalIndex = keys.Contains(IdxState.SelectedIndex)
@@ -1654,30 +1820,10 @@ else
     private static string Pct(double? v) => v.HasValue ? $"{v.Value:P1}" : "--";
     private static string StockLink(ScoreDaily s) => $"/stocks/{s.Index}/{s.Symbol}";
     private static string QuarterlyStockLink(ScoreQuarterly s) => $"/stocks/{s.Index}/{s.Symbol}";
+    private StockInfo? LookupStock(string index, string symbol) =>
+        _stockLookup.TryGetValue((index, symbol), out var si) ? si : null;
     private static string TruncSector(string? s) => s is null ? "--" :
         s.Length > 15 ? s[..12] + "..." : s;
-    // Country flags
-    private static readonly Dictionary<string, string> CountryCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Germany"] = "DE", ["France"] = "FR", ["Netherlands"] = "NL",
-        ["Spain"] = "ES", ["Italy"] = "IT", ["Belgium"] = "BE",
-        ["Finland"] = "FI", ["Ireland"] = "IE", ["Austria"] = "AT",
-        ["Luxembourg"] = "LU", ["Portugal"] = "PT", ["Greece"] = "GR",
-        ["United States"] = "US",
-        ["Japan"] = "JP", ["China"] = "CN", ["South Korea"] = "KR",
-        ["Australia"] = "AU", ["Hong Kong"] = "HK", ["Taiwan"] = "TW",
-        ["India"] = "IN", ["Singapore"] = "SG", ["Thailand"] = "TH",
-        ["Indonesia"] = "ID", ["Malaysia"] = "MY", ["Philippines"] = "PH",
-        ["United Kingdom"] = "GB", ["Switzerland"] = "CH", ["Sweden"] = "SE",
-        ["Denmark"] = "DK", ["Norway"] = "NO", ["New Zealand"] = "NZ",
-    };
-
-    private static string CountryFlagCode(string? country)
-    {
-        if (country is null || !CountryCodes.TryGetValue(country, out var code))
-            return "";
-        return code.ToLowerInvariant();
-    }
 
     private string QuarterlyCountry(ScoreQuarterly q) =>
         _daily.FirstOrDefault(d => d.Index == q.Index && d.Symbol == q.Symbol)?.Country ?? "";

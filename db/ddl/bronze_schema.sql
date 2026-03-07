@@ -287,5 +287,16 @@ CREATE INDEX IX_bronze_trading_calendar_exchange
     ON bronze.trading_calendar (exchange_code, is_trading_day, date);
 GO
 
+-- ============================================================================
+-- 9. Country Dimension (reference data — ISO 3166-1 alpha-2 codes)
+-- ============================================================================
+IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+               WHERE s.name = 'bronze' AND t.name = 'dim_country')
+CREATE TABLE bronze.dim_country (
+    country_name            NVARCHAR(100)   NOT NULL PRIMARY KEY,
+    iso_alpha2              CHAR(2)         NOT NULL
+);
+GO
+
 PRINT 'Bronze layer created successfully.';
 GO
