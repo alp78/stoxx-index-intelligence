@@ -95,6 +95,16 @@ def _skip(key, reason):
 
 
 # ---------------------------------------------------------------------------
+# Step 0: Purge removed symbols
+# ---------------------------------------------------------------------------
+
+def step_00_purge_removed_symbols():
+    """Delete data for symbols removed from definition files."""
+    from transforms.purge_removed_symbols import run
+    run()
+
+
+# ---------------------------------------------------------------------------
 # Steps 1-3: OHLCV  (smart fetch -> load -> transform + trim)
 # ---------------------------------------------------------------------------
 
@@ -300,6 +310,7 @@ def step_16_transform_index_performance():
 # ---------------------------------------------------------------------------
 
 STEPS = [
+    (0,  "purge_removed_symbols",      step_00_purge_removed_symbols),
     (1,  "fetch_ohlcv",                step_01_fetch_ohlcv),
     (2,  "load_ohlcv",                 step_02_load_ohlcv),
     (3,  "transform_ohlcv",            step_03_transform_ohlcv),

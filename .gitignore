@@ -8,9 +8,9 @@ __pycache__/
 # .NET build artifacts
 bin/
 obj/
-
 # Terraform
 infra/.terraform/
 infra/*.tfstate*
 infra/*.tfvars
-!infra/*.tfvars.example"docs/logos/" 
+!infra/*.tfvars.example
+docs/logos/
