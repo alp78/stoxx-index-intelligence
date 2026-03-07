@@ -29,6 +29,12 @@ public class CountryFlags
                 _codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var (name, code) in rows)
                     _codes[name] = code.ToLowerInvariant();
+                Console.WriteLine($"[CountryFlags] Loaded {_codes.Count} country codes");
+                if (_codes.Count > 0)
+                {
+                    var sample = _codes.First();
+                    Console.WriteLine($"[CountryFlags] Sample: '{sample.Key}' -> '{sample.Value}'");
+                }
             }
             catch (Exception ex)
             {
