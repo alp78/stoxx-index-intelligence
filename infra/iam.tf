@@ -20,26 +20,14 @@ resource "google_service_account" "airflow" {
 # IAM bindings
 # --------------------------------------------------------------------------
 
-# Pipeline: access secrets + Cloud SQL
-resource "google_project_iam_member" "pipeline_sql" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.pipeline.email}"
-}
-
+# Pipeline: access secrets
 resource "google_secret_manager_secret_iam_member" "pipeline_secret" {
   secret_id = google_secret_manager_secret.db_password.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.pipeline.email}"
 }
 
-# Dashboard: access secrets + Cloud SQL
-resource "google_project_iam_member" "dashboard_sql" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.dashboard.email}"
-}
-
+# Dashboard: access secrets
 resource "google_secret_manager_secret_iam_member" "dashboard_secret" {
   secret_id = google_secret_manager_secret.db_password.id
   role      = "roles/secretmanager.secretAccessor"

@@ -14,25 +14,39 @@ resource "google_compute_subnetwork" "main" {
 }
 
 # --------------------------------------------------------------------------
-# Private service access (Cloud SQL private IP via VPC peering)
+# Cloud NAT — allows VMs without public IPs to reach the internet
 # --------------------------------------------------------------------------
-resource "google_compute_global_address" "private_ip_range" {
-  name          = "stoxx-private-ip"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 16
-  network       = google_compute_network.main.id
+resource "google_compute_router" "main" {
+  name    = "stoxx-router"
+  region  = var.region
+  network = google_compute_network.main.id
 }
 
-resource "google_service_networking_connection" "private_vpc" {
-  network                 = google_compute_network.main.id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
+resource "google_compute_router_nat" "main" {
+  name                               = "stoxx-nat"
+  router                             = google_compute_router.main.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
 # --------------------------------------------------------------------------
 # Firewall rules
 # --------------------------------------------------------------------------
+resource "google_compute_firewall" "allow_sql" {
+  name    = "stoxx-allow-sql"
+  network = google_compute_network.main.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["1433"]
+  }
+
+  # Allow Cloud Run + Airflow (same subnet) to reach SQL Server VM
+  source_ranges = ["10.0.0.0/24"]
+  target_tags   = ["sql"]
+}
+
 resource "google_compute_firewall" "allow_airflow_ui" {
   name    = "stoxx-allow-airflow"
   network = google_compute_network.main.name
@@ -42,8 +56,11 @@ resource "google_compute_firewall" "allow_airflow_ui" {
     ports    = ["8080"]
   }
 
-  # Restrict to IAP source range only
-  source_ranges = ["35.235.240.0/20"]
+  # IAP range + optional admin IP (from tfvars, not committed)
+  source_ranges = compact(concat(
+    ["35.235.240.0/20"],
+    var.admin_ip != "" ? ["${var.admin_ip}/32"] : []
+  ))
   target_tags   = ["airflow"]
 }
 
@@ -72,7 +89,7 @@ resource "google_compute_firewall" "allow_iap" {
 
   # IAP tunnel source range
   source_ranges = ["35.235.240.0/20"]
-  target_tags   = ["airflow"]
+  target_tags   = ["airflow", "sql"]
 }
 
 resource "google_compute_firewall" "deny_all_ingress" {

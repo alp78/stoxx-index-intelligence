@@ -20,15 +20,15 @@ variable "zone" {
 }
 
 variable "db_password" {
-  description = "Cloud SQL admin password"
+  description = "SQL Server SA password"
   type        = string
   sensitive   = true
 }
 
-variable "db_tier" {
-  description = "Cloud SQL machine type (minimum for SQL Server: db-custom-1-3840)"
+variable "admin_ip" {
+  description = "Admin public IPv4 for Airflow UI access (e.g. 1.2.3.4)"
   type        = string
-  default     = "db-custom-1-3840"
+  default     = ""
 }
 
 variable "dd_api_key" {

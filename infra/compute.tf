@@ -41,3 +41,45 @@ resource "google_compute_instance" "airflow" {
 
   allow_stopping_for_update = true
 }
+
+# --------------------------------------------------------------------------
+# SQL Server VM (replaces Cloud SQL managed instance)
+# --------------------------------------------------------------------------
+resource "google_compute_instance" "sql" {
+  name         = "stoxx-sql"
+  machine_type = "e2-medium"
+  zone         = var.zone
+  tags         = ["sql"]
+
+  boot_disk {
+    initialize_params {
+      image = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
+      size  = 30
+      type  = "pd-ssd"
+    }
+  }
+
+  network_interface {
+    subnetwork = google_compute_subnetwork.main.id
+    # No public IP — access via IAP tunnel only
+  }
+
+  service_account {
+    email  = google_service_account.pipeline.email
+    scopes = ["cloud-platform"]
+  }
+
+  metadata = {
+    startup-script = replace(file("${path.module}/scripts/sql-startup.sh"), "\r\n", "\n")
+    sa-password    = var.db_password
+    enable-oslogin = "TRUE"
+  }
+
+  shielded_instance_config {
+    enable_secure_boot          = true
+    enable_vtpm                 = true
+    enable_integrity_monitoring = true
+  }
+
+  allow_stopping_for_update = true
+}

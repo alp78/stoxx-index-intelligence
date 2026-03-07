@@ -4,6 +4,8 @@
 
 locals {
   registry = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.stoxx.repository_id}"
+  sql_ip   = google_compute_instance.sql.network_interface[0].network_ip
+  sql_user = "sa"
 }
 
 # --------------------------------------------------------------------------
@@ -42,10 +44,9 @@ resource "google_cloud_run_v2_service" "dashboard" {
         failure_threshold     = 3
       }
 
-      # TODO: move full connection string (with password) to Secret Manager
       env {
         name  = "ConnectionStrings__stoxx"
-        value = "Server=${google_sql_database_instance.main.private_ip_address},1433;Database=stoxx;User Id=sqlserver;Password=${var.db_password};TrustServerCertificate=true"
+        value = "Server=${local.sql_ip},1433;Database=stoxx;User Id=${local.sql_user};Password=${var.db_password};TrustServerCertificate=true"
       }
 
       resources {
@@ -65,7 +66,7 @@ resource "google_cloud_run_v2_service" "dashboard" {
     }
   }
 
-  depends_on = [google_sql_database.stoxx]
+  depends_on = [google_compute_instance.sql]
 }
 
 # Public access (no auth required for dashboard)
@@ -97,7 +98,7 @@ resource "google_cloud_run_v2_job" "pipeline" {
 
         env {
           name  = "SQL_HOST"
-          value = google_sql_database_instance.main.private_ip_address
+          value = local.sql_ip
         }
         env {
           name  = "SQL_PORT"
@@ -109,7 +110,7 @@ resource "google_cloud_run_v2_job" "pipeline" {
         }
         env {
           name  = "SQL_USER"
-          value = "sqlserver"
+          value = local.sql_user
         }
         env {
           name = "SA_PASSWORD"
@@ -164,7 +165,7 @@ resource "google_cloud_run_v2_job" "pipeline" {
     }
   }
 
-  depends_on = [google_sql_database.stoxx]
+  depends_on = [google_compute_instance.sql]
 }
 
 # Cloud Run Job for initial setup (run once)
@@ -187,7 +188,7 @@ resource "google_cloud_run_v2_job" "setup" {
 
         env {
           name  = "SQL_HOST"
-          value = google_sql_database_instance.main.private_ip_address
+          value = local.sql_ip
         }
         env {
           name  = "SQL_PORT"
@@ -199,7 +200,7 @@ resource "google_cloud_run_v2_job" "setup" {
         }
         env {
           name  = "SQL_USER"
-          value = "sqlserver"
+          value = local.sql_user
         }
         env {
           name = "SA_PASSWORD"
@@ -229,5 +230,5 @@ resource "google_cloud_run_v2_job" "setup" {
     }
   }
 
-  depends_on = [google_sql_database.stoxx]
+  depends_on = [google_compute_instance.sql]
 }
