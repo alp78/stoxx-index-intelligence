@@ -220,7 +220,14 @@ def _export_db_dims(key):
     skip = {"id", "_index", "_ingested_at"}
     records = []
     for row in rows:
-        record = {col: val for col, val in zip(columns, row) if col not in skip and val is not None}
+        record = {}
+        for col, val in zip(columns, row):
+            if col in skip or val is None:
+                continue
+            # Convert date/datetime to ISO string for JSON serialization
+            if hasattr(val, "isoformat"):
+                val = val.isoformat()
+            record[col] = val
         records.append(record)
 
     return records
