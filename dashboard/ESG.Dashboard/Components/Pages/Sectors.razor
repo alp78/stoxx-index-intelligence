@@ -1,0 +1,168 @@
+@* ───────────────────────────────────────────────────────────────────
+   Sectors — treemap heatmap of index constituents grouped by sector.
+   Each tile is proportional to market cap, colored by daily change %,
+   and features the company logo.
+   ─────────────────────────────────────────────────────────────────── *@
+@page "/sectors"
+@rendermode InteractiveServer
+@inject ScoresRepository ScoresRepo
+@inject StockRepository StockRepo
+@inject IndexSelectionState IdxState
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Sector Heatmap — STOXX Index Intelligence</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <div class="d-flex align-center mb-3" style="gap: 12px;">
+        <MudSelect T="string" Value="_selectedIndex" ValueChanged="OnIndexChanged"
+                   Variant="Variant.Outlined" Dense="true" Style="max-width: 300px;" Margin="Margin.Dense">
+            @foreach (var idx in _indexKeys)
+            {
+                <MudSelectItem Value="@idx">@FormatIndexName(idx)</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSelect T="string" Value="_colorMetric" ValueChanged="OnMetricChanged"
+                   Variant="Variant.Outlined" Dense="true" Style="max-width: 200px;" Margin="Margin.Dense"
+                   Label="Color by">
+            <MudSelectItem Value="@("day")">Day Change</MudSelectItem>
+            <MudSelectItem Value="@("5d")">5-Day Change</MudSelectItem>
+            <MudSelectItem Value="@("ytd")">YTD Change</MudSelectItem>
+        </MudSelect>
+
+        <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem; margin-left: auto;">
+            @{ var idx = _scores.Where(s => s.Index == _selectedIndex).ToList(); }
+            @if (idx.Any()) { @($"Updated {idx.First().ScoreDate:yyyy-MM-dd} · {idx.Count} stocks") }
+        </MudText>
+    </div>
+
+    <div id="treemapContainer" style="width: 100%; height: calc(100vh - 160px); min-height: 500px;"></div>
+}
+
+@code {
+    private bool _loading = true;
+    private string _selectedIndex = null!;
+    private string _colorMetric = "day";
+    private string[] _indexKeys = [];
+    private List<ScoreDaily> _scores = new();
+    private IJSObjectReference? _jsModule;
+    private bool _treemapReady;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var keysTask = StockRepo.GetIndexKeysAsync();
+        var scoresTask = ScoresRepo.GetDailyScoresAsync();
+        await Task.WhenAll(keysTask, scoresTask);
+
+        _indexKeys = (await keysTask).ToArray();
+        _scores = (await scoresTask).ToList();
+        _selectedIndex = IdxState.SelectedIndex ?? _indexKeys.FirstOrDefault() ?? "euro_stoxx_50";
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed) return;
+        if (firstRender)
+        {
+            _jsModule = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./Components/Pages/Sectors.razor.js");
+        }
+        if (_jsModule is not null && !_treemapReady && _scores.Any())
+        {
+            await InitTreemap();
+        }
+    }
+
+    private async Task OnIndexChanged(string newIndex)
+    {
+        _selectedIndex = newIndex;
+        IdxState.SelectedIndex = newIndex;
+        if (_treemapReady) await UpdateTreemap();
+    }
+
+    private async Task OnMetricChanged(string metric)
+    {
+        _colorMetric = metric;
+        if (_treemapReady) await UpdateTreemap();
+    }
+
+    private async Task InitTreemap()
+    {
+        if (_jsModule is null) return;
+        var data = BuildTreemapData();
+        await _jsModule.InvokeVoidAsync("initTreemap", "treemapContainer", data);
+        _treemapReady = true;
+    }
+
+    private async Task UpdateTreemap()
+    {
+        if (_jsModule is null || !_treemapReady) return;
+        var data = BuildTreemapData();
+        await _jsModule.InvokeVoidAsync("updateTreemap", data);
+    }
+
+    private object BuildTreemapData()
+    {
+        var indexScores = _scores
+            .Where(s => s.Index == _selectedIndex && s.Sector is not null && s.MarketCap > 0)
+            .ToList();
+
+        var sectors = indexScores
+            .GroupBy(s => s.Sector!)
+            .OrderByDescending(g => g.Sum(s => s.MarketCap ?? 0))
+            .Select(g => new
+            {
+                sector = g.Key,
+                totalCap = g.Sum(s => s.MarketCap ?? 0),
+                stocks = g.OrderByDescending(s => s.MarketCap ?? 0)
+                    .Select(s => new
+                    {
+                        symbol = s.Symbol,
+                        name = s.ShortName ?? s.Symbol,
+                        cap = s.MarketCap ?? 0,
+                        change = GetChangeValue(s),
+                        logo = $"logos/{_selectedIndex}/{s.Symbol}.png"
+                    }).ToArray()
+            }).ToArray();
+
+        return new { sectors, index = _selectedIndex };
+    }
+
+    private double GetChangeValue(ScoreDaily s) => _colorMetric switch
+    {
+        "5d" => s.FiveDayChangePct ?? 0,
+        "ytd" => s.YtdChangePct ?? 0,
+        _ => s.DayChangePct ?? 0
+    };
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        _disposed = true;
+        if (_jsModule is not null)
+        {
+            try
+            {
+                if (_treemapReady)
+                    await _jsModule.InvokeVoidAsync("destroyTreemap");
+            }
+            catch { }
+            await _jsModule.DisposeAsync();
+        }
+    }
+
+    private static string FormatIndexName(string key) => key switch
+    {
+        "euro_stoxx_50" => "Euro STOXX 50",
+        "stoxx_usa_50" => "STOXX USA 50",
+        "stoxx_asia_50" => "STOXX Asia/Pacific 50",
+        _ => key.Replace("_", " ").ToUpperInvariant()
+    };
+}

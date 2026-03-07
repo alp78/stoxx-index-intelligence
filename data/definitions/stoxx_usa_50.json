@@ -1,12 +1,12 @@
 {
     "name": "Stoxx USA 50",
     "symbols": [
-        "NVDA", "AAPL", "GOOGL", "GOOG", "MSFT", "AMZN", "META", "AVGO",
+        "NVDA", "AAPL", "GOOGL", "MSFT", "AMZN", "META", "AVGO",
         "TSLA", "BRK-B", "WMT", "LLY", "JPM", "XOM", "V", "JNJ", "MU",
         "MA", "COST", "ORCL", "ABBV", "NFLX", "PG", "HD", "CVX", "BAC",
         "GE", "KO", "CAT", "PLTR", "AMD", "CSCO", "MRK", "AMAT", "LRCX",
         "PM", "RTX", "UNH", "MS", "GS", "WFC", "MCD", "TMUS", "LIN",
-        "PEP", "INTC", "IBM", "AXP", "VZ"
+        "PEP", "INTC", "IBM", "AXP", "VZ", "CRM", "UBER"
     ],
     "history_start": "2021-01-01"
 }

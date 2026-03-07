@@ -13,4 +13,4 @@ obj/
 infra/.terraform/
 infra/*.tfstate*
 infra/*.tfvars
-!infra/*.tfvars.example
+!infra/*.tfvars.example"docs/logos/" 
