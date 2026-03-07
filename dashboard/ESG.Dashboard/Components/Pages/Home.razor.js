@@ -387,10 +387,7 @@ function _donutShowStockLabels(sectorIdx) {
                 const logoPath = _donutLogoPaths[i] || '';
                 const compName = _donutStockNames[i] || '';
                 const wPct = realW !== undefined ? realW.toFixed(1) + '%' : '';
-                const chg = _donutDayChangePcts[i] || 0;
-                const chgTxt = (chg > 0 ? '+' : '') + chg.toFixed(2) + '%';
-                const chgKey = chg > 0 ? 'chgUp' : chg < 0 ? 'chgDn' : 'wt';
-                const line1 = (logoPath ? '{logo|} ' : '') + '{sym|' + sym + '} {wt|' + wPct + '} {' + chgKey + '|' + chgTxt + '}';
+                const line1 = (logoPath ? '{logo|} ' : '') + '{sym|' + sym + '} {wt|' + wPct + '}';
                 const line2 = compName ? '\n{name|' + compName + '}' : '';
                 return {
                     show: true,
@@ -415,22 +412,6 @@ function _donutShowStockLabels(sectorIdx) {
                             fontSize: 9,
                             fontFamily: 'Inter, sans-serif',
                             color: '#A0AEC0',
-                            verticalAlign: 'middle',
-                            lineHeight: 18
-                        },
-                        chgUp: {
-                            fontSize: 9,
-                            fontWeight: 600,
-                            fontFamily: 'Inter, sans-serif',
-                            color: '#66BB6A',
-                            verticalAlign: 'middle',
-                            lineHeight: 18
-                        },
-                        chgDn: {
-                            fontSize: 9,
-                            fontWeight: 600,
-                            fontFamily: 'Inter, sans-serif',
-                            color: '#EF5350',
                             verticalAlign: 'middle',
                             lineHeight: 18
                         },
