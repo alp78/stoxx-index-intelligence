@@ -22,11 +22,19 @@ public class CountryFlags
         {
             if (_codes is not null) return;
             using var conn = _db.Create();
-            var rows = await conn.QueryAsync<(string country_name, string iso_alpha2)>(
-                "SELECT country_name, iso_alpha2 FROM bronze.dim_country");
-            _codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var (name, code) in rows)
-                _codes[name] = code.ToLowerInvariant();
+            try
+            {
+                var rows = await conn.QueryAsync<(string country_name, string iso_alpha2)>(
+                    "SELECT country_name, iso_alpha2 FROM bronze.dim_country");
+                _codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (name, code) in rows)
+                    _codes[name] = code.ToLowerInvariant();
+            }
+            catch
+            {
+                // Table may not exist yet (e.g. first deploy before seed runs) — start with empty cache
+                _codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
         }
         finally
         {
