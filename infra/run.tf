@@ -14,9 +14,11 @@ resource "google_cloud_run_v2_service" "dashboard" {
   location            = var.region
   deletion_protection = false
 
+  # Blazor Server requires sticky sessions — WebSocket circuits are instance-bound
   template {
-    service_account = google_service_account.dashboard.email
-    timeout         = "3600s"
+    session_affinity = true
+    service_account  = google_service_account.dashboard.email
+    timeout          = "3600s"
 
     scaling {
       min_instance_count = 1
