@@ -95,12 +95,12 @@ def _skip(key, reason):
 
 
 # ---------------------------------------------------------------------------
-# Step 0: Purge removed symbols
+# Step 0: Sync definitions (add new symbols, purge removed ones)
 # ---------------------------------------------------------------------------
 
-def step_00_purge_removed_symbols():
-    """Delete data for symbols removed from definition files."""
-    from transforms.purge_removed_symbols import run
+def step_00_sync_definitions():
+    """Sync definitions with dim JSONs and DB: fetch new symbols, purge removed ones."""
+    from transforms.sync_definitions import run
     run()
 
 
@@ -310,7 +310,7 @@ def step_16_transform_index_performance():
 # ---------------------------------------------------------------------------
 
 STEPS = [
-    (0,  "purge_removed_symbols",      step_00_purge_removed_symbols),
+    (0,  "sync_definitions",            step_00_sync_definitions),
     (1,  "fetch_ohlcv",                step_01_fetch_ohlcv),
     (2,  "load_ohlcv",                 step_02_load_ohlcv),
     (3,  "transform_ohlcv",            step_03_transform_ohlcv),
