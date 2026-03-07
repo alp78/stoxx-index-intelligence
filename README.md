@@ -1,6 +1,6 @@
 # STOXX Index Intelligence
 
-A cloud-native data platform that tracks the **Euro STOXX 50**, **STOXX Asia/Pacific 50** and **STOXX USA 50** equity indices. Market data is fetched via [yfinance](https://github.com/ranaroussi/yfinance), transformed through a three-layer medallion database (SQL Server on Cloud SQL), and surfaced in an interactive Blazor/C# dashboard running on Cloud Run. A Python pipeline handles ingestion and scoring, orchestrated by Apache Airflow on a GCE VM. All components are containerized with Docker: the pipeline and dashboard are built as images, pushed to Artifact Registry, and deployed to Cloud Run via GitHub Actions. Locally, `docker-compose` runs the full stack including a SQL Server instance for development. Infrastructure is provisioned with Terraform, and Datadog provides end-to-end observability across metrics, logs and APM traces.
+A cloud-native data platform that tracks the **Euro STOXX 50**, **STOXX Asia/Pacific 50** and **STOXX USA 50** equity indices. Market data is fetched via [yfinance](https://github.com/ranaroussi/yfinance), transformed through a three-layer medallion database (SQL Server on a self-hosted GCE VM), and surfaced in an interactive Blazor/C# dashboard running on Cloud Run. A Python pipeline handles ingestion and scoring, orchestrated by Apache Airflow on a GCE VM. All components are containerized with Docker: the pipeline and dashboard are built as images, pushed to Artifact Registry, and deployed to Cloud Run via GitHub Actions. Locally, `docker-compose` runs the full stack including a SQL Server instance for development. Infrastructure is provisioned with Terraform, and Datadog provides end-to-end observability across metrics, logs and APM traces.
 
 ---
 
@@ -12,14 +12,14 @@ The platform is composed of four main subsystems:
 |-------|-----------|------|
 | **Ingestion & Transform** | Python 3.12, pandas, pyodbc | Fetch market data, load into SQL, compute scores |
 | **Orchestration** | Apache Airflow on GCE | Schedule and trigger pipeline runs |
-| **Database** | SQL Server 2022 (Cloud SQL) | Store raw, cleaned and analytics-ready data |
+| **Database** | SQL Server 2022 on GCE VM | Store raw, cleaned and analytics-ready data |
 | **Dashboard** | Blazor Server (.NET 9), C# | Interactive UI with real-time updates via SignalR |
 
 Supporting infrastructure:
 
 | Concern | Technology | Role |
 |---------|-----------|------|
-| **Cloud** | GCP (europe-west1) | Compute, networking, managed SQL |
+| **Cloud** | GCP (europe-west1) | Compute, networking, self-hosted SQL |
 | **IaC** | Terraform | Provision and manage all GCP resources |
 | **CI/CD** | GitHub Actions + Cloud Build | Build Docker images, deploy to Cloud Run |
 | **Observability** | Datadog Agent 7, ddtrace | APM traces, metrics, structured logs |
@@ -40,8 +40,6 @@ Data flows through a **medallion architecture** with three layers:
 
 **Gold** is where analytics happen. Daily scores rank each stock on relative value (z-scored PE, PB, EV/EBITDA), momentum (RSI, moving average crossovers) and sentiment (analyst target upside). Quarterly scores cover quality (margins, ROE, free cash flow), financial health (leverage, liquidity, cash burn) and governance (ISS risk scores). Index performance aggregates cap-weighted returns with rolling windows.
 
-> **Medallion vs star schema** The data volume is moderate (hundreds of stocks, daily granularity) and the access patterns are simple: the dashboard reads pre-computed scores by date and symbol. Wide tables avoid the join complexity of fact/dimension models and keep queries fast and straightforward. A star schema would make sense at higher cardinality or with ad-hoc reporting needs, but for this use case, flat gold tables are the pragmatic choice.
-
 The pipeline runs in **16 ordered steps**, from fetching raw data to computing gold-layer scores. Airflow triggers the full sequence three times daily (after Asian, European and US market closes), with lighter jobs running hourly (active ticker discovery) and every five minutes (real-time pulse snapshots).
 
 For the full schema reference, transform logic and table-by-table documentation:
@@ -52,25 +50,11 @@ For the full schema reference, transform logic and table-by-table documentation:
 
 ## Dashboard
 
-The web dashboard is a Blazor Server application running on Cloud Run. It reads exclusively from the gold layer and presents four main views:
+The web dashboard is a Blazor Server application running on Cloud Run. It reads exclusively from the gold layer and presents three main views:
 
-### Overview
-
-Index-level performance cards, sector heatmaps, top and bottom movers. Designed for a quick scan across all three regions.
-
-![Dashboard Overview](docs/images/blazor_dashboard_overview.png)
-
-### Stock explorer
-
-Drill into any stock: daily and quarterly scores, price charts, fundamental metrics, health flags. Compare across sectors with z-score distributions.
-
-![Stock Explorer](docs/images/blazor_dashboard_stocks.png)
-
-### Pulse (live)
-
-Real-time board showing the most active stocks across all indices, updated every five minutes via SignalR WebSockets. Volume surges, price ranges, and intraday quotes.
-
-![Pulse Board](docs/images/blazor_dashboard_puls.png)
+- **Overview** — Index-level performance cards, sector heatmaps, top and bottom movers. Designed for a quick scan across all three regions.
+- **Stock explorer** — Drill into any stock: daily and quarterly scores, price charts, fundamental metrics, health flags. Compare across sectors with z-score distributions.
+- **Pulse (live)** — Real-time board showing the most active stocks across all indices, updated every five minutes via SignalR WebSockets. Volume surges, price ranges, and intraday quotes.
 
 > **C#/Blazor vs React/JS** Blazor Server renders on the backend and pushes UI diffs over a WebSocket. This eliminates the need for a separate API layer: the dashboard queries SQL directly through Entity Framework repositories. For a data-heavy, read-mostly application with a small number of concurrent users, this approach reduces complexity significantly. The trade-off is that it requires a persistent connection per user, which would not scale to thousands of simultaneous sessions. For this use case, it is perfectly acceptable. The .NET ecosystem also provides strong typing end-to-end, from SQL models to Razor components, which catches data contract issues at compile time rather than at runtime.
 
@@ -96,7 +80,7 @@ All DAGs use `CloudRunExecuteJobOperator` to trigger the pipeline as a Cloud Run
 
 ![Daily DAG Graph](docs/images/daily_dag.png)
 
-The `stoxx_daily` DAG decomposes the pipeline into 5 task groups, each spawning its own Cloud Run job execution. Independent groups run in parallel while downstream tasks wait for their dependencies. Pulse steps (10–13) are excluded here as they are handled by dedicated DAGs (`stoxx_tickers` and `stoxx_pulse`).
+The `stoxx_daily` DAG decomposes the pipeline into 5 task groups, each spawning its own Cloud Run job execution. Independent groups run in parallel while downstream tasks wait for their dependencies. Pulse steps (10-13) are excluded here as they are handled by dedicated DAGs (`stoxx_tickers` and `stoxx_pulse`).
 
 | Task | Steps | Depends on |
 |------|-------|------------|
@@ -118,18 +102,11 @@ This granularity provides per-group visibility in the Airflow UI, allows individ
 
 Observability is handled by Datadog with three pillars:
 
-**Metrics** are collected by the Datadog Agent running as a container on the Airflow VM. CPU, memory, disk, and container-level metrics flow into Datadog Infrastructure. A GCP integration (via a dedicated service account) pulls Cloud SQL and Cloud Run metrics.
+**Metrics** are collected by the Datadog Agent running as a container on the Airflow VM. CPU, memory, disk, and container-level metrics flow into Datadog Infrastructure. A GCP integration (via a dedicated service account) pulls Cloud Run metrics.
 
 **Logs** are collected via Docker socket autodiscovery. The pipeline emits JSON-formatted logs with trace correlation IDs, making it possible to jump from a log line directly to the APM trace that produced it.
 
 **Traces** are instrumented with `ddtrace`. Each of the 16 pipeline steps is a span, and SQL queries within each step are automatically traced. Cloud Run jobs send APM data to the Datadog Agent on the VM through a VPC firewall rule (port 8126).
-
-| | |
-|---|---|
-| ![Datadog Hosts](docs/images/datadog_hosts.png) | ![Datadog Traces](docs/images/datadog_traces.png) |
-| Infrastructure monitoring | APM traces with per-step spans |
-
-![Datadog Logs](docs/images/datadog_logs.png)
 
 The entire Datadog integration is opt-in. Setting `dd_api_key = ""` in Terraform disables all observability resources in a single apply.
 
@@ -151,7 +128,7 @@ Cloud Run performs rolling updates: new instances are spun up before old ones ar
 
 ![GitHub Actions](docs/images/github_actions.png)
 
-Infrastructure is managed separately through Terraform. The `infra/` directory contains ~25 resources covering networking, compute, database, IAM, and secrets. Infrastructure changes are applied manually (`terraform apply`), not through CI, to maintain explicit control over production resources.
+Infrastructure is managed separately through Terraform. The `infra/` directory contains ~25 resources covering networking, compute, IAM, and secrets. Infrastructure changes are applied manually (`terraform apply`), not through CI, to maintain explicit control over production resources.
 
 **[Terraform Guide](docs/guides/terraform.md)**
 
@@ -161,19 +138,19 @@ Infrastructure is managed separately through Terraform. The `infra/` directory c
 
 ### Network isolation
 
-All data-plane traffic stays inside a VPC. Cloud SQL exposes only a private IP (`ipv4_enabled = false`) reachable through VPC peering. Cloud Run services and jobs connect to the database via a VPC connector with egress restricted to `PRIVATE_RANGES_ONLY`, so no database traffic ever traverses the public internet.
+All data-plane traffic stays inside a VPC. The SQL Server VM has no public IP and is reachable only from within the VPC subnet (`10.0.0.0/24`). Cloud Run services and jobs connect to the database through direct VPC networking with egress restricted to `PRIVATE_RANGES_ONLY`, so no database traffic ever traverses the public internet.
 
-Firewall rules follow a deny-all-except model. The only internal rule allows APM trace traffic on port 8126 from the VPC CIDR (`10.0.0.0/24`) to the Datadog Agent on the Airflow VM. SSH and Airflow UI access are restricted by network tags, and IAP tunnel access is scoped to Google's IAP IP range (`35.235.240.0/20`).
+Firewall rules follow a deny-all-except model. Internal rules allow SQL traffic on port 1433 and APM trace traffic on port 8126 from the VPC CIDR to the respective VMs. SSH access is restricted to IAP tunnel traffic (`35.235.240.0/20`). Airflow UI access can be granted to a specific admin IP via a Terraform variable (`admin_ip` in gitignored `terraform.tfvars`).
 
 The dashboard is the only public-facing surface. It runs on Cloud Run behind Google's managed load balancer with TLS termination, and serves read-only data from the gold layer. There is no write path from the dashboard to the database.
 
 ### Secrets management
 
-Database credentials are stored in **GCP Secret Manager** (`stoxx-db-password`) with automatic multi-region replication. Cloud Run services access the password at runtime through IAM-bound environment variable injection — only the `stoxx-pipeline` and `stoxx-dashboard` service accounts hold the `secretmanager.secretAccessor` role.
+Database credentials are stored in **GCP Secret Manager** (`stoxx-db-password`) with automatic multi-region replication. The Cloud Run pipeline job accesses the password at runtime through secret environment variable injection — only the `stoxx-pipeline` service account holds the `secretmanager.secretAccessor` role for this secret. The dashboard receives the connection string (including password) as a plain environment variable set via Terraform, scoped to its own service account.
 
 CI/CD authentication uses a dedicated `stoxx-ci` service account whose JSON key is stored as a GitHub Actions secret (`GCP_SA_KEY`). This account has only the minimum roles needed: `artifactregistry.writer` to push images and `run.developer` to update deployments. It cannot access the database, secrets, or networking resources.
 
-The Datadog API key is passed to the Airflow VM through GCP instance metadata attributes, retrieved at startup via the metadata server. The entire Datadog integration is opt-in: setting `dd_api_key = ""` in Terraform removes all observability resources.
+The Datadog API key is stored in Secret Manager and injected into the pipeline Cloud Run job as a secret environment variable. The Airflow VM receives it through GCP instance metadata attributes, retrieved at startup via the metadata server. The entire Datadog integration is opt-in: setting `dd_api_key = ""` in Terraform removes all observability resources.
 
 ### IAM & least privilege
 
@@ -181,8 +158,8 @@ Each workload runs under its own service account with scoped roles:
 
 | Service account | Roles | Purpose |
 |----------------|-------|---------|
-| `stoxx-pipeline` | `cloudsql.client`, `secretmanager.secretAccessor` | Pipeline DB access |
-| `stoxx-dashboard` | `cloudsql.client`, `secretmanager.secretAccessor` | Dashboard DB access |
+| `stoxx-pipeline` | `secretmanager.secretAccessor` | Pipeline DB + Datadog secret access |
+| `stoxx-dashboard` | `secretmanager.secretAccessor` | Dashboard DB secret access |
 | `stoxx-airflow` | `run.invoker`, `run.developer`, `logging.viewer` | Trigger Cloud Run jobs |
 | `stoxx-ci` | `artifactregistry.writer`, `run.developer`, `iam.serviceAccountUser` | CI/CD deployments |
 | `stoxx-datadog` | `monitoring.viewer`, `compute.viewer`, `cloudasset.viewer` | Read-only GCP metrics |
@@ -197,7 +174,7 @@ No service account has `editor` or `owner` roles. The CI account can assume pipe
 
 Every loader and transform is designed to be safely rerunnable. The pipeline uses three idempotency strategies depending on the data characteristics:
 
-**Merge on composite key** — OHLCV prices check for existing `(symbol, date)` pairs before inserting. Duplicate runs skip already-loaded rows. Commits happen in batches of 5,000–10,000 rows to bound memory usage while maintaining throughput.
+**Merge on composite key** — OHLCV prices check for existing `(symbol, date)` pairs before inserting. Duplicate runs skip already-loaded rows. Commits happen in batches of 5,000-10,000 rows to bound memory usage while maintaining throughput.
 
 **Truncate-per-index and reload** — Volatile data like daily signals and pulse snapshots delete all rows for a given index, then insert the fresh snapshot in a single transaction. This guarantees the table always reflects the latest fetch without partial state.
 
@@ -209,7 +186,7 @@ All database operations run inside explicit transactions with `autocommit=False`
 
 ```
 try:
-    execute operations (batched commits every 5k–10k rows)
+    execute operations (batched commits every 5k-10k rows)
     conn.commit()
 except Exception:
     conn.rollback()
@@ -220,7 +197,7 @@ Long-running transforms use periodic commits to avoid holding locks across milli
 
 ### Resilience & recovery
 
-Cloud SQL runs automated backups daily at 03:00 UTC on a stable maintenance window (Sunday 04:00 UTC). The pipeline job is configured with `max_retries = 1` at the Cloud Run level, so a transient failure (OOM, network blip) triggers an automatic retry of the entire job. At the application level, per-index errors are caught and logged without stopping the pipeline — a failed index is skipped and the remaining indices continue. Subsequent scheduled runs recover naturally because every step is idempotent.
+The SQL Server VM runs on a GCE persistent SSD with daily snapshots for backup. The pipeline job is configured with `max_retries = 1` at the Cloud Run level, so a transient failure (OOM, network blip) triggers an automatic retry of the entire job. At the application level, per-index errors are caught and logged without stopping the pipeline — a failed index is skipped and the remaining indices continue. Subsequent scheduled runs recover naturally because every step is idempotent.
 
 > **Why not savepoints and two-phase commits** The data volume is moderate and the pipeline runs frequently (three times daily). If a transform fails, the cost of re-running the entire step from bronze is low — typically under a minute. Adding savepoint complexity for sub-transaction recovery is not worth it when idempotent re-execution achieves the same result with simpler code.
 
@@ -232,12 +209,11 @@ Running in GCP europe-west1:
 
 | Resource | Monthly cost |
 |----------|-------------|
-| Cloud SQL (SQL Server Express) | ~$55 |
-| GCE VM (e2-medium) | ~$25 |
-| Persistent disk (20 GB) | ~$2 |
+| GCE VM — SQL Server (e2-medium, 30 GB SSD) | ~$25 |
+| GCE VM — Airflow (e2-medium, 20 GB) | ~$25 |
 | Cloud Run + Artifact Registry | ~$1-5 |
 | Datadog (optional, after trial) | ~$50-80 |
-| **Total** | **~$85-165/month** |
+| **Total** | **~$50-130/month** |
 
 ---
 
@@ -257,10 +233,10 @@ airflow/dags/          Airflow DAG definitions
 dashboard/             Blazor Server application (.NET 9 / C#)
 data/definitions/      Index configuration files (JSON)
 db/ddl/                Database schema scripts (bronze, silver, gold)
+db/migration/          DB migration scripts and guide
 docker/                Dockerfiles for pipeline and dashboard
 docs/guides/           Detailed technical guides
 docs/diagrams/         Architecture diagrams
-docs/images/           Screenshots
 infra/                 Terraform configuration
 ingestion/fetchers/    Data fetchers (yfinance API)
 ingestion/transforms/  SQL-based transforms (bronze -> silver -> gold)
@@ -278,3 +254,4 @@ utils/                 Pipeline orchestrator, config, logging
 | [Airflow Setup](docs/guides/airflow.md) | VM configuration, DAG schedules, container architecture, debugging |
 | [Terraform Infrastructure](docs/guides/terraform.md) | GCP resources, networking, IAM, secrets, cost breakdown |
 | [Datadog Observability](docs/guides/datadog.md) | Agent setup, APM instrumentation, log correlation, GCP integration |
+| [DB Migration](db/migration/DB_Migration_Guide.md) | Cloud SQL to VM migration: 6-step guide with scripts and troubleshooting |
