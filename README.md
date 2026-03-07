@@ -126,8 +126,6 @@ Every push to `main` triggers a GitHub Actions workflow that:
 
 Cloud Run performs rolling updates: new instances are spun up before old ones are drained. There is no downtime during deployments.
 
-![GitHub Actions](docs/images/github_actions.png)
-
 Infrastructure is managed separately through Terraform. The `infra/` directory contains ~25 resources covering networking, compute, IAM, and secrets. Infrastructure changes are applied manually (`terraform apply`), not through CI, to maintain explicit control over production resources.
 
 **[Terraform Guide](docs/guides/terraform.md)**
