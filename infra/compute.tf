@@ -72,6 +72,7 @@ resource "google_compute_instance" "sql" {
   metadata = {
     startup-script = replace(file("${path.module}/scripts/sql-startup.sh"), "\r\n", "\n")
     sa-password    = var.db_password
+    dd-api-key     = var.dd_api_key
     enable-oslogin = "TRUE"
   }
 
