@@ -664,7 +664,8 @@ function _donutShowTooltip(params, container) {
         tooltip.style.cssText = 'position:absolute;pointer-events:none;z-index:20;' +
             'background:rgba(26,26,46,0.95);border:1px solid rgba(255,255,255,0.08);' +
             'border-radius:6px;padding:8px 12px;font-family:Inter,sans-serif;' +
-            'font-size:11px;color:#A0AEC0;white-space:nowrap;transition:opacity 0.12s ease;opacity:0;';
+            'font-size:11px;color:#A0AEC0;white-space:nowrap;transition:opacity 0.12s ease;opacity:0;' +
+            'text-align:left;';
         container.style.position = 'relative';
         container.appendChild(tooltip);
     }
@@ -676,7 +677,8 @@ function _donutShowTooltip(params, container) {
     const value = (realW !== undefined ? realW.toFixed(2) : '0.00') + '%';
     const logoPath = _donutLogoPaths[i] || '';
     const countryCode = _donutCountryCodes[i] || '';
-    const change = _donutDayChangePcts[i] || 0;
+    const changeRaw = _donutDayChangePcts[i] || 0;
+    const change = changeRaw * 100;
     const changeTxt = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
     const changeColor = change >= 0 ? '#66BB6A' : '#EF5350';
     const logoImg = logoPath
