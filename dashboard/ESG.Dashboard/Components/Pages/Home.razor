@@ -234,16 +234,14 @@ else
                                 <div style="@_tipHead">Index Composition</div>
                                 <div style="@_tipDesc">Dual-ring donut showing how the index is constructed:</div>
                                 <ul style="@_tipList">
-                                    <li><b>Outer ring</b> &mdash; individual stock weights (cap-weighted)</li>
-                                    <li><b>Inner ring</b> &mdash; sector allocation (aggregated weights)</li>
+                                    <li><b>Inner ring</b> &mdash; individual stock weights (cap-weighted)</li>
+                                    <li><b>Outer ring</b> &mdash; sector allocation (aggregated weights)</li>
                                 </ul>
-                                <div style="@_tipNote">Hover over a segment to see the stock or sector name and its weight in the center.</div>
+                                <div style="@_tipNote">Hover any segment for details including daily change. Click a stock to open its detail page.</div>
                             </div>
                         </TooltipContent>
                     </MudTooltip>
-                    <div style="position: relative;">
-                        <canvas id="donutChart"></canvas>
-                    </div>
+                    <div id="donutChart" style="width:100%;height:100%;min-height:350px;"></div>
                 </MudPaper>
             </div>
         </MudItem>
@@ -1309,7 +1307,8 @@ else
     }
 
     private (string[] Labels, string[] Names, double[] DisplayWeights, double[] RealWeights, string[] Colors,
-             string[] SectorLabels, double[] SectorDisplayWeights, double[] SectorRealWeights, string[] SectorColors) ComputeDonutData()
+             string[] SectorLabels, double[] SectorDisplayWeights, double[] SectorRealWeights, string[] SectorColors,
+             double[] DayChangePcts, string[] CountryCodes, string[] LogoPaths, int[] StockSectorIndices) ComputeDonutData()
     {
         var stocks = _daily
             .Where(x => x.Index == _selectedSignalIndex && x.IndexWeight.HasValue && x.IndexWeight > 0)
@@ -1321,6 +1320,9 @@ else
         var realWeights = stocks.Select(s => s.IndexWeight!.Value * 100).ToArray();
         var displayWeights = NormalizeForDisplay(realWeights);
         var colors = GenerateStockColors(stocks.Count);
+        var dayChangePcts = stocks.Select(s => s.DayChangePct ?? 0).ToArray();
+        var countryCodes = stocks.Select(s => Flags.GetCode(s.Country)).ToArray();
+        var logoPaths = stocks.Select(s => $"logos/{s.Index}/{s.Symbol}.png").ToArray();
 
         var sectors = stocks
             .GroupBy(s => s.Sector ?? "Other")
@@ -1331,12 +1333,15 @@ else
         var sectorDisplayWeights = NormalizeForDisplay(sectorRealWeights);
         var sectorColors = sectorLabels.Select(s => _sectorColors.GetValueOrDefault(s, "#A0AEC0")).ToArray();
 
-        return (labels, names, displayWeights, realWeights, colors, sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors);
+        // Map each stock to its sector index in the sector dataset
+        var sectorIndexMap = sectorLabels.Select((s, i) => (s, i)).ToDictionary(x => x.s, x => x.i);
+        var stockSectorIndices = stocks.Select(s => sectorIndexMap.GetValueOrDefault(s.Sector ?? "Other", 0)).ToArray();
+
+        return (labels, names, displayWeights, realWeights, colors, sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors,
+                dayChangePcts, countryCodes, logoPaths, stockSectorIndices);
     }
 
     // Cube-root scaling for donut slices: without this, small-cap stocks are invisible slivers.
-    // cbrt compresses the range so a 0.1% weight still renders as a visible arc, while large
-    // weights stay dominant. Rescales so the total still sums to the original.
     private static double[] NormalizeForDisplay(double[] weights)
     {
         if (weights.Length == 0) return weights;
@@ -1349,7 +1354,6 @@ else
 
     private static string[] GenerateStockColors(int count)
     {
-        // Blue shades — wide range for good contrast between tiles
         var colors = new string[count];
         for (int i = 0; i < count; i++)
         {
@@ -1361,10 +1365,10 @@ else
 
     private static readonly Dictionary<string, string> _sectorColors = new()
     {
-        ["Technology"] = "#42A5F5", ["Healthcare"] = "#26A69A", ["Financial Services"] = "#FFA726",
+        ["Technology"] = "#26C6DA", ["Healthcare"] = "#26A69A", ["Financial Services"] = "#FFA726",
         ["Consumer Cyclical"] = "#AB47BC", ["Industrials"] = "#78909C", ["Communication Services"] = "#EF5350",
         ["Energy"] = "#8D6E63", ["Consumer Defensive"] = "#66BB6A", ["Utilities"] = "#FFCA28",
-        ["Real Estate"] = "#5C6BC0", ["Basic Materials"] = "#EC407A",
+        ["Real Estate"] = "#FF8A65", ["Basic Materials"] = "#EC407A",
     };
 
     // JS init returns false if the canvas element isn't found (not yet in DOM).
@@ -1385,19 +1389,25 @@ else
 
     private async Task InitDonutChart()
     {
-        var (labels, names, displayWeights, realWeights, colors, sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors) = ComputeDonutData();
+        var (labels, names, displayWeights, realWeights, colors,
+             sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors,
+             dayChangePcts, countryCodes, logoPaths, stockSectorIndices) = ComputeDonutData();
         var created = await _jsModule!.InvokeAsync<bool>("initDonutChart", "donutChart",
             labels, names, displayWeights, realWeights, colors,
-            sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors, _selectedSignalIndex);
+            sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors,
+            _selectedSignalIndex, dayChangePcts, countryCodes, logoPaths, stockSectorIndices);
         _donutReady = created;
     }
 
     private async Task UpdateDonutChart()
     {
-        var (labels, names, displayWeights, realWeights, colors, sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors) = ComputeDonutData();
+        var (labels, names, displayWeights, realWeights, colors,
+             sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors,
+             dayChangePcts, countryCodes, logoPaths, stockSectorIndices) = ComputeDonutData();
         await _jsModule!.InvokeVoidAsync("updateDonutChart",
             labels, names, displayWeights, realWeights, colors,
-            sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors, _selectedSignalIndex);
+            sectorLabels, sectorDisplayWeights, sectorRealWeights, sectorColors,
+            _selectedSignalIndex, dayChangePcts, countryCodes, logoPaths, stockSectorIndices);
     }
 
     // ── Batched line chart updates ──
