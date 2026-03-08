@@ -60,72 +60,33 @@ else
                 <MudSelectItem Value="@idx">@FormatIndexName(idx)</MudSelectItem>
             }
         </MudSelect>
+        @if (SelectedSnap != null)
+        {
+            <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem; margin-left: auto;">Updated @SelectedSnap.PerfDate.ToString("yyyy-MM-dd") &middot; @(SnapshotStockCount) stocks</MudText>
+        }
     </div>
 
-    <!-- Index snapshot strip — cap-weighted aggregate metrics (YTD, rolling returns, vol, valuation) -->
-    @if (SelectedSnap is not null)
-    {
-        <div class="mb-2">
-            <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                <ChildContent>
-                    <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">INDEX SNAPSHOT</MudText>
-                </ChildContent>
-                <TooltipContent>
-                    <div style="@_tipStyle">
-                        <div style="@_tipHead">Index Performance Snapshot</div>
-                        <div style="@_tipDesc">Cap-weighted aggregate metrics for the selected index:</div>
-                        <ul style="@_tipList">
-                            <li><b>YTD</b> &mdash; year-to-date cumulative return</li>
-                            <li><b>30d / 90d Ret</b> &mdash; rolling 30- and 90-day returns</li>
-                            <li><b>30d Vol</b> &mdash; 30-day annualized volatility</li>
-                            <li><b>PE / PB</b> &mdash; average price-to-earnings and price-to-book</li>
-                            <li><b>Yield</b> &mdash; average dividend yield</li>
-                        </ul>
-                    </div>
-                </TooltipContent>
-            </MudTooltip>
-            <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">Updated @SelectedSnap.PerfDate.ToString("yyyy-MM-dd") &middot; @_daily.Count(d => d.Index == _selectedSignalIndex) stocks</MudText>
-        </div>
-        <MudPaper Class="pa-2 px-3 mb-3" Elevation="1">
-            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; flex-wrap: wrap; gap: 4px 0;">
-                <span><span style="opacity: 0.4;">YTD</span> <span style="font-weight: 600; color: @ReturnHex(SelectedSnap.YtdReturn);">@FormatPct(SelectedSnap.YtdReturn)</span></span>
-                <span style="opacity: 0.3;">|</span>
-                <span><span style="opacity: 0.4;">30d Ret</span> <span style="font-weight: 600; color: @ReturnHex(SelectedSnap.Rolling30dReturn);">@FormatPct(SelectedSnap.Rolling30dReturn)</span></span>
-                <span style="opacity: 0.3;">|</span>
-                <span><span style="opacity: 0.4;">90d Ret</span> <span style="font-weight: 600; color: @ReturnHex(SelectedSnap.Rolling90dReturn);">@FormatPct(SelectedSnap.Rolling90dReturn)</span></span>
-                <span style="opacity: 0.3;">|</span>
-                <span><span style="opacity: 0.4;">30d Vol</span> <span style="font-weight: 600;">@FormatPct(SelectedSnap.Rolling30dVolatility)</span></span>
-                <span style="opacity: 0.3;">|</span>
-                <span><span style="opacity: 0.4;">PE</span> @FormatNum(SelectedSnap.AvgPe)</span>
-                <span style="opacity: 0.3;">|</span>
-                <span><span style="opacity: 0.4;">PB</span> @FormatNum(SelectedSnap.AvgPb)</span>
-                <span style="opacity: 0.3;">|</span>
-                <span><span style="opacity: 0.4;">Yield</span> @FormatPct(SelectedSnap.AvgDividendYield)</span>
-            </div>
-        </MudPaper>
-    }
-
-    <!-- Charts: 50/50 split — left: 3 LightweightCharts stacked, right: Chart.js radar + donut.
-         Left charts use LightweightCharts Blazor wrapper; right charts use vanilla Chart.js via JS module. -->
+    <!-- Charts: 50/50 split — left: 5 LightweightCharts stacked, right: snapshot + radar + donut.
+         Order: returns (cumulative → rolling → drawdown) then risk (volatility → Sharpe). -->
     <MudGrid Spacing="3" Class="mb-4" Style="align-items: stretch;">
         <MudItem xs="12" md="6" Style="display: flex; flex-direction: column;">
-            <!-- Rolling 30d Return — period buttons re-filter pre-loaded data, no DB call needed -->
+            <!-- 1. Synthetic portfolio return — cumulative return rebased to 0% at period start -->
             <MudPaper Class="pa-3 mb-3" Elevation="2">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                         <ChildContent>
-                            <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Rolling 30d Return (%)</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Synthetic portfolio return (%)</MudText>
                         </ChildContent>
                         <TooltipContent>
                             <div style="@_tipStyle">
-                                <div style="@_tipHead">Rolling 30-Day Return</div>
-                                <div style="@_tipDesc">Trailing 30-day cumulative return for each index, recalculated daily.</div>
+                                <div style="@_tipHead">Synthetic Portfolio Return</div>
+                                <div style="@_tipDesc">Cumulative return of an equal-weight portfolio holding all index constituents, rebased to 0% at period start.</div>
                                 <ul style="@_tipList">
-                                    <li>Rising lines signal recent strength</li>
-                                    <li>Divergence between indices highlights relative outperformance</li>
-                                    <li>Use period buttons to compare across different time horizons</li>
+                                    <li>Simulates a naive buy-and-hold across each universe</li>
+                                    <li>Positive slope = portfolio gaining value</li>
+                                    <li>Compare lines to see which region performed best</li>
                                 </ul>
-                                <div style="@_tipNote">Each line represents one index — compare slopes to spot rotation between regions.</div>
+                                <div style="@_tipNote">Equal-weighted &middot; price return &middot; daily rebalanced</div>
                             </div>
                         </TooltipContent>
                     </MudTooltip>
@@ -140,38 +101,63 @@ else
                         }
                     </MudButtonGroup>
                 </div>
-                <div @ref="_rollContainer" style="position: relative; height: 200px; overflow: hidden; background: #1E1E2D; opacity: @(_rollReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
-                    <ChartShell @ref="_rollShell" />
-                    <div class="chart-tooltip"></div>
-                </div>
-            </MudPaper>
-
-            <!-- Synthetic portfolio return — cumulative return rebased to 0% at period start -->
-            <MudPaper Class="pa-3 mb-3" Elevation="2">
-                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                    <ChildContent>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">Synthetic portfolio return (%)</MudText>
-                    </ChildContent>
-                    <TooltipContent>
-                        <div style="@_tipStyle">
-                            <div style="@_tipHead">Synthetic Portfolio Return</div>
-                            <div style="@_tipDesc">Cumulative return of an equal-weight portfolio holding all index constituents, rebased to 0% at period start.</div>
-                            <ul style="@_tipList">
-                                <li>Simulates a naive buy-and-hold across each universe</li>
-                                <li>Positive slope = portfolio gaining value</li>
-                                <li>Compare lines to see which region performed best</li>
-                            </ul>
-                        </div>
-                    </TooltipContent>
-                </MudTooltip>
-                <div @ref="_chartContainer" style="position: relative; height: 160px; overflow: hidden; background: #1E1E2D; opacity: @(_chartReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                <div @ref="_chartContainer" style="position: relative; height: 200px; overflow: hidden; background: #1E1E2D; opacity: @(_chartReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
                     <ChartShell @ref="_chartShell" />
                     <div class="chart-tooltip"></div>
                 </div>
             </MudPaper>
 
-            <!-- 30d Annualized Volatility — stddev * sqrt(252), color-banded thresholds in tooltip -->
-            <MudPaper Class="pa-3" Elevation="2" Style="flex: 1;">
+            <!-- 2. Rolling 30d Return — short-term momentum -->
+            <MudPaper Class="pa-3 mb-3" Elevation="2">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">Rolling 30d Return (%)</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Rolling 30-Day Return</div>
+                            <div style="@_tipDesc">Trailing 30-day cumulative return for each index, recalculated daily.</div>
+                            <ul style="@_tipList">
+                                <li>Rising lines signal recent strength</li>
+                                <li>Divergence between indices highlights relative outperformance</li>
+                                <li>Use period buttons to compare across different time horizons</li>
+                            </ul>
+                            <div style="@_tipNote">Each line represents one index — compare slopes to spot rotation between regions.</div>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <div @ref="_rollContainer" style="position: relative; height: 160px; overflow: hidden; background: #1E1E2D; opacity: @(_rollReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                    <ChartShell @ref="_rollShell" />
+                    <div class="chart-tooltip"></div>
+                </div>
+            </MudPaper>
+
+            <!-- 3. Drawdown from peak — always <= 0%, shows depth and duration of losses -->
+            <MudPaper Class="pa-3 mb-3" Elevation="2">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">Drawdown from peak (%)</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Drawdown from Peak</div>
+                            <div style="@_tipDesc">Percentage decline from the highest cumulative return to date. Always &le; 0%.</div>
+                            <ul style="@_tipList">
+                                <li>Depth: how far the portfolio fell from its peak</li>
+                                <li>Duration: how long until it recovered</li>
+                                <li>Deeper, longer drawdowns signal higher tail risk</li>
+                            </ul>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <div @ref="_ddContainer" style="position: relative; height: 140px; overflow: hidden; background: #1E1E2D; opacity: @(_ddReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                    <ChartShell @ref="_ddShell" />
+                    <div class="chart-tooltip"></div>
+                </div>
+            </MudPaper>
+
+            <!-- 4. 30d Annualized Volatility — stddev * sqrt(252), color-banded thresholds in tooltip -->
+            <MudPaper Class="pa-3 mb-3" Elevation="2">
                 <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                     <ChildContent>
                         <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">30d Annualized Volatility (%)</MudText>
@@ -194,13 +180,132 @@ else
                     <div class="chart-tooltip"></div>
                 </div>
             </MudPaper>
+
+            <!-- 5. Rolling Sharpe ratio — return per unit of risk (synthesis) -->
+            <MudPaper Class="pa-3" Elevation="2" Style="flex: 1;">
+                <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                    <ChildContent>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">Rolling 30d Sharpe ratio</MudText>
+                    </ChildContent>
+                    <TooltipContent>
+                        <div style="@_tipStyle">
+                            <div style="@_tipHead">Rolling 30-Day Sharpe Ratio</div>
+                            <div style="@_tipDesc">Return per unit of risk: rolling 30d return &divide; rolling 30d volatility.</div>
+                            <ul style="@_tipColorList">
+                                <li><span style="color: #26A69A;">&gt; 1.0</span> &mdash; strong risk-adjusted return</li>
+                                <li><span style="color: #FFA726;">0 – 1.0</span> &mdash; positive but modest</li>
+                                <li><span style="color: #EF5350;">&lt; 0</span> &mdash; negative return (losing money)</li>
+                            </ul>
+                        </div>
+                    </TooltipContent>
+                </MudTooltip>
+                <div @ref="_sharpeContainer" style="position: relative; height: 140px; overflow: hidden; background: #1E1E2D; opacity: @(_sharpeReady ? "1" : "0"); transition: opacity 0.15s ease-in;">
+                    <ChartShell @ref="_sharpeShell" />
+                    <div class="chart-tooltip"></div>
+                </div>
+            </MudPaper>
         </MudItem>
 
-        <!-- Right column: Radar + Donut — rendered via Chart.js, initialized with retry
-             because canvas elements may not be in the DOM on first OnAfterRenderAsync -->
+        <!-- Right column: Snapshot + Radar + Donut -->
         <MudItem xs="12" md="6" Style="display: flex; flex-direction: column;">
-            <div class="chart-split-col">
-                <MudPaper Class="pa-3 mb-3" Elevation="2">
+                <!-- Index snapshot — KPI tile grid -->
+                @if (SelectedSnap != null)
+                {
+                    <MudPaper Class="pa-3 mb-3" Elevation="2">
+                        <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2); margin-bottom: 8px;">Index Snapshot</MudText>
+                            </ChildContent>
+                            <TooltipContent>
+                                <div style="@_tipStyle">
+                                    <div style="@_tipHead">Index Snapshot</div>
+                                    <div style="@_tipDesc">Key metrics for the selected index, computed daily from constituent data:</div>
+                                    <div style="margin: 0; padding-left: 0; opacity: 0.85;">
+                                        <div style="margin-bottom: 6px;">
+                                            <b>YTD</b> &mdash; year-to-date equal-weight return
+                                            <div style="opacity: 0.6; padding-left: 10px;">
+                                                <div>&gt; <span style="color: #26A69A;">+10%</span> &mdash; strong</div>
+                                                <div>&lt; <span style="color: #EF5350;">&minus;10%</span> &mdash; drawdown</div>
+                                            </div>
+                                        </div>
+                                        <div style="margin-bottom: 6px;">
+                                            <b>30d / 90d Return</b> &mdash; rolling period returns
+                                            <div style="opacity: 0.6; padding-left: 10px;">
+                                                <div><span style="color: #26A69A;">30d &gt; 90d</span> &mdash; accelerating trend, recent momentum strengthening</div>
+                                                <div><span style="color: #EF5350;">30d &lt; 90d</span> &mdash; decelerating trend, recent momentum fading</div>
+                                                <div><span style="color: #26A69A;">Both positive</span>, 30d &gt; 90d &mdash; strong rally gaining steam</div>
+                                                <div><span style="color: #EF5350;">Both negative</span>, 30d &lt; 90d &mdash; deepening selloff</div>
+                                                <div><span style="color: #FFA726;">Mixed signs</span> &mdash; potential trend reversal</div>
+                                            </div>
+                                        </div>
+                                        <div style="margin-bottom: 6px;">
+                                            <b>30d Volatility</b> &mdash; annualized std dev of daily returns
+                                            <div style="opacity: 0.6; padding-left: 10px;">
+                                                <div>&lt; <span style="color: #26A69A;">15%</span> &mdash; calm</div>
+                                                <div><span style="color: #FFA726;">15&ndash;25%</span> &mdash; elevated</div>
+                                                <div>&gt; <span style="color: #EF5350;">25%</span> &mdash; high risk</div>
+                                            </div>
+                                        </div>
+                                        <div style="margin-bottom: 6px;">
+                                            <b>P/E</b> &mdash; average price-to-earnings
+                                            <div style="opacity: 0.6; padding-left: 10px;">
+                                                <div>&lt; <span style="color: #26A69A;">15</span> &mdash; cheap</div>
+                                                <div>&gt; <span style="color: #EF5350;">25</span> &mdash; expensive</div>
+                                            </div>
+                                        </div>
+                                        <div style="margin-bottom: 6px;">
+                                            <b>P/B</b> &mdash; average price-to-book
+                                            <div style="opacity: 0.6; padding-left: 10px;">
+                                                <div>&lt; <span style="color: #26A69A;">1.5</span> &mdash; value</div>
+                                                <div>&gt; <span style="color: #EF5350;">3</span> &mdash; growth premium</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <b>Dividend Yield</b> &mdash; average yield across constituents
+                                            <div style="opacity: 0.6; padding-left: 10px;">
+                                                <div>&gt; <span style="color: #26A69A;">3%</span> &mdash; attractive for income</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </TooltipContent>
+                        </MudTooltip>
+                        <div class="kpi-grid">
+                            <div class="kpi-tile">
+                                <span class="kpi-label">YTD</span>
+                                <span class="kpi-value" style="color: @ReturnHex(SelectedSnap.YtdReturn);">@ReturnArrow(SelectedSnap.YtdReturn)@FormatPct(SelectedSnap.YtdReturn)</span>
+                            </div>
+                            <div class="kpi-tile">
+                                <span class="kpi-label">30d Return</span>
+                                <span class="kpi-value" style="color: @ReturnHex(SelectedSnap.Rolling30dReturn);">@ReturnArrow(SelectedSnap.Rolling30dReturn)@FormatPct(SelectedSnap.Rolling30dReturn)</span>
+                            </div>
+                            <div class="kpi-tile">
+                                <span class="kpi-label">90d Return</span>
+                                <span class="kpi-value" style="color: @ReturnHex(SelectedSnap.Rolling90dReturn);">@ReturnArrow(SelectedSnap.Rolling90dReturn)@FormatPct(SelectedSnap.Rolling90dReturn)</span>
+                            </div>
+                            <div class="kpi-tile">
+                                <span class="kpi-label">30d Volatility</span>
+                                <span class="kpi-value">@FormatPct(SelectedSnap.Rolling30dVolatility)</span>
+                                <span class="kpi-bar">
+                                    <span class="kpi-bar-fill" style="width: @VolBarWidth(SelectedSnap.Rolling30dVolatility); background: @VolBarColor(SelectedSnap.Rolling30dVolatility);"></span>
+                                </span>
+                            </div>
+                            <div class="kpi-tile">
+                                <span class="kpi-label">P/E</span>
+                                <span class="kpi-value">@FormatNum(SelectedSnap.AvgPe)</span>
+                            </div>
+                            <div class="kpi-tile">
+                                <span class="kpi-label">P/B</span>
+                                <span class="kpi-value">@FormatNum(SelectedSnap.AvgPb)</span>
+                            </div>
+                            <div class="kpi-tile kpi-tile-wide">
+                                <span class="kpi-label">Dividend Yield</span>
+                                <span class="kpi-value" style="color: #26A69A;">@FormatYield(SelectedSnap.AvgDividendYield)</span>
+                            </div>
+                        </div>
+                    </MudPaper>
+                }
+                <MudPaper Class="pa-3 mb-3" Elevation="2" Style="flex: 1; display: flex; flex-direction: column;">
                     <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                         <ChildContent>
                             <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">Factor Profile</MudText>
@@ -224,7 +329,7 @@ else
                         <canvas id="radarChart"></canvas>
                     </div>
                 </MudPaper>
-                <MudPaper Class="pa-3" Elevation="2">
+                <MudPaper Class="pa-3" Elevation="2" Style="flex: 2; display: flex; flex-direction: column;">
                     <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                         <ChildContent>
                             <MudText Typo="Typo.caption" Style="opacity: 0.4; cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);" Class="mb-1">Index Composition</MudText>
@@ -241,21 +346,24 @@ else
                             </div>
                         </TooltipContent>
                     </MudTooltip>
-                    <div id="donutChart" style="width:100%;height:100%;min-height:350px;"></div>
+                    <div id="donutChart" style="width:100%;flex:1;min-height:300px;"></div>
                 </MudPaper>
-            </div>
         </MudItem>
     </MudGrid>
 
-    <!-- Signal tables: daily scores (2/3 width) and quarterly scores (1/3 width) -->
-    <MudGrid Style="margin-top: 12px;">
-        <!-- Daily Signals — refreshed daily from cross-sectional z-scores across index constituents -->
-        <MudItem xs="12" lg="8">
+    <!-- Signal tables: 3-column grid — daily (cols 1-2) + quarterly (col 3), rows aligned -->
+    <MudGrid Spacing="3" Style="margin-top: 12px; align-items: stretch;">
+        <!-- Section headers -->
+        <MudItem xs="12" md="8">
             <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 4px;">DAILY SIGNALS</MudText>
-            <MudGrid>
-                <!-- Row 1: Momentum + Divergence -->
-                <MudItem xs="12" md="6">
-                    <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 4px;">QUARTERLY SIGNALS</MudText>
+        </MudItem>
+
+        <!-- Row 1: Momentum | Divergence | Fundamentals -->
+        <MudItem xs="12" md="4" Style="display: flex;">
+                    <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
                             <div>
                                 <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
@@ -349,8 +457,8 @@ else
                     </MudPaper>
                 </MudItem>
 
-                <MudItem xs="12" md="6">
-                    <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <MudItem xs="12" md="4" Style="display: flex;">
+                    <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
                         <div class="mb-2">
                             <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                                 <ChildContent>
@@ -430,9 +538,9 @@ else
                     </MudPaper>
                 </MudItem>
 
-                <!-- Row 2: Value + Sentiment -->
-                <MudItem xs="12" md="6">
-                    <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <!-- Row 2: Value | Sentiment | Health Warnings -->
+                <MudItem xs="12" md="4" Style="display: flex;">
+                    <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
                         <div class="mb-2">
                             <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                                 <ChildContent>
@@ -499,8 +607,8 @@ else
                     </MudPaper>
                 </MudItem>
 
-                <MudItem xs="12" md="6">
-                    <MudPaper Class="pa-4" Elevation="2" Style="height: 100%;">
+                <MudItem xs="12" md="4" Style="display: flex;">
+                    <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
                         <div class="mb-2">
                             <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                                 <ChildContent>
@@ -569,15 +677,10 @@ else
                         </MudSimpleTable>
                     </MudPaper>
                 </MudItem>
-            </MudGrid>
-        </MudItem>
 
-        <!-- Quarterly Signals — updated with earnings; quality scores and health flags from balance sheet data -->
-        <MudItem xs="12" lg="4">
-            <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 4px;">QUARTERLY SIGNALS</MudText>
-            <div style="display: flex; flex-direction: column; gap: 16px;">
                 <!-- Strongest Fundamentals (Quality) -->
-                <MudPaper Class="pa-4" Elevation="2">
+                <MudItem xs="12" md="4" Style="display: flex;">
+                    <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
                     <div class="mb-2">
                         <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                             <ChildContent>
@@ -642,10 +745,12 @@ else
                             }
                         </tbody>
                     </MudSimpleTable>
-                </MudPaper>
+                    </MudPaper>
+                </MudItem>
 
                 <!-- Health Warnings -->
-                <MudPaper Class="pa-4" Elevation="2">
+                <MudItem xs="12" md="4" Style="display: flex;">
+                    <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
                     <div class="mb-2">
                         <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
                             <ChildContent>
@@ -736,9 +841,8 @@ else
                     {
                         <MudText Typo="Typo.body2" Style="opacity: 0.5;">No warnings</MudText>
                     }
-                </MudPaper>
-            </div>
-        </MudItem>
+                    </MudPaper>
+                </MudItem>
     </MudGrid>
 }
 
@@ -800,13 +904,35 @@ else
     private object? _volTimeScaleRef;
     private bool _volReady;
 
+    // Drawdown chart (% from peak)
+    private ChartShell? _ddShell;
+    private ChartComponent? _ddRef => _ddShell?.Chart;
+    private ElementReference _ddContainer;
+    private object? _ddJsRef;
+    private object? _ddSeriesRef;
+    private object? _ddTimeScaleRef;
+    private bool _ddReady;
+
+    // Rolling Sharpe ratio chart
+    private ChartShell? _sharpeShell;
+    private ChartComponent? _sharpeRef => _sharpeShell?.Chart;
+    private ElementReference _sharpeContainer;
+    private object? _sharpeJsRef;
+    private object? _sharpeSeriesRef;
+    private object? _sharpeTimeScaleRef;
+    private bool _sharpeReady;
+
     // Tooltip state
     private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _tsLookup = new();
     private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _rollLookup = new();
     private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _volLookup = new();
+    private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _ddLookup = new();
+    private Dictionary<long, (DateTime Date, Dictionary<string, double> Values)> _sharpeLookup = new();
     private long? _lastHoverTime;
     private long? _rollLastHover;
     private long? _volLastHover;
+    private long? _ddLastHover;
+    private long? _sharpeLastHover;
 
     // ── Signals (daily + quarterly scores) ──────────────────────────
     private string _selectedSignalIndex = null!;
@@ -843,6 +969,7 @@ else
     ];
 
     private IndexPerformance? SelectedSnap => _snapshots.FirstOrDefault(s => s.Index == _selectedSignalIndex);
+    private int SnapshotStockCount => _daily.Count(d => d.Index == _selectedSignalIndex);
 
     private string DailyAsOf => _daily
         .Where(d => d.Index == _selectedSignalIndex)
@@ -987,6 +1114,8 @@ else
             if (!_chartReady && _chartRef is not null) lineChartsToInit.Add((_chartRef, "chart"));
             if (!_rollReady && _rollRef is not null) lineChartsToInit.Add((_rollRef, "roll"));
             if (!_volReady && _volRef is not null) lineChartsToInit.Add((_volRef, "vol"));
+            if (!_ddReady && _ddRef is not null) lineChartsToInit.Add((_ddRef, "dd"));
+            if (!_sharpeReady && _sharpeRef is not null) lineChartsToInit.Add((_sharpeRef, "sharpe"));
 
             // Other charts init in parallel via wrapper (momentum uses 5 series, can't batch easily)
             var otherTasks = new List<Task>();
@@ -1051,6 +1180,8 @@ else
                 case "chart": chart.CrosshairMoved += OnMainCrosshair; break;
                 case "roll": chart.CrosshairMoved += OnRollCrosshair; break;
                 case "vol": chart.CrosshairMoved += OnVolCrosshair; break;
+                case "dd": chart.CrosshairMoved += OnDdCrosshair; break;
+                case "sharpe": chart.CrosshairMoved += OnSharpeCrosshair; break;
             }
         }
 
@@ -1058,36 +1189,117 @@ else
         var chartData = PrepareChartData();
         var rollData = PrepareSimpleSeriesData(_rollLookup, p => p.Rolling30dReturn, out _rollMinTime, out _rollMaxTime);
         var volData = PrepareSimpleSeriesData(_volLookup, p => p.Rolling30dVolatility, out _volMinTime, out _volMaxTime);
+        var ddData = PrepareDrawdownData(out _ddMinTime, out _ddMaxTime);
+        var sharpeData = PrepareSharpeData(out _sharpeMinTime, out _sharpeMaxTime);
         var ttIndices = new[] { new { key = _selectedSignalIndex, name = FormatIndexName(_selectedSignalIndex), color = IndexColor(_selectedSignalIndex) } };
 
         // Build per-chart entries and tooltip entries
         var entries = new List<object>();
         var tooltips = new List<object>();
+
+        // Zero line for rolling 30d return chart
+        var zeroLine = new { price = 0, color = "rgba(255,255,255,0.15)", lineWidth = 1, lineStyle = 2, axisLabelVisible = false };
+        // Average volatility line (computed per index)
+        var avgVol = ComputeAverageVolatility();
+        var avgVolLine = avgVol.HasValue
+            ? new { price = avgVol.Value, color = "#FFA726", lineWidth = 1, lineStyle = 2, axisLabelVisible = true, title = "avg" }
+            : null;
+
         foreach (var (chart, role) in charts)
         {
             var (data, container, colorBySign) = role switch
             {
                 "chart" => (chartData, _chartContainer, true),
                 "roll" => (rollData, _rollContainer, true),
+                "dd" => (ddData, _ddContainer, true),
+                "sharpe" => (sharpeData, _sharpeContainer, false),
                 _ => (volData, _volContainer, false)
             };
+            var dataMinTime = role switch { "roll" => _rollMinTime, "vol" => _volMinTime, "dd" => _ddMinTime, "sharpe" => _sharpeMinTime, _ => 0L };
+            var dataMaxTime = role switch { "roll" => _rollMaxTime, "vol" => _volMaxTime, "dd" => _ddMaxTime, "sharpe" => _sharpeMaxTime, _ => 0L };
             var (from, to) = role == "chart"
                 ? (data.Length > 0 ? data[0].Time : 0L, data.Length > 0 ? data[^1].Time : 0L)
-                : GetVisibleRange(role == "roll" ? _rollMinTime : _volMinTime, role == "roll" ? _rollMaxTime : _volMaxTime);
+                : GetVisibleRange(dataMinTime, dataMaxTime);
+
+            // Per-chart series type and options
+            string? seriesType = null;
+            object? perSeriesOptions = null;
+            object[]? priceLines = null;
+
+            if (role == "roll")
+            {
+                seriesType = "Baseline";
+                perSeriesOptions = new
+                {
+                    baseValue = new { type = "price", price = 0 },
+                    topLineColor = "#26A69A",
+                    topFillColor1 = "rgba(38,166,154,0.18)",
+                    topFillColor2 = "rgba(38,166,154,0.02)",
+                    bottomLineColor = "#EF5350",
+                    bottomFillColor1 = "rgba(239,83,80,0.02)",
+                    bottomFillColor2 = "rgba(239,83,80,0.18)",
+                    lineWidth = 1,
+                    crosshairMarkerVisible = false,
+                    lastValueVisible = false,
+                    priceLineVisible = false
+                };
+                priceLines = [zeroLine];
+            }
+            else if (role == "vol" && avgVolLine is not null)
+            {
+                priceLines = [avgVolLine];
+            }
+            else if (role == "dd")
+            {
+                seriesType = "Area";
+                perSeriesOptions = new
+                {
+                    lineColor = "#EF5350",
+                    topColor = "rgba(239,83,80,0.01)",
+                    bottomColor = "rgba(239,83,80,0.25)",
+                    lineWidth = 1,
+                    crosshairMarkerVisible = false,
+                    lastValueVisible = false,
+                    priceLineVisible = false
+                };
+                priceLines = [zeroLine];
+            }
+            else if (role == "sharpe")
+            {
+                seriesType = "Baseline";
+                perSeriesOptions = new
+                {
+                    baseValue = new { type = "price", price = 0 },
+                    topLineColor = "#26A69A",
+                    topFillColor1 = "rgba(38,166,154,0.12)",
+                    topFillColor2 = "rgba(38,166,154,0.01)",
+                    bottomLineColor = "#EF5350",
+                    bottomFillColor1 = "rgba(239,83,80,0.01)",
+                    bottomFillColor2 = "rgba(239,83,80,0.12)",
+                    lineWidth = 1,
+                    crosshairMarkerVisible = false,
+                    lastValueVisible = false,
+                    priceLineVisible = false
+                };
+                priceLines = [zeroLine];
+            }
 
             entries.Add(new
             {
                 chartRef = chart.JsObjectReference,
                 data,
                 from = data.Length > 0 ? (long?)from : null,
-                to = data.Length > 0 ? (long?)to : null
+                to = data.Length > 0 ? (long?)to : null,
+                seriesType,
+                seriesOptions = perSeriesOptions,
+                priceLines
             });
             tooltips.Add(new
             {
                 container,
-                lookup = BuildTooltipLookup(role == "chart" ? _tsLookup : role == "roll" ? _rollLookup : _volLookup),
+                lookup = BuildTooltipLookup(role switch { "chart" => _tsLookup, "roll" => _rollLookup, "dd" => _ddLookup, "sharpe" => _sharpeLookup, _ => _volLookup }),
                 indices = ttIndices,
-                options = new { colorBySign }
+                options = new { colorBySign, suffix = role == "sharpe" ? "" : "%" }
             });
         }
 
@@ -1134,6 +1346,12 @@ else
                     break;
                 case "vol":
                     _volJsRef = chartJsRef; _volSeriesRef = s; _volTimeScaleRef = ts; _volReady = true;
+                    break;
+                case "dd":
+                    _ddJsRef = chartJsRef; _ddSeriesRef = s; _ddTimeScaleRef = ts; _ddReady = true;
+                    break;
+                case "sharpe":
+                    _sharpeJsRef = chartJsRef; _sharpeSeriesRef = s; _sharpeTimeScaleRef = ts; _sharpeReady = true;
                     break;
             }
         }
@@ -1420,6 +1638,67 @@ else
 
     private long _rollMinTime, _rollMaxTime;
     private long _volMinTime, _volMaxTime;
+    private long _ddMinTime, _ddMaxTime;
+    private long _sharpeMinTime, _sharpeMaxTime;
+
+    // Computes the historical average of rolling 30d volatility for the selected index.
+    private double? ComputeAverageVolatility()
+    {
+        var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
+        var vals = allData.Where(p => p.Rolling30dVolatility.HasValue).Select(p => p.Rolling30dVolatility!.Value * 100).ToList();
+        return vals.Count > 0 ? vals.Average() : null;
+    }
+
+    // Drawdown = (current cumulative factor / running peak) - 1, always <= 0.
+    private LineData<long>[] PrepareDrawdownData(out long minTime, out long maxTime)
+    {
+        _ddLookup.Clear();
+        minTime = long.MaxValue; maxTime = long.MinValue;
+
+        var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
+        var withFactor = allData.Where(p => p.CumulativeFactor.HasValue).ToList();
+        if (withFactor.Count == 0) return [];
+
+        double peak = double.MinValue;
+        var data = new LineData<long>[withFactor.Count];
+        for (int i = 0; i < withFactor.Count; i++)
+        {
+            var f = withFactor[i].CumulativeFactor!.Value;
+            if (f > peak) peak = f;
+            var dd = (f / peak - 1) * 100; // percentage drawdown
+            var ts = new DateTimeOffset(withFactor[i].PerfDate, TimeSpan.Zero).ToUnixTimeSeconds();
+            data[i] = new LineData<long> { Time = ts, Value = dd };
+            if (!_ddLookup.ContainsKey(ts))
+                _ddLookup[ts] = (withFactor[i].PerfDate, new());
+            _ddLookup[ts].Values[_selectedSignalIndex] = dd;
+        }
+        if (data.Length > 0) { minTime = data[0].Time; maxTime = data[^1].Time; }
+        return data;
+    }
+
+    // Rolling Sharpe = rolling_30d_return / rolling_30d_volatility (annualized).
+    private LineData<long>[] PrepareSharpeData(out long minTime, out long maxTime)
+    {
+        _sharpeLookup.Clear();
+        minTime = long.MaxValue; maxTime = long.MinValue;
+
+        var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
+        var result = new List<LineData<long>>();
+        foreach (var p in allData)
+        {
+            if (!p.Rolling30dReturn.HasValue || !p.Rolling30dVolatility.HasValue || p.Rolling30dVolatility.Value == 0) continue;
+            var sharpe = p.Rolling30dReturn.Value / p.Rolling30dVolatility.Value;
+            var ts = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds();
+            var d = new LineData<long> { Time = ts, Value = Math.Round(sharpe, 3) };
+            result.Add(d);
+            if (!_sharpeLookup.ContainsKey(ts))
+                _sharpeLookup[ts] = (p.PerfDate, new());
+            _sharpeLookup[ts].Values[_selectedSignalIndex] = sharpe;
+        }
+        var data = result.ToArray();
+        if (data.Length > 0) { minTime = data[0].Time; maxTime = data[^1].Time; }
+        return data;
+    }
 
     // Prepares chart data in C# (no interop), returns the arrays for batch push.
     private LineData<long>[] PrepareChartData()
@@ -1497,7 +1776,7 @@ else
         return (dataMin, dataMax);
     }
 
-    // Pushes all 3 line charts in a single JS interop call.
+    // Pushes all 5 line charts in a single JS interop call.
     private async Task BatchUpdateAllLineCharts()
     {
         if (_jsModule is null) return;
@@ -1505,10 +1784,18 @@ else
         var chartData = PrepareChartData();
         var rollData = PrepareSimpleSeriesData(_rollLookup, p => p.Rolling30dReturn, out _rollMinTime, out _rollMaxTime);
         var volData = PrepareSimpleSeriesData(_volLookup, p => p.Rolling30dVolatility, out _volMinTime, out _volMaxTime);
+        var ddData = PrepareDrawdownData(out _ddMinTime, out _ddMaxTime);
+        var sharpeData = PrepareSharpeData(out _sharpeMinTime, out _sharpeMaxTime);
 
         var charts = new List<object>();
         var tooltips = new List<object>();
         var ttIndices = new[] { new { key = _selectedSignalIndex, name = FormatIndexName(_selectedSignalIndex), color = IndexColor(_selectedSignalIndex) } };
+
+        var zeroLine = new { price = 0, color = "rgba(255,255,255,0.15)", lineWidth = 1, lineStyle = 2, axisLabelVisible = false };
+        var avgVol = ComputeAverageVolatility();
+        object[]? volPriceLines = avgVol.HasValue
+            ? [new { price = avgVol.Value, color = "#FFA726", lineWidth = 1, lineStyle = 2, axisLabelVisible = true, title = "avg" }]
+            : null;
 
         if (_chartReady)
         {
@@ -1519,7 +1806,8 @@ else
                 timeScale = _chartTimeScaleRef!,
                 data = chartData,
                 from = chartData.Length > 0 ? (long?)from : null,
-                to = chartData.Length > 0 ? (long?)to : null
+                to = chartData.Length > 0 ? (long?)to : null,
+                priceLines = (object[]?)null
             });
             tooltips.Add(new { container = _chartContainer, lookup = BuildTooltipLookup(_tsLookup), indices = ttIndices, options = new { colorBySign = true } });
         }
@@ -1533,7 +1821,8 @@ else
                 timeScale = _rollTimeScaleRef!,
                 data = rollData,
                 from = rollData.Length > 0 ? (long?)from : null,
-                to = rollData.Length > 0 ? (long?)to : null
+                to = rollData.Length > 0 ? (long?)to : null,
+                priceLines = new object[] { zeroLine }
             });
             tooltips.Add(new { container = _rollContainer, lookup = BuildTooltipLookup(_rollLookup), indices = ttIndices, options = new { colorBySign = true } });
         }
@@ -1547,9 +1836,40 @@ else
                 timeScale = _volTimeScaleRef!,
                 data = volData,
                 from = volData.Length > 0 ? (long?)from : null,
-                to = volData.Length > 0 ? (long?)to : null
+                to = volData.Length > 0 ? (long?)to : null,
+                priceLines = volPriceLines
             });
             tooltips.Add(new { container = _volContainer, lookup = BuildTooltipLookup(_volLookup), indices = ttIndices, options = new { colorBySign = false } });
+        }
+
+        if (_ddReady)
+        {
+            var (from, to) = GetVisibleRange(_ddMinTime, _ddMaxTime);
+            charts.Add(new {
+                chartRef = _ddJsRef,
+                series = _ddSeriesRef!,
+                timeScale = _ddTimeScaleRef!,
+                data = ddData,
+                from = ddData.Length > 0 ? (long?)from : null,
+                to = ddData.Length > 0 ? (long?)to : null,
+                priceLines = new object[] { zeroLine }
+            });
+            tooltips.Add(new { container = _ddContainer, lookup = BuildTooltipLookup(_ddLookup), indices = ttIndices, options = new { colorBySign = true } });
+        }
+
+        if (_sharpeReady)
+        {
+            var (from, to) = GetVisibleRange(_sharpeMinTime, _sharpeMaxTime);
+            charts.Add(new {
+                chartRef = _sharpeJsRef,
+                series = _sharpeSeriesRef!,
+                timeScale = _sharpeTimeScaleRef!,
+                data = sharpeData,
+                from = sharpeData.Length > 0 ? (long?)from : null,
+                to = sharpeData.Length > 0 ? (long?)to : null,
+                priceLines = new object[] { zeroLine }
+            });
+            tooltips.Add(new { container = _sharpeContainer, lookup = BuildTooltipLookup(_sharpeLookup), indices = ttIndices, options = new { colorBySign = false, suffix = "" } });
         }
 
         if (charts.Count > 0)
@@ -1583,6 +1903,7 @@ else
     {
         var data = PrepareSimpleSeriesData(_rollLookup, p => p.Rolling30dReturn, out _rollMinTime, out _rollMaxTime);
         var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
+        var zeroLine = new { price = 0, color = "rgba(255,255,255,0.15)", lineWidth = 1, lineStyle = 2, axisLabelVisible = false };
         await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
             new[] { new {
                 chartRef = _rollJsRef,
@@ -1590,7 +1911,8 @@ else
                 timeScale = _rollTimeScaleRef!,
                 data,
                 from = data.Length > 0 ? (long?)from : null,
-                to = data.Length > 0 ? (long?)to : null
+                to = data.Length > 0 ? (long?)to : null,
+                priceLines = new object[] { zeroLine }
             }},
             new[] { new {
                 container = _rollContainer,
@@ -1604,6 +1926,10 @@ else
     {
         var data = PrepareSimpleSeriesData(_volLookup, p => p.Rolling30dVolatility, out _volMinTime, out _volMaxTime);
         var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
+        var avgVol = ComputeAverageVolatility();
+        object[]? volPriceLines = avgVol.HasValue
+            ? [new { price = avgVol.Value, color = "#FFA726", lineWidth = 1, lineStyle = 2, axisLabelVisible = true, title = "avg" }]
+            : null;
         await _jsModule!.InvokeVoidAsync("batchUpdateCharts",
             new[] { new {
                 chartRef = _volJsRef,
@@ -1611,7 +1937,8 @@ else
                 timeScale = _volTimeScaleRef!,
                 data,
                 from = data.Length > 0 ? (long?)from : null,
-                to = data.Length > 0 ? (long?)to : null
+                to = data.Length > 0 ? (long?)to : null,
+                priceLines = volPriceLines
             }},
             new[] { new {
                 container = _volContainer,
@@ -1708,6 +2035,16 @@ else
                 var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
                 rangeEntries.Add(new { timeScale = _volTimeScaleRef!, from = (long?)from, to = (long?)to });
             }
+            if (_ddReady)
+            {
+                var (from, to) = GetVisibleRange(_ddMinTime, _ddMaxTime);
+                rangeEntries.Add(new { timeScale = _ddTimeScaleRef!, from = (long?)from, to = (long?)to });
+            }
+            if (_sharpeReady)
+            {
+                var (from, to) = GetVisibleRange(_sharpeMinTime, _sharpeMaxTime);
+                rangeEntries.Add(new { timeScale = _sharpeTimeScaleRef!, from = (long?)from, to = (long?)to });
+            }
             if (rangeEntries.Count > 0)
                 await _jsModule!.InvokeVoidAsync("batchSetVisibleRange", rangeEntries);
         }
@@ -1725,6 +2062,12 @@ else
 
     private void OnVolCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
         => HandleCrosshair(e, ref _volLastHover, _volContainer);
+
+    private void OnDdCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
+        => HandleCrosshair(e, ref _ddLastHover, _ddContainer);
+
+    private void OnSharpeCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
+        => HandleCrosshair(e, ref _sharpeLastHover, _sharpeContainer);
 
     private void OnMomCrosshair(object? sender, LightweightCharts.Blazor.Models.Events.MouseEventParams<long> e)
         => HandleCrosshair(e, ref _momLastHover, _momContainer);
@@ -1770,6 +2113,8 @@ else
         if (_chartRef is not null) _chartRef.CrosshairMoved -= OnMainCrosshair;
         if (_rollRef is not null) _rollRef.CrosshairMoved -= OnRollCrosshair;
         if (_volRef is not null) _volRef.CrosshairMoved -= OnVolCrosshair;
+        if (_ddRef is not null) _ddRef.CrosshairMoved -= OnDdCrosshair;
+        if (_sharpeRef is not null) _sharpeRef.CrosshairMoved -= OnSharpeCrosshair;
         if (_momRef is not null) _momRef.CrosshairMoved -= OnMomCrosshair;
 
         if (_jsModule is not null)
@@ -1805,7 +2150,27 @@ else
 
     private static string FormatPct(double? val) => val.HasValue ? $"{val.Value:P1}" : "--";
     private static string FormatNum(double? val) => val.HasValue ? $"{val.Value:F1}" : "--";
+    private static string FormatYield(double? val)
+    {
+        if (!val.HasValue) return "--";
+        var v = val.Value > 1 ? val.Value : val.Value * 100;
+        return $"{v:F2} %";
+    }
     private static string ReturnHex(double? val) => val switch { > 0 => "#26A69A", < 0 => "#EF5350", _ => "inherit" };
+    private static string ReturnArrow(double? val)
+    {
+        if (val > 0) return "\u25b2 ";
+        if (val < 0) return "\u25bc ";
+        return "";
+    }
+    private static string VolBarWidth(double? val) => val.HasValue ? $"{Math.Min(val.Value * 100 / 0.40, 100):F0}%" : "0%";
+    private static string VolBarColor(double? val)
+    {
+        if (!val.HasValue) return "#A0AEC0";
+        if (val.Value < 0.15) return "#26A69A";
+        if (val.Value < 0.25) return "#FFA726";
+        return "#EF5350";
+    }
     private static MudBlazor.Color ReturnColor(double? val) => val switch
     {
         > 0 => MudBlazor.Color.Success,
