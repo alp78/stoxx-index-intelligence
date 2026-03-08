@@ -1480,18 +1480,21 @@ else
             }
         }
 
-        // Sequential JS interop — parallel SetData calls deadlock the Blazor Server SignalR circuit
-        for (var i = 0; i < 5; i++)
+        // Batch push all 5 series + visible range in ONE JS call to prevent flash
+        if (_jsModule is not null)
         {
-            if (_momSeriesRefs[i] is not null)
-                await _momSeriesRefs[i]!.SetData(prepared[i]);
+            var seriesJsRefs = _momSeriesRefs
+                .Where(s => s is not null)
+                .Select(s => ((LightweightCharts.Blazor.IJsObjectWrapper)s!).JsObjectReference)
+                .ToArray();
+            var ts = await _momRef.TimeScale();
+            var tsRef = ((LightweightCharts.Blazor.IJsObjectWrapper)ts).JsObjectReference;
+            var dataArrays = prepared.Take(seriesJsRefs.Length).ToArray();
+            await _jsModule.InvokeVoidAsync("batchUpdateMomSeries",
+                seriesJsRefs, dataArrays, tsRef,
+                minTime < long.MaxValue ? (long?)minTime : null,
+                minTime < long.MaxValue ? (long?)maxTime : null);
         }
-
-        var ts = await _momRef.TimeScale();
-        if (minTime < long.MaxValue)
-            await ts.SetVisibleRange(new TimeRange { From = minTime, To = maxTime });
-        else
-            await ts.FitContent();
         await SendMomTooltipData();
     }
 
@@ -2010,7 +2013,7 @@ else
     }
 
     // Period switch re-filters the pre-loaded 3Y data — no DB call.
-    // Brief opacity transition (_momTransitioning) avoids a jarring visual snap.
+    // Hide chart during data swap to prevent flash of stale series.
     private async Task SetMomPeriod(string period)
     {
         if (_disposed) return;
@@ -2021,9 +2024,10 @@ else
             {
                 _momTransitioning = true;
                 StateHasChanged();
-                await Task.Delay(20);
+                await Task.Delay(150);  // wait for CSS opacity transition to complete
                 await UpdateMomData();
                 _momTransitioning = false;
+                StateHasChanged();
             }
         }
         catch (ObjectDisposedException) { }

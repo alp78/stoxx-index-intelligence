@@ -151,6 +151,20 @@ export function batchSetVisibleRange(entries) {
     _syncing = false;
 }
 
+// ── Batch momentum chart update (all series + range in ONE call) ─────
+// Prevents flash of stale data from sequential SetData round-trips.
+// `seriesRefs`: [IJSObjectReference × 5], `dataArrays`: [data × 5]
+// `timeScaleRef`: IJSObjectReference, `from`/`to`: visible range timestamps
+export function batchUpdateMomSeries(seriesRefs, dataArrays, timeScaleRef, from, to) {
+    for (let i = 0; i < seriesRefs.length; i++) {
+        const series = _resolve(seriesRefs[i]);
+        series.setData(dataArrays[i] || []);
+    }
+    const ts = _resolve(timeScaleRef);
+    if (from != null && to != null) ts.setVisibleRange({ from, to });
+    else ts.fitContent();
+}
+
 // ── Tooltip (managed entirely in JS to avoid Blazor re-renders) ──────
 // Tooltip DOM is manipulated directly — calling back into Blazor would
 // trigger StateHasChanged on every crosshair move and kill performance.
