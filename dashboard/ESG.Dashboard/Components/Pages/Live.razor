@@ -1,7 +1,7 @@
 @* ───────────────────────────────────────────────────────────────────
-   Live Pulse — real-time intraday activity across all three indices.
-   Shows pulse snapshots (price, book, volume) and activity-ranked
-   tickers with auto-refresh via SignalR subscription.
+   Live Pulse — real-time intraday activity for the selected index.
+   Combined performance chart + card grid showing price, change,
+   day range, volume, and activity for each constituent.
    ─────────────────────────────────────────────────────────────────── *@
 @page "/live"
 @rendermode InteractiveServer
@@ -9,6 +9,8 @@
 @inject StockRepository StockRepo
 @inject CountryFlags Flags
 @inject IndexRegistry IdxReg
+@inject IndexSelectionState IdxState
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <PageTitle>Pulse - STOXX Index Intelligence</PageTitle>
@@ -19,206 +21,257 @@
 }
 else
 {
-    <!-- Index header bar: one column per index showing name, live/closed status, and local exchange time -->
-    <MudGrid Spacing="3" Class="mb-0">
-        @for (int idxPos = 0; idxPos < _indices.Length; idxPos++)
+    <!-- Index selector + live/closed status + last update -->
+    <div class="d-flex align-center mb-3" style="gap: 12px;">
+        <MudSelect T="string" Value="_selectedIndex" ValueChanged="OnIndexChanged"
+                   Variant="Variant.Outlined" Dense="true" Style="max-width: 300px;" Margin="Margin.Dense">
+            @foreach (var idx in _indices)
+            {
+                <MudSelectItem Value="@idx">@FormatIndexName(idx).ToUpperInvariant()</MudSelectItem>
+            }
+        </MudSelect>
+
+        @{ var live = IsMarketOpen(_selectedIndex); var exchange = ExchangeInfo(_selectedIndex); }
+        @if (live)
         {
-            var idx = _indices[idxPos];
-            var live = IsMarketOpen(idx);
-            var exchange = ExchangeInfo(idx);
-
-            <MudItem xs="12" md="4">
-                <div class="d-flex align-center" style="gap: 6px; padding: 4px 0;">
-                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700; font-size: 0.95rem;">@FormatIndexName(idx)</MudText>
-                    @if (live)
-                    {
-                        <span class="live-dot" style="margin-left: 2px;"></span>
-                        <span style="font-size: 0.55rem; font-weight: 700; color: #26A69A; letter-spacing: 1px;">LIVE</span>
-                    }
-                    else
-                    {
-                        <span class="closed-dot" style="margin-left: 2px;"></span>
-                        <span style="font-size: 0.55rem; font-weight: 700; color: #EF5350; letter-spacing: 1px;">CLOSED</span>
-                    }
-                    <span style="margin-left: auto; font-size: 0.6rem; opacity: 0.35;">
-                        @exchange.Name &middot; @exchange.City &middot; @exchange.LocalTime
-                    </span>
-                </div>
-            </MudItem>
+            <span class="live-dot"></span>
+            <span style="font-size: 0.55rem; font-weight: 700; color: #26A69A; letter-spacing: 1px;">LIVE</span>
         }
-    </MudGrid>
+        else
+        {
+            <span class="closed-dot"></span>
+            <span style="font-size: 0.55rem; font-weight: 700; color: #EF5350; letter-spacing: 1px;">CLOSED</span>
+        }
+        <span style="font-size: 0.6rem; opacity: 0.35;">@exchange.Name &middot; @exchange.City &middot; @exchange.LocalTime</span>
 
-    <!-- Pulse: per-index tables of most active tickers with price, change, day range, volume, and activity bars -->
-    <div>
-        <div class="d-flex align-center" style="margin-bottom: 10px;">
-            <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+        <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem; margin-left: auto;">
+            @if (_lastDataTimestamp.HasValue) { @($"Updated {_lastDataTimestamp.Value:dd MMM yyyy HH:mm} CET") }
+        </MudText>
+    </div>
+
+    <!-- Section title -->
+    <MudTooltip Arrow="true" Placement="Placement.Bottom">
+        <ChildContent>
+            <MudText Typo="Typo.subtitle2" Style="opacity: 0.35; margin-bottom: 8px; cursor: help;">PULSE</MudText>
+        </ChildContent>
+        <TooltipContent>
+            <div style="@_tipStyle">
+                <div style="@_tipHead">Live Pulse Feed</div>
+                <div style="@_tipDesc">Top 10 most active stocks per index, ranked by a composite activity score. Refreshed hourly.</div>
+                <div style="margin: 0; padding-left: 0; opacity: 0.85;">
+                    <div style="margin-bottom: 6px;">
+                        <b>Volume Surge</b> = volume / avg_volume(10d)
+                        <div style="opacity: 0.6; padding-left: 10px;">How much today's volume exceeds the 10-day average</div>
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                        <b>Range Intensity</b> = (high &minus; low) / close
+                        <div style="opacity: 0.6; padding-left: 10px;">Intraday price range as a fraction of price</div>
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                        <b>Vol Z</b> = z-score of Volume Surge across all index constituents
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                        <b>Range Z</b> = z-score of Range Intensity across all index constituents
+                        <div style="opacity: 0.6; padding-left: 10px;">
+                            <div>&gt; <span style="color: #EF5350;">2.0</span> &mdash; extreme outlier</div>
+                            <div>&gt; <span style="color: #FFA726;">1.0</span> &mdash; elevated</div>
+                            <div>&gt; <span style="color: #42A5F5;">0.0</span> &mdash; near average</div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                        <b>Activity Score</b> = 0.5 &times; Vol Z + 0.5 &times; Range Z
+                        <div style="opacity: 0.6; padding-left: 10px;">Equal-weighted blend &mdash; stocks ranked by this score</div>
+                    </div>
+                </div>
+                <div style="@_tipNote">Pulse snapshots every 5 min &middot; ticker ranking hourly &middot; z-scores are cross-sectional (vs peers, not vs history)</div>
+            </div>
+        </TooltipContent>
+    </MudTooltip>
+
+    @if (SelectedPulseList.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Style="opacity: 0.3; text-align: center; padding: 48px 0;">No pulse data available</MudText>
+    }
+    else
+    {
+        <!-- Stock card grid -->
+        <div class="pulse-grid mb-3">
+            @foreach (var p in SelectedPulseList)
+            {
+                var range = (p.DayHigh ?? 1) - (p.DayLow ?? 0);
+                var pctInRange = range > 0 ? ((p.CurrentPrice ?? 0) - (p.DayLow ?? 0)) / range * 100 : 50;
+                var chgColor = ChgColor(p.PriceChangePct);
+                var chgBg = p.PriceChangePct switch { > 0 => "rgba(38,166,154,0.08)", < 0 => "rgba(239,83,80,0.08)", _ => "transparent" };
+                _tickerLookup.TryGetValue((_selectedIndex, p.Symbol), out var ticker);
+                var si = _stockLookup.TryGetValue((_selectedIndex, p.Symbol), out var _si) ? _si : null;
+                var activityPct = ticker is not null && SelectedMaxActivity > 0 ? (ticker.ActivityScore ?? 0) / SelectedMaxActivity * 100 : 0;
+                var rankColor = ticker is not null ? RankBarColor(ticker.Rank) : "#A0A0B0";
+
+                <MudPaper Class="pa-3" Elevation="2" Style="display: flex; gap: 12px;">
+                    <!-- Left: Activity Rank -->
+                    @if (ticker is not null)
+                    {
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 44px; gap: 4px; border-right: 1px solid rgba(255,255,255,0.06); padding-right: 12px;">
+                            <div style="font-size: 1.4rem; font-weight: 800; color: @rankColor; letter-spacing: -0.02em; line-height: 1;">#@ticker.Rank</div>
+                            <div style="width: 4px; flex: 1; background: rgba(255,255,255,0.04); border-radius: 3px; min-height: 30px; position: relative;">
+                                <div style="position: absolute; bottom: 0; width: 100%; height: @($"{activityPct:F0}%"); background: @rankColor; border-radius: 3px; transition: height 0.3s ease;"></div>
+                            </div>
+                            <div style="font-size: 0.5rem; opacity: 0.35; font-family: 'Inter', monospace;">@($"{ticker.ActivityScore:F1}")</div>
+                        </div>
+                    }
+
+                    <!-- Right: All metrics -->
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0;">
+                        <!-- Row 1: Logo + Name + Chart toggle -->
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <img src="logos/@(_selectedIndex)/@(p.Symbol).png"
+                                 style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0;"
+                                 onerror="this.style.display='none'" />
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="display: flex; align-items: baseline; gap: 6px;">
+                                    <MudLink Href="@StockLink(_selectedIndex, p.Symbol)" Style="font-weight: 700; font-size: 0.85rem;">@p.Symbol</MudLink>
+                                    @if (si?.Country is not null)
+                                    {
+                                        <span class="fi fi-@Flags.GetCode(si.Country)" style="font-size: 0.6rem;"></span>
+                                    }
+                                </div>
+                                <div style="font-size: 0.6rem; opacity: 0.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    @(p.ShortName ?? si?.ShortName ?? "")
+                                </div>
+                            </div>
+                            @{  var sym = p.Symbol; }
+                            <input type="checkbox" checked="@_chartSymbols.Contains(sym)"
+                                   @onclick="@(async (MouseEventArgs e) => await OnToggleChartSymbol(sym, e))"
+                                   @onclick:preventDefault
+                                   style="margin: 0 0 0 4px; cursor: pointer; accent-color: #7C4DFF;" />
+                        </div>
+
+                        <!-- Row 2: Volume + Vol Ratio + Range Intensity -->
+                        <div style="display: flex; gap: 8px; font-size: 0.65rem; opacity: 0.6;">
+                            <div style="flex: 1;">
+                                <div class="metric-label">Volume</div>
+                                <div style="font-weight: 600;">@FmtVol(p.CurrentVolume)</div>
+                            </div>
+                            @if (p.VolumeRatio.HasValue)
+                            {
+                                <div style="flex: 1;">
+                                    <div class="metric-label">Vol Ratio</div>
+                                    <div style="font-weight: 600; color: @VolRatioColor(p.VolumeRatio.Value);">@($"{p.VolumeRatio:F1}x")</div>
+                                </div>
+                            }
+                            @if (ticker?.RangeIntensity.HasValue == true)
+                            {
+                                <div style="flex: 1;">
+                                    <div class="metric-label">Range Int.</div>
+                                    <div style="font-weight: 600; color: @VolRatioColor(ticker.RangeIntensity!.Value);">@($"{ticker.RangeIntensity:F1}x")</div>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Row 3: Z-scores (volume + range) -->
+                        @if (ticker is not null)
+                        {
+                            <div style="display: flex; gap: 8px; font-size: 0.65rem; opacity: 0.6;">
+                                @if (ticker.VolZ.HasValue)
+                                {
+                                    <div style="flex: 1;">
+                                        <div class="metric-label">Vol Z</div>
+                                        <div style="font-weight: 600; color: @ZColor(ticker.VolZ.Value);">@($"{ticker.VolZ:+0.00;-0.00}")</div>
+                                    </div>
+                                }
+                                @if (ticker.RngZ.HasValue)
+                                {
+                                    <div style="flex: 1;">
+                                        <div class="metric-label">Range Z</div>
+                                        <div style="font-weight: 600; color: @ZColor(ticker.RngZ.Value);">@($"{ticker.RngZ:+0.00;-0.00}")</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <!-- Row 4: Day range bar -->
+                        <div>
+                            <div class="metric-label">Day Range</div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.55rem; opacity: 0.3; margin-bottom: 2px;">
+                                <span>@($"{SelectedCurrency}{p.DayLow:N2}")</span>
+                                <span>@($"{SelectedCurrency}{p.DayHigh:N2}")</span>
+                            </div>
+                            <div class="range-bar-track" style="height: 5px;">
+                                <div style="position: absolute; left: 0; top: 0; height: 100%; width: @($"{pctInRange:F0}%"); background: @(pctInRange > 50 ? "rgba(38,166,154,0.15)" : "rgba(239,83,80,0.15)"); border-radius: 2px;"></div>
+                                <div class="range-bar-marker" style="left: @($"{pctInRange:F0}%"); background: @(pctInRange > 50 ? "#26A69A" : "#EF5350");"></div>
+                            </div>
+                        </div>
+                    </div>
+                </MudPaper>
+            }
+        </div>
+
+        <!-- Shared period switch -->
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 8px; margin-top: 16px;">
+            <MudButtonGroup OverrideStyles="false" Size="Size.Small">
+                @foreach (var pk in _chartPeriods)
+                {
+                    var key = pk;
+                    <MudButton Variant="@(_chartPeriod == key ? Variant.Filled : Variant.Text)"
+                               Color="MudBlazor.Color.Default"
+                               Style="min-width: 32px; padding: 2px 6px; font-size: 0.7rem;"
+                               OnClick="@(() => OnPeriodChanged(key))">@key</MudButton>
+                }
+            </MudButtonGroup>
+        </div>
+
+        <!-- Volume Surge chart -->
+        <MudPaper Class="pa-3 mb-1" Elevation="2">
+            <MudTooltip Arrow="true" Placement="Placement.Bottom">
                 <ChildContent>
-                    <span style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">
-                        <MudText Typo="Typo.subtitle2" Style="opacity: 0.5; font-weight: 700; font-size: 0.85rem;">Pulse</MudText>
-                    </span>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.4; margin-bottom: 4px; cursor: help; display: inline-block; border-bottom: 1px dotted rgba(255,255,255,0.2);">VOLUME SURGE</MudText>
                 </ChildContent>
                 <TooltipContent>
                     <div style="@_tipStyle">
-                        <div style="@_tipHead">Pulse</div>
-                        <div style="@_tipDesc">Real-time snapshot of the most active tickers per index:</div>
-                        <ul style="@_tipList">
-                            <li><b>Price</b> &mdash; last traded price</li>
-                            <li><b>Change</b> &mdash; % change from previous close</li>
-                            <li><b>Day Range</b> &mdash; current price position within today's high/low</li>
-                            <li><b>Vol Ratio</b> &mdash; current volume / 10-day average (&gt;1.5x = elevated)</li>
-                            <li><b>Activity</b> &mdash; composite score: 0.5 &times; z(volume surge) + 0.5 &times; z(range intensity)</li>
-                        </ul>
-                        <div style="@_tipNote">Updated every 60 seconds. Activity score recalculated hourly.</div>
+                        <div style="@_tipHead">Volume Surge</div>
+                        <div style="@_tipDesc">Daily traded volume divided by the 10-day rolling average volume. Same metric used in the pulse ranking.</div>
+                        <div style="opacity: 0.85;">
+                            <div style="margin-bottom: 4px;"><b>Formula</b> &mdash; volume / avg_volume(10d)</div>
+                            <div style="opacity: 0.6; padding-left: 10px;">
+                                <div>&gt; <span style="color: #EF5350;">2.0x</span> &mdash; unusual surge</div>
+                                <div>&gt; <span style="color: #FFA726;">1.5x</span> &mdash; elevated</div>
+                                <div>&gt; <span style="color: #42A5F5;">1.0x</span> &mdash; above average</div>
+                                <div>&lt; 1.0x &mdash; below average</div>
+                            </div>
+                        </div>
+                        <div style="@_tipNote">White line = full index average &middot; colored lines = individual stocks &middot; baseline at 1.0x</div>
                     </div>
                 </TooltipContent>
             </MudTooltip>
-            <span style="margin-left: auto; font-size: 0.7rem; opacity: 0.35;">
-                @if (_lastDataTimestamp.HasValue)
-                {
-                    @($"Last update: {_lastDataTimestamp.Value:dd MMM yyyy HH:mm} CET")
-                }
-            </span>
-        </div>
+            <div id="volChartLegend" style="margin-bottom: 4px; min-height: 16px;"></div>
+            <div id="volChart" style="width: 100%; height: 200px;"></div>
+        </MudPaper>
 
-        <MudGrid Spacing="3">
-            @for (int idxPos = 0; idxPos < _indices.Length; idxPos++)
-            {
-                var idx = _indices[idxPos];
-                var pulseList = _pulseByIndex.GetValueOrDefault(idx) ?? [];
-                var currency = CurrencySymbol(idx);
-                // Activity bar width is relative to the highest-scoring ticker in this index.
-                // maxActivity normalizes scores to [0..100%] for the bar; guard against zero.
-                var maxActivity = pulseList.Count > 0
-                    ? pulseList.Max(p => _tickerLookup.TryGetValue((idx, p.Symbol), out var t) ? (t.ActivityScore ?? 0) : 0)
-                    : 1.0;
-                if (maxActivity == 0) maxActivity = 1;
-
-                <MudItem xs="12" md="4">
-                    <MudPaper Class="pa-3" Elevation="2">
-                        @if (pulseList.Count == 0)
-                        {
-                            <MudText Typo="Typo.body2" Style="opacity: 0.3; text-align: center; padding: 16px 0;">No data</MudText>
-                        }
-                        else
-                        {
-                            <MudSimpleTable Dense="true" Class="pulse-table" Style="white-space: nowrap; font-size: 0.75rem;">
-                                <thead>
-                                    <tr>
-                                        <th></th>
-                                        <th>Name</th>
-                                        <th style="text-align: right;">Price</th>
-                                        <th style="text-align: right;">Chg</th>
-                                        <th>Range</th>
-                                        <th style="text-align: right;">Vol</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var p in pulseList)
-                                    {
-                                        var range = (p.DayHigh ?? 1) - (p.DayLow ?? 0);
-                                        var pctCurrent = range > 0
-                                            ? ((p.CurrentPrice ?? 0) - (p.DayLow ?? 0)) / range * 100
-                                            : 50;
-                                        var markerColor = pctCurrent > 50 ? "#26A69A" : "#EF5350";
-                                        _tickerLookup.TryGetValue((idx, p.Symbol), out var ticker);
-
-                                        <tr style="height: 56px;">
-                                            <td style="padding: 0 2px;"><img src="logos/@(idx)/@(p.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
-                                            <td>
-                                                @{ var si = _stockLookup.TryGetValue((idx, p.Symbol), out var _si) ? _si : null; }
-                                                <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
-                                                    <TooltipContent>
-                                                        <div style="text-align: left; font-size: 0.8rem; line-height: 1.5; padding: 2px 0;">
-                                                            @if (si is not null)
-                                                            {
-                                                                <div class="d-flex align-center" style="gap: 6px; margin-bottom: 4px;">
-                                                                    <img src="logos/@(idx)/@(p.Symbol).png" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'" />
-                                                                    <strong>@(si.ShortName ?? p.Symbol)</strong>
-                                                                </div>
-                                                                @if (si.Country is not null || si.City is not null)
-                                                                {
-                                                                    <div style="opacity: 0.85;">
-                                                                        @if (si.Country is not null) { <span class="fi fi-@Flags.GetCode(si.Country)" style="margin-right: 4px;"></span> }
-                                                                        @(si.City is not null ? $"{si.City}, " : "")@(si.Country ?? "")
-                                                                    </div>
-                                                                }
-                                                            }
-                                                            else
-                                                            {
-                                                                <strong>@p.Symbol</strong>
-                                                            }
-                                                        </div>
-                                                    </TooltipContent>
-                                                    <ChildContent>
-                                                        <div>
-                                                            <MudLink Href="@StockLink(idx, p.Symbol)">@p.Symbol</MudLink>
-                                                            <div style="font-size: 0.65em; opacity: 0.35; max-width: 90px; overflow: hidden; text-overflow: ellipsis;">@p.ShortName</div>
-                                                        </div>
-                                                    </ChildContent>
-                                                </MudTooltip>
-                                            </td>
-                                            <td style="text-align: right; font-weight: 600; font-size: 0.75rem;">@($"{currency}{p.CurrentPrice:N2}")</td>
-                                            <td style="text-align: right; color: @ChgColor(p.PriceChangePct); font-size: 0.7rem;">
-                                                @ChgArrow(p.PriceChangePct) @FormatChgPct(p.PriceChangePct)
-                                            </td>
-                                            <td>
-                                                <div style="width: 50px;">
-                                                    <div class="range-bar-track">
-                                                        <div class="range-bar-marker" style="left: @($"{pctCurrent:F0}%"); background: @markerColor;"></div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td style="text-align: right; font-size: 0.7rem;">
-                                                <div>@FmtVol(p.CurrentVolume)</div>
-                                                @if (p.VolumeRatio is not null)
-                                                {
-                                                    var vrColor = p.VolumeRatio switch
-                                                    {
-                                                        > 2.0 => Color.Error,
-                                                        > 1.5 => Color.Warning,
-                                                        > 1.0 => Color.Info,
-                                                        _ => Color.Default
-                                                    };
-                                                    <MudChip T="string" Size="Size.Small" Color="vrColor"
-                                                             Style="font-size: 0.55rem; height: 14px; margin: 0; padding: 0 3px;">
-                                                        @($"{p.VolumeRatio:F1}x")
-                                                    </MudChip>
-                                                }
-                                            </td>
-                                        </tr>
-                                        @* Activity bar: width proportional to score/max, colored by rank tier *@
-                                        @if (ticker is not null)
-                                        {
-                                            var barWidth = maxActivity > 0 ? (ticker.ActivityScore ?? 0) / maxActivity * 100 : 0;
-                                            var barColor = RankBarColor(ticker.Rank);
-
-                                            <tr style="border: none;">
-                                                <td colspan="6" style="padding: 0 4px 6px 22px; border-top: none;">
-                                                    <div style="display: flex; align-items: center; gap: 6px;">
-                                                        <span style="font-size: 0.6rem; width: 12px; text-align: right; opacity: 0.3; font-weight: 600;">
-                                                            @ticker.Rank
-                                                        </span>
-                                                        <div style="flex: 1; min-width: 20px;">
-                                                            <div style="background: rgba(255,255,255,0.04); border-radius: 3px; height: 4px;">
-                                                                <div class="activity-bar" style="width: @($"{barWidth:F0}%"); background: @barColor; height: 4px; border-radius: 3px;"></div>
-                                                            </div>
-                                                        </div>
-                                                        <span style="font-size: 0.6rem; opacity: 0.35; min-width: 20px; text-align: right; font-family: 'Inter', monospace;">
-                                                            @($"{ticker.ActivityScore:F1}")
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        }
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        }
-                    </MudPaper>
-                </MudItem>
-            }
-        </MudGrid>
-    </div>
+        <!-- Range Intensity chart -->
+        <MudPaper Class="pa-3 mb-3" Elevation="2">
+            <MudTooltip Arrow="true" Placement="Placement.Bottom">
+                <ChildContent>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.4; margin-bottom: 4px; cursor: help; display: inline-block; border-bottom: 1px dotted rgba(255,255,255,0.2);">RANGE INTENSITY</MudText>
+                </ChildContent>
+                <TooltipContent>
+                    <div style="@_tipStyle">
+                        <div style="@_tipHead">Range Intensity</div>
+                        <div style="@_tipDesc">Intraday price range as a percentage of close. Same metric used in the pulse ranking to measure price volatility.</div>
+                        <div style="opacity: 0.85;">
+                            <div style="margin-bottom: 4px;"><b>Formula</b> &mdash; (high &minus; low) / close &times; 100</div>
+                            <div style="opacity: 0.6; padding-left: 10px;">
+                                <div>Higher % = wider intraday swings</div>
+                                <div>Cross-index z-score of this value determines Range Z</div>
+                            </div>
+                        </div>
+                        <div style="@_tipNote">White line = full index average &middot; colored lines = individual stocks &middot; values in %</div>
+                    </div>
+                </TooltipContent>
+            </MudTooltip>
+            <div id="rangeChartLegend" style="margin-bottom: 4px; min-height: 16px;"></div>
+            <div id="rangeChart" style="width: 100%; height: 200px;"></div>
+        </MudPaper>
+    }
 }
 
 @code {
@@ -227,28 +280,68 @@ else
     private DateTime? _lastRefresh;
     private DateTime? _lastDataTimestamp;
     private CancellationTokenSource? _refreshCts;
+    private string _selectedIndex = "";
+    private string _chartPeriod = "1M";
+    private IJSObjectReference? _jsModule;
+    private bool _chartReady;
+    private HashSet<string> _chartSymbols = new();  // symbols visible in charts
 
     // Data
     private Dictionary<string, List<PulseSnapshot>> _pulseByIndex = new();
     private Dictionary<(string, string), PulseTicker> _tickerLookup = new();
+    private Dictionary<string, List<SymbolClose>> _closesByIndex = new();       // pulse stocks
+    private Dictionary<string, List<SymbolClose>> _allClosesByIndex = new();    // all constituents (for avg)
+
+    // Computed properties for selected index
+    private List<PulseSnapshot> SelectedPulseList => _pulseByIndex.GetValueOrDefault(_selectedIndex) ?? [];
+    private string SelectedCurrency => CurrencySymbol(_selectedIndex);
+    private double SelectedMaxActivity
+    {
+        get
+        {
+            var list = SelectedPulseList;
+            if (list.Count == 0) return 1;
+            var max = list.Max(p => _tickerLookup.TryGetValue((_selectedIndex, p.Symbol), out var t) ? (t.ActivityScore ?? 0) : 0);
+            return max == 0 ? 1 : max;
+        }
+    }
     private Dictionary<(string, string), StockInfo> _stockLookup = new();
 
     // Fixed index order
     private static readonly string[] _indices =
         ["euro_stoxx_50", "stoxx_usa_50", "stoxx_asia_50"];
 
+    private static readonly string[] _chartPeriods = ["5D", "1M", "3M", "6M"];
+
     // ── Data loading ──────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
         _loading = true;
+        _selectedIndex = _indices.Contains(IdxState.SelectedIndex) ? IdxState.SelectedIndex : _indices[0];
         var stocksTask = StockRepo.GetStocksAsync();
         await Task.WhenAll(LoadAllData(), stocksTask);
         _stockLookup = (await stocksTask).ToDictionary(s => (s.Index, s.Symbol));
+        await LoadChartData();
+        _chartSymbols = new(SelectedPulseList.Select(p => p.Symbol));
         _loading = false;
 
         _refreshCts = new CancellationTokenSource();
         _ = AutoRefreshLoop(_refreshCts.Token);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import",
+                "./Components/Pages/Live.razor.js");
+        }
+        if (_jsModule is not null && !_loading && !_chartReady && SelectedPulseList.Count > 0)
+        {
+            _chartReady = true;
+            await RenderChart();
+        }
     }
 
     private async Task LoadAllData()
@@ -264,14 +357,40 @@ else
             .ToDictionary(g => g.Key, g => g.ToList());
         _tickerLookup = tickers.ToDictionary(t => (t.Index, t.Symbol));
 
-        // Latest data timestamp (already stored as CET)
         _lastDataTimestamp = pulse.Count > 0 ? pulse.Max(p => p.Timestamp) : null;
-
         _lastRefresh = DateTime.Now;
     }
 
-    // PeriodicTimer is disposed via `using`; cancellation token causes WaitForNextTickAsync
-    // to throw OperationCanceledException, which we catch to exit the loop cleanly.
+    private async Task LoadChartData()
+    {
+        // Load 6M of closes for pulse stocks + all constituents (for portfolio avg)
+        var from = DateTime.Today.AddMonths(-6);
+        var tasks = new List<Task>();
+        foreach (var idx in _indices)
+        {
+            var pulseSymbols = (_pulseByIndex.GetValueOrDefault(idx) ?? []).Select(p => p.Symbol).ToArray();
+            var allSymbols = _stockLookup.Keys.Where(k => k.Item1 == idx).Select(k => k.Item2).ToArray();
+            var localIdx = idx;
+            if (pulseSymbols.Length > 0)
+            {
+                tasks.Add(Task.Run(async () =>
+                {
+                    var closes = (await StockRepo.GetBatchClosesAsync(localIdx, pulseSymbols, from)).ToList();
+                    lock (_closesByIndex) { _closesByIndex[localIdx] = closes; }
+                }));
+            }
+            if (allSymbols.Length > 0)
+            {
+                tasks.Add(Task.Run(async () =>
+                {
+                    var closes = (await StockRepo.GetBatchClosesAsync(localIdx, allSymbols, from)).ToList();
+                    lock (_allClosesByIndex) { _allClosesByIndex[localIdx] = closes; }
+                }));
+            }
+        }
+        await Task.WhenAll(tasks);
+    }
+
     private async Task AutoRefreshLoop(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
@@ -287,17 +406,202 @@ else
         }
     }
 
+    private async Task OnIndexChanged(string newIndex)
+    {
+        _selectedIndex = newIndex;
+        IdxState.SelectedIndex = newIndex;
+        _chartSymbols = new(SelectedPulseList.Select(p => p.Symbol));
+        if (_chartReady && _jsModule is not null)
+            await RenderChart();
+    }
+
+    private async Task OnPeriodChanged(string period)
+    {
+        _chartPeriod = period;
+        if (_chartReady && _jsModule is not null)
+            await RenderChart();
+    }
+
+    private async Task OnToggleChartSymbol(string symbol, MouseEventArgs e)
+    {
+        if (e.CtrlKey)
+        {
+            // Ctrl+click: isolate this stock only
+            _chartSymbols = new() { symbol };
+        }
+        else
+        {
+            // Normal click: toggle (checkbox fires before state flips, so invert)
+            if (_chartSymbols.Contains(symbol)) _chartSymbols.Remove(symbol);
+            else _chartSymbols.Add(symbol);
+        }
+        if (_chartReady && _jsModule is not null)
+            await RenderChart();
+    }
+
+    // ── Chart rendering ─────────────────────────────────────────────
+
+    private async Task RenderChart()
+    {
+        if (_jsModule is null) return;
+
+        var cutoff = _chartPeriod switch
+        {
+            "5D" => DateTime.Today.AddDays(-7),
+            "1M" => DateTime.Today.AddMonths(-1),
+            "3M" => DateTime.Today.AddMonths(-3),
+            "6M" => DateTime.Today.AddMonths(-6),
+            _ => DateTime.Today.AddMonths(-1)
+        };
+
+        var closes = _closesByIndex.GetValueOrDefault(_selectedIndex) ?? [];
+        var allCloses = _allClosesByIndex.GetValueOrDefault(_selectedIndex) ?? [];
+        var symbols = SelectedPulseList.Select(p => p.Symbol)
+            .Where(s => _chartSymbols.Contains(s)).ToList();
+
+        // Volume Surge series
+        var volSeries = new List<object>();
+        foreach (var sym in symbols)
+        {
+            var data = ComputeVolumeRatio(closes, sym, cutoff);
+            if (data.Length < 2) continue;
+            volSeries.Add(new { symbol = sym, data });
+        }
+        var volAvg = ComputeAvgVolumeRatio(allCloses, cutoff);
+
+        // Range Intensity series
+        var rangeSeries = new List<object>();
+        foreach (var sym in symbols)
+        {
+            var data = ComputeRangeIntensity(closes, sym, cutoff);
+            if (data.Length < 2) continue;
+            rangeSeries.Add(new { symbol = sym, data });
+        }
+        var rangeAvg = ComputeAvgRangeIntensity(allCloses, cutoff);
+
+        var configs = new object[]
+        {
+            new { containerId = "volChart", legendId = "volChartLegend", seriesData = volSeries, avgData = volAvg, suffix = "x", baseline = 1.0 },
+            new { containerId = "rangeChart", legendId = "rangeChartLegend", seriesData = rangeSeries, avgData = rangeAvg, suffix = "%", baseline = (double?)null }
+        };
+        await _jsModule.InvokeVoidAsync("initPulseCharts", (object)configs);
+    }
+
+    /// <summary>Compute rolling 10-day volume ratio for a single symbol.</summary>
+    private static object[] ComputeVolumeRatio(List<SymbolClose> closes, string symbol, DateTime cutoff)
+    {
+        // Need 10 extra trading days before cutoff for the rolling average
+        var allPts = closes.Where(c => c.Symbol == symbol && c.Volume > 0)
+                           .OrderBy(c => c.Date).ToList();
+        if (allPts.Count < 11) return [];
+
+        var result = new List<object>();
+        for (int i = 10; i < allPts.Count; i++)
+        {
+            if (allPts[i].Date < cutoff) continue;
+            var avg10 = 0.0;
+            for (int j = i - 10; j < i; j++) avg10 += allPts[j].Volume;
+            avg10 /= 10.0;
+            if (avg10 == 0) continue;
+            var ratio = allPts[i].Volume / avg10;
+            result.Add(new
+            {
+                time = allPts[i].Date.ToString("yyyy-MM-dd"),
+                value = Math.Round(ratio, 2)
+            });
+        }
+        return result.ToArray();
+    }
+
+    /// <summary>Average volume ratio across all constituents per date.</summary>
+    private static object[] ComputeAvgVolumeRatio(List<SymbolClose> allCloses, DateTime cutoff)
+    {
+        // Compute per-symbol volume ratios, then average per date
+        var symbols = allCloses.Select(c => c.Symbol).Distinct().ToList();
+        var dateMap = new SortedDictionary<DateTime, List<double>>();
+
+        foreach (var sym in symbols)
+        {
+            var allPts = allCloses.Where(c => c.Symbol == sym && c.Volume > 0)
+                                  .OrderBy(c => c.Date).ToList();
+            if (allPts.Count < 11) continue;
+
+            for (int i = 10; i < allPts.Count; i++)
+            {
+                if (allPts[i].Date < cutoff) continue;
+                var avg10 = 0.0;
+                for (int j = i - 10; j < i; j++) avg10 += allPts[j].Volume;
+                avg10 /= 10.0;
+                if (avg10 == 0) continue;
+
+                if (!dateMap.TryGetValue(allPts[i].Date, out var list))
+                    dateMap[allPts[i].Date] = list = new();
+                list.Add(allPts[i].Volume / avg10);
+            }
+        }
+
+        return dateMap.Select(kv => (object)new
+        {
+            time = kv.Key.ToString("yyyy-MM-dd"),
+            value = Math.Round(kv.Value.Average(), 2)
+        }).ToArray();
+    }
+
+    /// <summary>Compute daily range intensity for a single symbol.
+    /// Range intensity = (high - low) / close — matches the pulse ranking formula.</summary>
+    private static object[] ComputeRangeIntensity(List<SymbolClose> closes, string symbol, DateTime cutoff)
+    {
+        var pts = closes.Where(c => c.Symbol == symbol && c.High > 0 && c.Low > 0 && c.Close > 0 && c.Date >= cutoff)
+                        .OrderBy(c => c.Date).ToList();
+
+        return pts.Select(p => (object)new
+        {
+            time = p.Date.ToString("yyyy-MM-dd"),
+            value = Math.Round((p.High - p.Low) / p.Close * 100, 2)
+        }).ToArray();
+    }
+
+    /// <summary>Average range intensity across all constituents per date.</summary>
+    private static object[] ComputeAvgRangeIntensity(List<SymbolClose> allCloses, DateTime cutoff)
+    {
+        var symbols = allCloses.Select(c => c.Symbol).Distinct().ToList();
+        var dateMap = new SortedDictionary<DateTime, List<double>>();
+
+        foreach (var sym in symbols)
+        {
+            var pts = allCloses.Where(c => c.Symbol == sym && c.High > 0 && c.Low > 0 && c.Close > 0 && c.Date >= cutoff)
+                               .OrderBy(c => c.Date).ToList();
+
+            foreach (var p in pts)
+            {
+                if (!dateMap.TryGetValue(p.Date, out var list))
+                    dateMap[p.Date] = list = new();
+                list.Add((p.High - p.Low) / p.Close * 100);
+            }
+        }
+
+        return dateMap.Select(kv => (object)new
+        {
+            time = kv.Key.ToString("yyyy-MM-dd"),
+            value = Math.Round(kv.Value.Average(), 2)
+        }).ToArray();
+    }
+
     // ── Cleanup ───────────────────────────────────────────────────────
 
     public async ValueTask DisposeAsync()
     {
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
+        if (_jsModule is not null)
+        {
+            try { await _jsModule.InvokeVoidAsync("destroyPulseCharts"); } catch { }
+            await _jsModule.DisposeAsync();
+        }
     }
 
     // ── Market hours (approximate exchange sessions in UTC) ─────────
-    // Rough heuristic — ignores DST shifts, half-days, and holidays.
-    // Good enough for a live/closed indicator, not for trading logic.
+
     private static bool IsMarketOpen(string index)
     {
         var utcNow = DateTime.UtcNow;
@@ -307,11 +611,8 @@ else
         var t = utcNow.TimeOfDay;
         return index switch
         {
-            // Xetra / Euronext: 08:00–16:30 UTC (approx CET -1)
             "euro_stoxx_50" => t >= new TimeSpan(8, 0, 0) && t <= new TimeSpan(16, 30, 0),
-            // NYSE / NASDAQ: 14:30–21:00 UTC (approx ET +5)
             "stoxx_usa_50" => t >= new TimeSpan(14, 30, 0) && t <= new TimeSpan(21, 0, 0),
-            // Tokyo / HK / Sydney: ~00:00–08:00 UTC (covers JST/HKT/AEST overlap)
             "stoxx_asia_50" => t >= new TimeSpan(0, 0, 0) && t <= new TimeSpan(8, 0, 0),
             _ => false
         };
@@ -336,21 +637,9 @@ else
         };
     }
 
-    // ── Tooltip styles ────────────────────────────────────────────────
-    // Inline CSS constants for the Pulse explanation tooltip — kept here because
-    // MudTooltip's TooltipContent requires inline styles for dark-theme consistency.
-    private const string _tipStyle = "text-align: left; background: #1A1A2E; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; max-width: 340px; font-size: 0.75rem; line-height: 1.6; color: #E0E0E0; box-shadow: 0 4px 20px rgba(0,0,0,0.5);";
-    private const string _tipHead = "font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: #fff;";
-    private const string _tipDesc = "opacity: 0.6; margin-bottom: 8px;";
-    private const string _tipList = "margin: 0 0 6px 0; padding-left: 16px; opacity: 0.85;";
-    private const string _tipNote = "opacity: 0.45; font-size: 0.7rem; font-style: italic; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 4px;";
-
     // ── Helpers ──────────────────────────────────────────────────────
 
-    private string IndexColor(string key) => IdxReg.GetColor(key);
-
     private string FormatIndexName(string key) => IdxReg.GetDisplayName(key);
-
 
     private string CurrencySymbol(string index) => IdxReg.GetCurrency(index);
 
@@ -389,4 +678,26 @@ else
         <= 7 => "#AB47BC",
         _ => "#A0A0B0"
     };
+
+    private static string VolRatioColor(double vr) => vr switch
+    {
+        > 2.0 => "#EF5350",
+        > 1.5 => "#FFA726",
+        > 1.0 => "#42A5F5",
+        _ => "inherit"
+    };
+
+    private static string ZColor(double z) => z switch
+    {
+        > 2.0 => "#EF5350",
+        > 1.0 => "#FFA726",
+        > 0 => "#42A5F5",
+        _ => "#A0A0B0"
+    };
+
+    // ── Tooltip styles (same as Home.razor) ─────────────────────────
+    private const string _tipStyle = "text-align: left; background: #1A1A2E; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; max-width: 340px; font-size: 0.75rem; line-height: 1.6; color: #E0E0E0; box-shadow: 0 4px 20px rgba(0,0,0,0.5);";
+    private const string _tipHead = "font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: #fff;";
+    private const string _tipDesc = "opacity: 0.6; margin-bottom: 8px;";
+    private const string _tipNote = "opacity: 0.45; font-size: 0.7rem; font-style: italic; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 4px;";
 }

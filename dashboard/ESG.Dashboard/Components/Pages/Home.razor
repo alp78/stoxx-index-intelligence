@@ -57,7 +57,7 @@ else
                    Variant="Variant.Outlined" Dense="true" Style="max-width: 300px;" Margin="Margin.Dense">
             @foreach (var idx in _indexKeys)
             {
-                <MudSelectItem Value="@idx">@FormatIndexName(idx)</MudSelectItem>
+                <MudSelectItem Value="@idx">@FormatIndexName(idx).ToUpperInvariant()</MudSelectItem>
             }
         </MudSelect>
         @if (SelectedSnap != null)
