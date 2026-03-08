@@ -637,7 +637,7 @@ function _donutSetupEvents(container) {
         } else if (params.seriesName === 'Stocks') {
             const symbol = _donutStockLabels[params.dataIndex];
             if (symbol && _donutIndex) {
-                window.location.href = `/stocks/${_donutIndex}/${symbol}`;
+                Blazor.navigateTo(`/stocks/${_donutIndex}/${symbol}`);
             }
         }
     });

@@ -47,7 +47,7 @@ resource "google_compute_instance" "airflow" {
 # --------------------------------------------------------------------------
 resource "google_compute_instance" "sql" {
   name         = "stoxx-sql"
-  machine_type = "e2-medium"
+  machine_type = "e2-small"
   zone         = var.zone
   tags         = ["sql"]
 

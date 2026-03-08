@@ -248,7 +248,7 @@ function renderTiles(container, tiles) {
         el.addEventListener('mouseenter', (e) => { el.style.filter = 'brightness(1.3)'; showTooltip(e, tooltipHtml); });
         el.addEventListener('mousemove', (e) => showTooltip(e, tooltipHtml));
         el.addEventListener('mouseleave', () => { el.style.filter = ''; hideTooltip(); });
-        el.addEventListener('click', () => { if (s.href) window.location.href = s.href; });
+        el.addEventListener('click', () => { if (s.href) Blazor.navigateTo(s.href); });
 
         // Adaptive content based on tile size
         if (minW > 50 && minH > 40) {
