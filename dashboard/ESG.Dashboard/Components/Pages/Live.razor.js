@@ -1,7 +1,8 @@
 // Live.razor.js — Dual synchronized multi-line charts for Pulse page
 // Volume Surge + Range Intensity, per-stock lines + portfolio average
 
-let _charts = [];  // { chart, seriesMap, avgSeries }
+let _charts = [];  // { chart, seriesMap, avgSeries, ... }
+let _sharedPointX = null;  // shared mouse x across synced charts
 
 const PALETTE = [
     '#42A5F5', '#26A69A', '#AB47BC', '#FFA726', '#EF5350',
@@ -138,55 +139,82 @@ function _createChart(containerId, seriesData, legendId, avgData, suffix, baseli
         container.appendChild(tooltip);
     }
 
-    chart.subscribeCrosshairMove(param => {
-        if (!param.time || param.seriesData.size === 0) {
+    // Build time->value maps for all series (used by tooltip from both local + sync)
+    const dataByTime = {};  // time -> { symbol: value, ... }
+    for (const sd of seriesData) {
+        for (const pt of sd.data) {
+            if (!dataByTime[pt.time]) dataByTime[pt.time] = {};
+            dataByTime[pt.time][sd.symbol] = pt.value;
+        }
+    }
+    const avgByTime = {};
+    if (avgData) {
+        for (const pt of avgData) avgByTime[pt.time] = pt.value;
+    }
+
+    // Tooltip renderer — works from stored data, no dependency on param.seriesData
+    function showTooltip(time, pointX) {
+        if (!time || !dataByTime[time]) {
             tooltip.style.display = 'none';
             return;
         }
-        let html = `<div style="opacity:0.5;margin-bottom:2px;">${param.time}</div>`;
-        const entries = [];
+        const vals = dataByTime[time];
+        let html = `<div style="opacity:0.5;margin-bottom:2px;">${time}</div>`;
+        // AVG first
+        if (avgByTime[time] !== undefined) {
+            const v = avgByTime[time];
+            const valColor = v > 1.5 ? '#FFA726' : v > 1.0 ? '#42A5F5' : '#A0A0B0';
+            html += `<div style="border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:3px;margin-bottom:3px;"><span style="color:rgba(255,255,255,0.7);">&#9679;</span> <span style="font-weight:600;">INDEX AVG</span> <span style="color:${valColor};">${v.toFixed(2)}${sfx}</span></div>`;
+        }
+        // Per-stock, sorted descending
+        const items = [];
+        let ci = 0;
         for (const sd of seriesData) {
-            const s = seriesMap[sd.symbol];
-            if (!s) continue;
-            const d = param.seriesData.get(s);
-            if (d && d.value !== undefined) {
-                entries.push({ symbol: sd.symbol, value: d.value, color: s.options().color });
+            if (vals[sd.symbol] !== undefined) {
+                const color = PALETTE[ci % PALETTE.length];
+                items.push({ symbol: sd.symbol, value: vals[sd.symbol], color });
             }
+            ci++;
         }
-        entries.sort((a, b) => b.value - a.value);
-        if (avgSeries) {
-            const ad = param.seriesData.get(avgSeries);
-            if (ad && ad.value !== undefined) {
-                const valColor = ad.value > 1.5 ? '#FFA726' : ad.value > 1.0 ? '#42A5F5' : '#A0A0B0';
-                html += `<div style="border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:3px;margin-bottom:3px;"><span style="color:rgba(255,255,255,0.7);">&#9679;</span> <span style="font-weight:600;">INDEX AVG</span> <span style="color:${valColor};">${ad.value.toFixed(2)}${sfx}</span></div>`;
-            }
-        }
-        for (const e of entries) {
+        items.sort((a, b) => b.value - a.value);
+        for (const e of items) {
             const valColor = e.value > 2.0 ? '#EF5350' : e.value > 1.5 ? '#FFA726' : e.value > 1.0 ? '#42A5F5' : '#A0A0B0';
             html += `<div><span style="color:${e.color};">&#9679;</span> <span style="font-weight:600;">${e.symbol}</span> <span style="color:${valColor};">${e.value.toFixed(2)}${sfx}</span></div>`;
         }
         tooltip.innerHTML = html;
         tooltip.style.display = 'block';
 
-        const x = param.point.x;
-        const w = container.clientWidth;
-        tooltip.style.top = '8px';
-        if (x > w / 2) {
-            tooltip.style.left = 'auto';
-            tooltip.style.right = (w - x + 12) + 'px';
-        } else {
-            tooltip.style.right = 'auto';
-            tooltip.style.left = (x + 12) + 'px';
+        if (pointX != null) {
+            const w = container.clientWidth;
+            tooltip.style.top = '8px';
+            if (pointX > w / 2) {
+                tooltip.style.left = 'auto';
+                tooltip.style.right = (w - pointX + 12) + 'px';
+            } else {
+                tooltip.style.right = 'auto';
+                tooltip.style.left = (pointX + 12) + 'px';
+            }
         }
+    }
+
+    function hideTooltip() {
+        tooltip.style.display = 'none';
+    }
+
+    chart.subscribeCrosshairMove(param => {
+        if (param.point) _sharedPointX = param.point.x;
+        const x = param.point ? param.point.x : _sharedPointX;
+        if (!param.time) { hideTooltip(); return; }
+        showTooltip(param.time, x);
     });
 
-    // Build time->value map for crosshair sync (first series as anchor)
+    // First series time->value for crosshair sync anchor
     const timeValueMap = {};
     if (seriesData.length > 0) {
         for (const pt of seriesData[0].data) timeValueMap[pt.time] = pt.value;
     }
 
-    return { chart, seriesMap, avgSeries, timeValueMap };
+    return { chart, seriesMap, avgSeries, timeValueMap, showTooltip, hideTooltip };
 }
 
 export function initPulseCharts(configs) {
@@ -215,23 +243,29 @@ export function initPulseCharts(configs) {
         });
     }
 
-    // Sync crosshair position across charts — must pass a real price
-    // value so the tooltip callback fires with valid seriesData
+    // Sync crosshair + tooltip across charts.
+    // setCrosshairPosition does NOT fire subscribeCrosshairMove in v4,
+    // so we manually call showTooltip on the synced chart.
     let _syncingCrosshair = false;
     for (const c of _charts) {
         c.chart.subscribeCrosshairMove(param => {
             if (_syncingCrosshair) return;
             _syncingCrosshair = true;
+            const sourceX = param.point ? param.point.x : _sharedPointX;
             for (const other of _charts) {
                 if (other.chart === c.chart) continue;
                 if (param.time) {
+                    // Move crosshair dots
                     const anchor = Object.values(other.seriesMap)[0] || other.avgSeries;
                     const price = other.timeValueMap[param.time];
                     if (anchor && price !== undefined) {
                         try { other.chart.setCrosshairPosition(price, param.time, anchor); } catch (_) {}
                     }
+                    // Show tooltip directly (setCrosshairPosition won't trigger callback)
+                    other.showTooltip(param.time, sourceX);
                 } else {
                     try { other.chart.clearCrosshairPosition(); } catch (_) {}
+                    other.hideTooltip();
                 }
             }
             _syncingCrosshair = false;
