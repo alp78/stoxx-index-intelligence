@@ -34,13 +34,25 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
         for (const pane of chart.panes()) {
             for (const s of pane.getSeries()) chart.removeSeries(s);
         }
-        // Add a single line series
-        const series = chart.addSeries(LightweightCharts.LineSeries, seriesOptions);
+        // Per-entry series type/options override the defaults
+        const sType = e.seriesType === 'Baseline'
+            ? LightweightCharts.BaselineSeries
+            : e.seriesType === 'Area'
+                ? LightweightCharts.AreaSeries
+                : LightweightCharts.LineSeries;
+        const sOpts = e.seriesOptions ? { ...seriesOptions, ...e.seriesOptions } : seriesOptions;
+        const series = chart.addSeries(sType, sOpts);
         // Push data and set visible range
         series.setData(e.data);
         const ts = chart.timeScale();
         if (e.from != null && e.to != null) ts.setVisibleRange({ from: e.from, to: e.to });
         else ts.fitContent();
+        // Price lines (e.g. zero line, average line)
+        if (e.priceLines) {
+            for (const pl of e.priceLines) {
+                series.createPriceLine(pl);
+            }
+        }
         // Generate unique IDs so the stored-reference map can track them
         if (!series.uniqueJavascriptId) series.uniqueJavascriptId = crypto.randomUUID();
         if (!ts.uniqueJavascriptId) ts.uniqueJavascriptId = crypto.randomUUID();
@@ -79,6 +91,19 @@ export function batchUpdateCharts(charts, tooltips) {
             }
         }
         series.setData(c.data);
+        // Re-create price lines on update (remove old ones first)
+        if (c.priceLines) {
+            // removePriceLine API doesn't exist — recreate by removing all via options hack
+            // Actually, we can iterate existing price lines... but simpler: the series was just
+            // cleaned above on re-add. For existing series, remove old lines:
+            try {
+                const existing = series.priceLines ? series.priceLines() : [];
+                for (const pl of existing) series.removePriceLine(pl);
+            } catch (_) { /* older versions may not support priceLines() */ }
+            for (const pl of c.priceLines) {
+                series.createPriceLine(pl);
+            }
+        }
         const ts = _resolve(c.timeScale);
         if (c.from != null && c.to != null) ts.setVisibleRange({ from: c.from, to: c.to });
         else ts.fitContent();
@@ -134,8 +159,9 @@ export function showTooltip(container, x, y, timestamp) {
         const valColor = colorBySign
             ? (hasVal ? (val >= 0 ? '#26A69A' : '#EF5350') : 'inherit')
             : idx.color;
+        const suffix = options.suffix !== undefined ? options.suffix : '%';
         const prefix = (colorBySign && hasVal && val >= 0) ? '+' : '';
-        const valText = hasVal ? prefix + val.toFixed(2) + '%' : '--';
+        const valText = hasVal ? prefix + val.toFixed(2) + suffix : '--';
         html += `<div style="display: flex; align-items: center; gap: 6px;">` +
             `<span style="display:inline-block;width:8px;height:2px;background:${idx.color};border-radius:1px;flex-shrink:0;"></span>` +
             `<span style="opacity:0.5;flex:1;">${_esc(idx.name)}</span>` +
