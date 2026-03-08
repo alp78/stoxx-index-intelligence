@@ -93,7 +93,9 @@ public class StockRepository
 
         using var conn = _db.Create();
         var sql = $"""
-            SELECT symbol AS Symbol, date AS Date, adj_close AS [Close]
+            SELECT symbol AS Symbol, date AS Date, adj_close AS [Close], volume AS Volume,
+                   CASE WHEN [close] <> 0 THEN high * adj_close / [close] ELSE high END AS High,
+                   CASE WHEN [close] <> 0 THEN low * adj_close / [close] ELSE low END AS Low
             FROM {table}
             WHERE symbol IN @Symbols AND date >= @From
               AND adj_close IS NOT NULL

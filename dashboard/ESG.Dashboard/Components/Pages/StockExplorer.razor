@@ -532,7 +532,7 @@ else
                                Label="Index" Variant="Variant.Outlined" Dense="true" Class="mb-2">
                         @foreach (var idx in _indexKeys)
                         {
-                            <MudSelectItem Value="@idx">@FormatIndexName(idx)</MudSelectItem>
+                            <MudSelectItem Value="@idx">@FormatIndexName(idx).ToUpperInvariant()</MudSelectItem>
                         }
                     </MudSelect>
                     <MudTextField @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined"
