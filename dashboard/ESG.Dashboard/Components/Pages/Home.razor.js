@@ -73,8 +73,10 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
     }
 
     // ── Sync zoom/pan across all charts ──
-    // Use time-based range (not logical/bar-index) so charts with different
-    // data lengths still align on the calendar axis.
+    // Use logical range (bar-index based) — all data arrays are filtered to the
+    // same period cutoff so bar indices correspond. Logical range preserves the
+    // user's zoom level during pan (unlike time-based sync which can auto-adjust
+    // and cause gradual zoom-out when edge timestamps don't match exactly).
     const timeScales = [];
     for (const e of entries) {
         const chart = _resolve(e.chartRef);
@@ -82,12 +84,12 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
     }
     let _syncing = false;
     for (const ts of timeScales) {
-        ts.subscribeVisibleTimeRangeChange(range => {
+        ts.subscribeVisibleLogicalRangeChange(range => {
             if (_syncing || !range) return;
             _syncing = true;
             for (const other of timeScales) {
                 if (other !== ts) {
-                    try { other.setVisibleRange(range); } catch (_) {}
+                    other.setVisibleLogicalRange(range);
                 }
             }
             _syncing = false;
