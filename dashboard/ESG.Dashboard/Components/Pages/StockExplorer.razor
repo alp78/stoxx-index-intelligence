@@ -528,12 +528,6 @@ else
         <MudItem xs="12" md="4" Class="stock-nav-panel">
             <MudPaper Elevation="2" Class="pa-0" Style="position: sticky; top: 80px;">
                 <div class="pa-3">
-                    @if (_lastRefresh is not null)
-                    {
-                        <div class="mb-2">
-                            <span style="font-size: 0.6rem; opacity: 0.3;">@_lastRefresh.Value.ToString("HH:mm:ss")</span>
-                        </div>
-                    }
                     <MudSelect T="string" Value="_filterIndex" ValueChanged="OnIndexFilterChanged"
                                Label="Index" Variant="Variant.Outlined" Dense="true" Class="mb-2">
                         @foreach (var idx in _indexKeys)
