@@ -20,6 +20,8 @@ function _resolve(ref) {
     return window.lightweightChartsBlazor.getStoredReference(ref);
 }
 
+let _syncing = false;  // shared guard: prevents zoom/pan sync loops during batch updates
+
 // Initializes multiple line charts in a single JS call — replaces N×(ApplyOptions +
 // AddSeries + TimeScale + SetData + SetVisibleRange) wrapper round-trips with 1 call.
 // Each entry: { chartRef, data, from?, to? }
@@ -73,23 +75,21 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
     }
 
     // ── Sync zoom/pan across all charts ──
-    // Use logical range (bar-index based) — all data arrays are filtered to the
-    // same period cutoff so bar indices correspond. Logical range preserves the
-    // user's zoom level during pan (unlike time-based sync which can auto-adjust
-    // and cause gradual zoom-out when edge timestamps don't match exactly).
+    // Use time-based range sync so charts with different data lengths stay
+    // aligned on the same calendar window (logical range would drift when
+    // bar counts differ, e.g. rolling-30d starts later than synthetic).
     const timeScales = [];
     for (const e of entries) {
         const chart = _resolve(e.chartRef);
         timeScales.push(chart.timeScale());
     }
-    let _syncing = false;
     for (const ts of timeScales) {
-        ts.subscribeVisibleLogicalRangeChange(range => {
+        ts.subscribeVisibleTimeRangeChange(range => {
             if (_syncing || !range) return;
             _syncing = true;
             for (const other of timeScales) {
                 if (other !== ts) {
-                    other.setVisibleLogicalRange(range);
+                    try { other.setVisibleRange(range); } catch (_) {}
                 }
             }
             _syncing = false;
@@ -103,6 +103,7 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
 // `charts`: [{ series, timeScale, data, from?, to? }]
 // `tooltips`: [{ container, lookup, indices, options }]
 export function batchUpdateCharts(charts, tooltips) {
+    _syncing = true;  // suppress zoom/pan sync while updating all charts
     for (const c of charts) {
         const series = _resolve(c.series);
         // Guard: if the chart somehow accumulated extra series, remove them so
@@ -118,9 +119,6 @@ export function batchUpdateCharts(charts, tooltips) {
         series.setData(c.data);
         // Re-create price lines on update (remove old ones first)
         if (c.priceLines) {
-            // removePriceLine API doesn't exist — recreate by removing all via options hack
-            // Actually, we can iterate existing price lines... but simpler: the series was just
-            // cleaned above on re-add. For existing series, remove old lines:
             try {
                 const existing = series.priceLines ? series.priceLines() : [];
                 for (const pl of existing) series.removePriceLine(pl);
@@ -133,6 +131,7 @@ export function batchUpdateCharts(charts, tooltips) {
         if (c.from != null && c.to != null) ts.setVisibleRange({ from: c.from, to: c.to });
         else ts.fitContent();
     }
+    _syncing = false;
     for (const t of tooltips) {
         t.container._ttLookup = t.lookup;
         t.container._ttIndices = t.indices;
@@ -143,11 +142,13 @@ export function batchUpdateCharts(charts, tooltips) {
 // Range-only update: moves visible window without replacing data or tooltips.
 // `entries`: [{ timeScale, from?, to? }]
 export function batchSetVisibleRange(entries) {
+    _syncing = true;
     for (const e of entries) {
         const ts = _resolve(e.timeScale);
         if (e.from != null && e.to != null) ts.setVisibleRange({ from: e.from, to: e.to });
         else ts.fitContent();
     }
+    _syncing = false;
 }
 
 // ── Tooltip (managed entirely in JS to avoid Blazor re-renders) ──────
