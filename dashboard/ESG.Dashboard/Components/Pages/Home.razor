@@ -1205,6 +1205,19 @@ else
             ? new { price = avgVol.Value, color = "#FFA726", lineWidth = 1, lineStyle = 2, axisLabelVisible = true, title = "avg" }
             : null;
 
+        // Compute a global visible range so all 5 charts share the same x-axis.
+        // Use the synthetic chart (earliest data) as the anchor.
+        var globalFrom = chartData.Length > 0 ? chartData[0].Time : 0L;
+        var globalTo = chartData.Length > 0 ? chartData[^1].Time : 0L;
+        {
+            var cutoff = GetPeriodCutoff();
+            if (cutoff.HasValue)
+            {
+                var cutoffTs = new DateTimeOffset(cutoff.Value, TimeSpan.Zero).ToUnixTimeSeconds();
+                globalFrom = Math.Max(cutoffTs, globalFrom);
+            }
+        }
+
         foreach (var (chart, role) in charts)
         {
             var (data, container, colorBySign) = role switch
@@ -1215,11 +1228,8 @@ else
                 "sharpe" => (sharpeData, _sharpeContainer, false),
                 _ => (volData, _volContainer, false)
             };
-            var dataMinTime = role switch { "roll" => _rollMinTime, "vol" => _volMinTime, "dd" => _ddMinTime, "sharpe" => _sharpeMinTime, _ => 0L };
-            var dataMaxTime = role switch { "roll" => _rollMaxTime, "vol" => _volMaxTime, "dd" => _ddMaxTime, "sharpe" => _sharpeMaxTime, _ => 0L };
-            var (from, to) = role == "chart"
-                ? (data.Length > 0 ? data[0].Time : 0L, data.Length > 0 ? data[^1].Time : 0L)
-                : GetVisibleRange(dataMinTime, dataMaxTime);
+            var from = globalFrom;
+            var to = globalTo;
 
             // Per-chart series type and options
             string? seriesType = null;
@@ -1650,28 +1660,33 @@ else
     }
 
     // Drawdown = (current cumulative factor / running peak) - 1, always <= 0.
+    // Peak is computed from ALL history (for accuracy), but only data from the
+    // period cutoff is emitted so the x-axis aligns with the other charts.
     private LineData<long>[] PrepareDrawdownData(out long minTime, out long maxTime)
     {
         _ddLookup.Clear();
         minTime = long.MaxValue; maxTime = long.MinValue;
 
+        var cutoff = GetPeriodCutoff();
         var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
         var withFactor = allData.Where(p => p.CumulativeFactor.HasValue).ToList();
         if (withFactor.Count == 0) return [];
 
         double peak = double.MinValue;
-        var data = new LineData<long>[withFactor.Count];
+        var result = new List<LineData<long>>();
         for (int i = 0; i < withFactor.Count; i++)
         {
             var f = withFactor[i].CumulativeFactor!.Value;
             if (f > peak) peak = f;
-            var dd = (f / peak - 1) * 100; // percentage drawdown
+            if (cutoff.HasValue && withFactor[i].PerfDate < cutoff.Value) continue;
+            var dd = (f / peak - 1) * 100;
             var ts = new DateTimeOffset(withFactor[i].PerfDate, TimeSpan.Zero).ToUnixTimeSeconds();
-            data[i] = new LineData<long> { Time = ts, Value = dd };
+            result.Add(new LineData<long> { Time = ts, Value = dd });
             if (!_ddLookup.ContainsKey(ts))
                 _ddLookup[ts] = (withFactor[i].PerfDate, new());
             _ddLookup[ts].Values[_selectedSignalIndex] = dd;
         }
+        var data = result.ToArray();
         if (data.Length > 0) { minTime = data[0].Time; maxTime = data[^1].Time; }
         return data;
     }
@@ -1682,11 +1697,13 @@ else
         _sharpeLookup.Clear();
         minTime = long.MaxValue; maxTime = long.MinValue;
 
+        var cutoff = GetPeriodCutoff();
         var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
         var result = new List<LineData<long>>();
         foreach (var p in allData)
         {
             if (!p.Rolling30dReturn.HasValue || !p.Rolling30dVolatility.HasValue || p.Rolling30dVolatility.Value == 0) continue;
+            if (cutoff.HasValue && p.PerfDate < cutoff.Value) continue;
             var sharpe = p.Rolling30dReturn.Value / p.Rolling30dVolatility.Value;
             var ts = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds();
             var d = new LineData<long> { Time = ts, Value = Math.Round(sharpe, 3) };
@@ -1738,9 +1755,10 @@ else
         lookup.Clear();
         minTime = long.MaxValue; maxTime = long.MinValue;
 
+        var cutoff = GetPeriodCutoff();
         var allData = _perfByIndex.GetValueOrDefault(_selectedSignalIndex) ?? [];
         var data = allData
-            .Where(p => valueSelector(p).HasValue)
+            .Where(p => valueSelector(p).HasValue && (!cutoff.HasValue || p.PerfDate >= cutoff.Value))
             .Select(p => new LineData<long>
             {
                 Time = new DateTimeOffset(p.PerfDate, TimeSpan.Zero).ToUnixTimeSeconds(),
@@ -1797,16 +1815,19 @@ else
             ? [new { price = avgVol.Value, color = "#FFA726", lineWidth = 1, lineStyle = 2, axisLabelVisible = true, title = "avg" }]
             : null;
 
+        // Global visible range anchored to synthetic chart so all 5 x-axes align.
+        var globalFrom = chartData.Length > 0 ? chartData[0].Time : 0L;
+        var globalTo = chartData.Length > 0 ? chartData[^1].Time : 0L;
+
         if (_chartReady)
         {
-            var (from, to) = chartData.Length > 0 ? (chartData[0].Time, chartData[^1].Time) : (0L, 0L);
             charts.Add(new {
                 chartRef = _chartJsRef,
                 series = _chartSeriesRef!,
                 timeScale = _chartTimeScaleRef!,
                 data = chartData,
-                from = chartData.Length > 0 ? (long?)from : null,
-                to = chartData.Length > 0 ? (long?)to : null,
+                from = chartData.Length > 0 ? (long?)globalFrom : null,
+                to = chartData.Length > 0 ? (long?)globalTo : null,
                 priceLines = (object[]?)null
             });
             tooltips.Add(new { container = _chartContainer, lookup = BuildTooltipLookup(_tsLookup), indices = ttIndices, options = new { colorBySign = true } });
@@ -1814,14 +1835,13 @@ else
 
         if (_rollReady)
         {
-            var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
             charts.Add(new {
                 chartRef = _rollJsRef,
                 series = _rollSeriesRef!,
                 timeScale = _rollTimeScaleRef!,
                 data = rollData,
-                from = rollData.Length > 0 ? (long?)from : null,
-                to = rollData.Length > 0 ? (long?)to : null,
+                from = rollData.Length > 0 ? (long?)globalFrom : null,
+                to = rollData.Length > 0 ? (long?)globalTo : null,
                 priceLines = new object[] { zeroLine }
             });
             tooltips.Add(new { container = _rollContainer, lookup = BuildTooltipLookup(_rollLookup), indices = ttIndices, options = new { colorBySign = true } });
@@ -1829,14 +1849,13 @@ else
 
         if (_volReady)
         {
-            var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
             charts.Add(new {
                 chartRef = _volJsRef,
                 series = _volSeriesRef!,
                 timeScale = _volTimeScaleRef!,
                 data = volData,
-                from = volData.Length > 0 ? (long?)from : null,
-                to = volData.Length > 0 ? (long?)to : null,
+                from = volData.Length > 0 ? (long?)globalFrom : null,
+                to = volData.Length > 0 ? (long?)globalTo : null,
                 priceLines = volPriceLines
             });
             tooltips.Add(new { container = _volContainer, lookup = BuildTooltipLookup(_volLookup), indices = ttIndices, options = new { colorBySign = false } });
@@ -1844,14 +1863,13 @@ else
 
         if (_ddReady)
         {
-            var (from, to) = GetVisibleRange(_ddMinTime, _ddMaxTime);
             charts.Add(new {
                 chartRef = _ddJsRef,
                 series = _ddSeriesRef!,
                 timeScale = _ddTimeScaleRef!,
                 data = ddData,
-                from = ddData.Length > 0 ? (long?)from : null,
-                to = ddData.Length > 0 ? (long?)to : null,
+                from = ddData.Length > 0 ? (long?)globalFrom : null,
+                to = ddData.Length > 0 ? (long?)globalTo : null,
                 priceLines = new object[] { zeroLine }
             });
             tooltips.Add(new { container = _ddContainer, lookup = BuildTooltipLookup(_ddLookup), indices = ttIndices, options = new { colorBySign = true } });
@@ -1859,14 +1877,13 @@ else
 
         if (_sharpeReady)
         {
-            var (from, to) = GetVisibleRange(_sharpeMinTime, _sharpeMaxTime);
             charts.Add(new {
                 chartRef = _sharpeJsRef,
                 series = _sharpeSeriesRef!,
                 timeScale = _sharpeTimeScaleRef!,
                 data = sharpeData,
-                from = sharpeData.Length > 0 ? (long?)from : null,
-                to = sharpeData.Length > 0 ? (long?)to : null,
+                from = sharpeData.Length > 0 ? (long?)globalFrom : null,
+                to = sharpeData.Length > 0 ? (long?)globalTo : null,
                 priceLines = new object[] { zeroLine }
             });
             tooltips.Add(new { container = _sharpeContainer, lookup = BuildTooltipLookup(_sharpeLookup), indices = ttIndices, options = new { colorBySign = false, suffix = "" } });
@@ -2019,34 +2036,8 @@ else
         _selectedPeriod = period;
         try
         {
-            // Synthetic chart needs SetData (rebase changes all values).
-            // Rolling/vol just need their visible range moved — data is already loaded in full.
-            await UpdateChartData();
-
-            // Batch-adjust visible range for rolling + volatility in a single JS call.
-            var rangeEntries = new List<object>();
-            if (_rollReady)
-            {
-                var (from, to) = GetVisibleRange(_rollMinTime, _rollMaxTime);
-                rangeEntries.Add(new { timeScale = _rollTimeScaleRef!, from = (long?)from, to = (long?)to });
-            }
-            if (_volReady)
-            {
-                var (from, to) = GetVisibleRange(_volMinTime, _volMaxTime);
-                rangeEntries.Add(new { timeScale = _volTimeScaleRef!, from = (long?)from, to = (long?)to });
-            }
-            if (_ddReady)
-            {
-                var (from, to) = GetVisibleRange(_ddMinTime, _ddMaxTime);
-                rangeEntries.Add(new { timeScale = _ddTimeScaleRef!, from = (long?)from, to = (long?)to });
-            }
-            if (_sharpeReady)
-            {
-                var (from, to) = GetVisibleRange(_sharpeMinTime, _sharpeMaxTime);
-                rangeEntries.Add(new { timeScale = _sharpeTimeScaleRef!, from = (long?)from, to = (long?)to });
-            }
-            if (rangeEntries.Count > 0)
-                await _jsModule!.InvokeVoidAsync("batchSetVisibleRange", rangeEntries);
+            // All 5 charts filter data by period cutoff, so reload everything.
+            await BatchUpdateAllLineCharts();
         }
         catch (ObjectDisposedException) { }
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
@@ -2153,8 +2144,9 @@ else
     private static string FormatYield(double? val)
     {
         if (!val.HasValue) return "--";
-        var v = val.Value > 1 ? val.Value : val.Value * 100;
-        return $"{v:F2} %";
+        var v = val.Value;
+        if (v > 0.20) return $"{v:F2} %";   // already in percent (e.g. 2.93)
+        return $"{v * 100:F2} %";             // decimal form (e.g. 0.0293)
     }
     private static string ReturnHex(double? val) => val switch { > 0 => "#26A69A", < 0 => "#EF5350", _ => "inherit" };
     private static string ReturnArrow(double? val)

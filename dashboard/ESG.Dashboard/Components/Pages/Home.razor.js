@@ -71,6 +71,29 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
         t.container._ttIndices = t.indices;
         t.container._ttOptions = t.options || {};
     }
+
+    // ── Sync zoom/pan across all charts ──
+    // Use time-based range (not logical/bar-index) so charts with different
+    // data lengths still align on the calendar axis.
+    const timeScales = [];
+    for (const e of entries) {
+        const chart = _resolve(e.chartRef);
+        timeScales.push(chart.timeScale());
+    }
+    let _syncing = false;
+    for (const ts of timeScales) {
+        ts.subscribeVisibleTimeRangeChange(range => {
+            if (_syncing || !range) return;
+            _syncing = true;
+            for (const other of timeScales) {
+                if (other !== ts) {
+                    try { other.setVisibleRange(range); } catch (_) {}
+                }
+            }
+            _syncing = false;
+        });
+    }
+
     return results;
 }
 

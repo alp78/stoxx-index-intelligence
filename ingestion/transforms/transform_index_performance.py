@@ -208,6 +208,10 @@ def _transform_index(cursor, conn, key):
 
     # --- 10. Cap-weighted cross-sectional aggregates ---
     if signals is not None:
+        # Clamp dividend_yield to [0, 0.20] — yfinance occasionally returns
+        # outlier values that skew the cap-weighted average.
+        signals['dividend_yield'] = signals['dividend_yield'].clip(upper=0.20)
+
         def _cap_weighted_aggs(group):
             mcaps = group['market_cap']
             valid = mcaps.notna() & (mcaps > 0)
