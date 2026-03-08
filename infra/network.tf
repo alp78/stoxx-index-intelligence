@@ -84,7 +84,7 @@ resource "google_compute_firewall" "allow_iap" {
 
   allow {
     protocol = "tcp"
-    ports    = ["22"]
+    ports    = ["22", "1433"]
   }
 
   # IAP tunnel source range
