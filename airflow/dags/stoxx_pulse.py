@@ -20,6 +20,7 @@ with DAG(
     schedule="*/5 0-21 * * 1-5",  # Every 5 min, 00:00-21:00 UTC Mon-Fri (covers Asia/Europe/US)
     start_date=datetime(2025, 1, 1),
     catchup=False,
+    max_active_runs=1,
     tags=["stoxx"],
     default_args=default_args,
 ) as dag:
