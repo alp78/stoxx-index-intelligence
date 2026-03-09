@@ -467,7 +467,13 @@ else
             if (data.Length < 2) continue;
             volSeries.Add(new { symbol = sym, data });
         }
-        var volAvg = ComputeAvgVolumeRatio(allCloses, cutoff);
+        // Determine the last date that visible pulse stocks have data for.
+        // The AVG line (computed from all 50 constituents) must not extend beyond this,
+        // otherwise it shows trailing points with no tooltip when the pipeline hasn't
+        // yet run for this index today.
+        var maxPulseDate = closes.Where(c => symbols.Contains(c.Symbol) && c.Date >= cutoff)
+            .Select(c => c.Date).DefaultIfEmpty(DateTime.MinValue).Max();
+        var volAvg = ComputeAvgVolumeRatio(allCloses, cutoff, maxPulseDate);
 
         // Range Intensity series
         var rangeSeries = new List<object>();
@@ -477,7 +483,7 @@ else
             if (data.Length < 2) continue;
             rangeSeries.Add(new { symbol = sym, data });
         }
-        var rangeAvg = ComputeAvgRangeIntensity(allCloses, cutoff);
+        var rangeAvg = ComputeAvgRangeIntensity(allCloses, cutoff, maxPulseDate);
 
         var configs = new object[]
         {
@@ -513,8 +519,9 @@ else
         return result.ToArray();
     }
 
-    /// <summary>Average volume ratio across all constituents per date.</summary>
-    private static object[] ComputeAvgVolumeRatio(List<SymbolClose> allCloses, DateTime cutoff)
+    /// <summary>Average volume ratio across all constituents per date.
+    /// maxDate caps the AVG line so it doesn't extend beyond visible stock data.</summary>
+    private static object[] ComputeAvgVolumeRatio(List<SymbolClose> allCloses, DateTime cutoff, DateTime maxDate)
     {
         // Compute per-symbol volume ratios, then average per date
         var symbols = allCloses.Select(c => c.Symbol).Distinct().ToList();
@@ -528,7 +535,7 @@ else
 
             for (int i = 10; i < allPts.Count; i++)
             {
-                if (allPts[i].Date < cutoff) continue;
+                if (allPts[i].Date < cutoff || allPts[i].Date > maxDate) continue;
                 var avg10 = 0.0;
                 for (int j = i - 10; j < i; j++) avg10 += allPts[j].Volume;
                 avg10 /= 10.0;
@@ -561,15 +568,17 @@ else
         }).ToArray();
     }
 
-    /// <summary>Average range intensity across all constituents per date.</summary>
-    private static object[] ComputeAvgRangeIntensity(List<SymbolClose> allCloses, DateTime cutoff)
+    /// <summary>Average range intensity across all constituents per date.
+    /// maxDate caps the AVG line so it doesn't extend beyond visible stock data.</summary>
+    private static object[] ComputeAvgRangeIntensity(List<SymbolClose> allCloses, DateTime cutoff, DateTime maxDate)
     {
         var symbols = allCloses.Select(c => c.Symbol).Distinct().ToList();
         var dateMap = new SortedDictionary<DateTime, List<double>>();
 
         foreach (var sym in symbols)
         {
-            var pts = allCloses.Where(c => c.Symbol == sym && c.High > 0 && c.Low > 0 && c.Close > 0 && c.Date >= cutoff)
+            var pts = allCloses.Where(c => c.Symbol == sym && c.High > 0 && c.Low > 0 && c.Close > 0
+                                        && c.Date >= cutoff && c.Date <= maxDate)
                                .OrderBy(c => c.Date).ToList();
 
             foreach (var p in pts)
