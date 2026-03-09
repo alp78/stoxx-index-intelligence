@@ -230,10 +230,12 @@ def _transform_index(cursor, conn, key):
                     return np.nan
                 return (vals[mask] * w[mask]).sum() / w[mask].sum()
 
-            def _whmean(col):
-                """Weighted harmonic mean — industry standard for P/E and P/B."""
+            def _whmean(col, floor=0.5):
+                """Weighted harmonic mean — industry standard for P/E and P/B.
+                Values below floor are excluded to prevent near-zero outliers
+                (e.g. BRK-B P/B 0.001) from dominating the harmonic mean."""
                 vals = group.loc[valid, col]
-                mask = vals.notna() & (vals > 0)
+                mask = vals.notna() & (vals >= floor)
                 if mask.sum() == 0:
                     return np.nan
                 return w[mask].sum() / (w[mask] / vals[mask]).sum()
