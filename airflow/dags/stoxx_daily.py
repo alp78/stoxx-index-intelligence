@@ -40,6 +40,7 @@ with DAG(
     schedule="0 9,17,22 * * 1-5",
     start_date=datetime(2025, 1, 1),
     catchup=False,
+    max_active_runs=1,
     tags=["stoxx"],
 ) as dag:
 
