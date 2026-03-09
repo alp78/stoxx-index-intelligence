@@ -14,6 +14,21 @@ from utils.logger import get_logger, log_info, log_warning, log_error, StepTimer
 logger = get_logger(__name__)
 
 
+def _normalize_yield(val):
+    """Normalize dividend yield to a ratio (0.0–1.0).
+
+    yfinance is inconsistent: some stocks return 0.0238 (ratio for 2.38%),
+    others return 2.38 or 11.52 (percentage). No stock in a major index
+    realistically yields above 20%, so any value > 0.20 is treated as
+    a percentage and divided by 100.
+    """
+    if val is None:
+        return None
+    if val > 0.20:
+        return val / 100
+    return val
+
+
 def fetch_daily_signals(index_key, output_file):
     log_info(logger, "Fetching daily trading signals (PE, yield, momentum) from yfinance",
              step="fetch", source="yfinance", kind="signals_daily", index=index_key)
@@ -53,7 +68,7 @@ def fetch_daily_signals(index_key, output_file):
                         "forwardPE": info.get("forwardPE"),
                         "priceToBook": info.get("priceToBook"),
                         "evToEbitda": info.get("enterpriseToEbitda"),
-                        "dividendYield": info.get("dividendYield"),
+                        "dividendYield": _normalize_yield(info.get("dividendYield")),
                         "marketCap": info.get("marketCap"),
                         "beta": info.get("beta")
                     },

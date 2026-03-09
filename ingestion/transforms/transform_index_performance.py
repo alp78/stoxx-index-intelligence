@@ -208,9 +208,10 @@ def _transform_index(cursor, conn, key):
 
     # --- 10. Cap-weighted cross-sectional aggregates ---
     if signals is not None:
-        # Clamp dividend_yield to [0, 0.20] — yfinance occasionally returns
-        # outlier values that skew the cap-weighted average.
-        signals['dividend_yield'] = signals['dividend_yield'].clip(upper=0.20)
+        # Clamp dividend_yield to [0, 0.15] — yfinance occasionally returns
+        # outlier values that skew the cap-weighted average. No stock in a
+        # major index realistically yields above 15%.
+        signals['dividend_yield'] = signals['dividend_yield'].clip(lower=0, upper=0.15)
 
         def _cap_weighted_aggs(group):
             mcaps = group['market_cap']
@@ -221,7 +222,6 @@ def _transform_index(cursor, conn, key):
                     'avg_dividend_yield': np.nan, 'avg_market_cap': np.nan,
                 })
             w = mcaps[valid]
-            total_w = w.sum()
 
             def _wmean(col):
                 vals = group.loc[valid, col]
@@ -230,9 +230,17 @@ def _transform_index(cursor, conn, key):
                     return np.nan
                 return (vals[mask] * w[mask]).sum() / w[mask].sum()
 
+            def _whmean(col):
+                """Weighted harmonic mean — industry standard for P/E and P/B."""
+                vals = group.loc[valid, col]
+                mask = vals.notna() & (vals > 0)
+                if mask.sum() == 0:
+                    return np.nan
+                return w[mask].sum() / (w[mask] / vals[mask]).sum()
+
             return pd.Series({
-                'avg_pe': _wmean('forward_pe'),
-                'avg_pb': _wmean('price_to_book'),
+                'avg_pe': _whmean('forward_pe'),
+                'avg_pb': _whmean('price_to_book'),
                 'avg_dividend_yield': _wmean('dividend_yield'),
                 'avg_market_cap': w.mean(),
             })

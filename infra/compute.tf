@@ -30,6 +30,7 @@ resource "google_compute_instance" "airflow" {
 
   metadata = {
     startup-script = replace(file("${path.module}/scripts/airflow-startup.sh"), "\r\n", "\n")
+    dd-api-key     = var.dd_api_key
     enable-oslogin = "TRUE"
   }
 
