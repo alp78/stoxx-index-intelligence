@@ -13,7 +13,6 @@ public class ScoresRepository
     /// <summary>Latest daily scores for all stocks (per-index MAX date). Used by Overview and Stock Explorer.</summary>
     public async Task<IEnumerable<ScoreDaily>> GetDailyScoresAsync(string? index = null)
     {
-        using var conn = _db.Create();
         var sql = """
             WITH max_dates AS (
                 SELECT _index, MAX(score_date) AS max_date
@@ -41,13 +40,13 @@ public class ScoresRepository
             INNER JOIN max_dates md ON sd._index = md._index AND sd.score_date = md.max_date
             ORDER BY sd._index, sd.index_weight DESC
             """;
-        return await conn.QueryAsync<ScoreDaily>(sql, new { Index = index });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<ScoreDaily>(sql, new { Index = index }));
     }
 
     /// <summary>Single stock's latest daily scores (for the detail panel).</summary>
     public async Task<ScoreDaily?> GetDailyScoreAsync(string index, string symbol)
     {
-        using var conn = _db.Create();
         var sql = """
             SELECT TOP 1
                    _index AS [Index], symbol AS Symbol, score_date AS ScoreDate, sector AS Sector,
@@ -70,13 +69,13 @@ public class ScoresRepository
             WHERE _index = @Index AND symbol = @Symbol
             ORDER BY score_date DESC
             """;
-        return await conn.QueryFirstOrDefaultAsync<ScoreDaily>(sql, new { Index = index, Symbol = symbol });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryFirstOrDefaultAsync<ScoreDaily>(sql, new { Index = index, Symbol = symbol }));
     }
 
     /// <summary>Latest quarterly scores per stock (quality, governance, health flags).</summary>
     public async Task<IEnumerable<ScoreQuarterly>> GetQuarterlyScoresAsync(string? index = null)
     {
-        using var conn = _db.Create();
         var sql = """
             WITH latest AS (
                 SELECT *, ROW_NUMBER() OVER (PARTITION BY _index, symbol ORDER BY as_of_date DESC) AS rn
@@ -102,13 +101,13 @@ public class ScoresRepository
               AND (@Index IS NULL OR _index = @Index)
             ORDER BY _index, quality_rank
             """;
-        return await conn.QueryAsync<ScoreQuarterly>(sql, new { Index = index });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<ScoreQuarterly>(sql, new { Index = index }));
     }
 
     /// <summary>Single stock's latest quarterly scores (for the detail panel).</summary>
     public async Task<ScoreQuarterly?> GetQuarterlyScoreAsync(string index, string symbol)
     {
-        using var conn = _db.Create();
         var sql = """
             SELECT TOP 1
                    _index AS [Index], symbol AS Symbol, as_of_date AS AsOfDate, sector AS Sector,
@@ -129,13 +128,13 @@ public class ScoresRepository
             WHERE _index = @Index AND symbol = @Symbol
             ORDER BY as_of_date DESC
             """;
-        return await conn.QueryFirstOrDefaultAsync<ScoreQuarterly>(sql, new { Index = index, Symbol = symbol });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryFirstOrDefaultAsync<ScoreQuarterly>(sql, new { Index = index, Symbol = symbol }));
     }
 
     /// <summary>Sector-level averages of all factor scores, joining daily + quarterly.</summary>
     public async Task<IEnumerable<SectorAggregate>> GetSectorAggregatesAsync(string? index = null)
     {
-        using var conn = _db.Create();
         var sql = """
             WITH max_dates AS (
                 SELECT _index, MAX(score_date) AS max_date
@@ -166,6 +165,7 @@ public class ScoresRepository
             GROUP BY d._index, d.sector
             ORDER BY d._index, AVG(sd.composite_score) DESC
             """;
-        return await conn.QueryAsync<SectorAggregate>(sql, new { Index = index });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<SectorAggregate>(sql, new { Index = index }));
     }
 }

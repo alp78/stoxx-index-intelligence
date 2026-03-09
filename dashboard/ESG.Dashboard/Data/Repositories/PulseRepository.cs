@@ -16,7 +16,6 @@ public class PulseRepository
     /// </summary>
     public async Task<IEnumerable<PulseSnapshot>> GetLatestPulseAsync()
     {
-        using var conn = _db.Create();
         var sql = """
             SELECT t._index        AS [Index],
                    t.symbol         AS Symbol,
@@ -46,7 +45,8 @@ public class PulseRepository
                 ON t._index = d._index AND t.symbol = d.symbol AND d.is_current = 1
             ORDER BY t._index, t.rank
             """;
-        return await conn.QueryAsync<PulseSnapshot>(sql);
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<PulseSnapshot>(sql));
     }
 
     /// <summary>
@@ -54,7 +54,6 @@ public class PulseRepository
     /// </summary>
     public async Task<IEnumerable<PulseTicker>> GetActiveTickersAsync()
     {
-        using var conn = _db.Create();
         var sql = """
             WITH latest AS (
                 SELECT _index, symbol, rank, discovered_at,
@@ -82,7 +81,8 @@ public class PulseRepository
             WHERE l.rn = 1
             ORDER BY l._index, l.rank
             """;
-        return await conn.QueryAsync<PulseTicker>(sql);
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<PulseTicker>(sql));
     }
 
 }
