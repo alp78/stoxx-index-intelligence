@@ -18,7 +18,6 @@ public class StockRepository
     /// <summary>All current index constituents from silver.index_dim.</summary>
     public async Task<IEnumerable<StockInfo>> GetStocksAsync(string? index = null)
     {
-        using var conn = _db.Create();
         var sql = """
             SELECT _index AS [Index], symbol AS Symbol,
                    short_name AS ShortName, sector AS Sector,
@@ -29,13 +28,13 @@ public class StockRepository
               AND (@Index IS NULL OR _index = @Index)
             ORDER BY _index, symbol
             """;
-        return await conn.QueryAsync<StockInfo>(sql, new { Index = index });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<StockInfo>(sql, new { Index = index }));
     }
 
     /// <summary>Single stock's metadata (name, sector, country).</summary>
     public async Task<StockInfo?> GetStockAsync(string index, string symbol)
     {
-        using var conn = _db.Create();
         var sql = """
             SELECT _index AS [Index], symbol AS Symbol,
                    short_name AS ShortName, sector AS Sector,
@@ -44,7 +43,8 @@ public class StockRepository
             FROM silver.index_dim
             WHERE is_current = 1 AND _index = @Index AND symbol = @Symbol
             """;
-        return await conn.QueryFirstOrDefaultAsync<StockInfo>(sql, new { Index = index, Symbol = symbol });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryFirstOrDefaultAsync<StockInfo>(sql, new { Index = index, Symbol = symbol }));
     }
 
     /// <summary>OHLCV prices with server-side SMA 30/90 computation via SQL window functions.</summary>
@@ -54,7 +54,6 @@ public class StockRepository
         var table = _registry.GetOhlcvTable(index);
         if (table is null) return [];
 
-        using var conn = _db.Create();
         // Table name is from IndexRegistry (loaded from DB), not user input
         // Compute MA 30/90 via SQL window functions (server-side, avoids client recalc)
         // CTE computes over full history; outer query filters by date range
@@ -80,7 +79,8 @@ public class StockRepository
               AND (@To IS NULL OR date <= @To)
             ORDER BY date
             """;
-        return await conn.QueryAsync<OhlcvPrice>(sql, new { Symbol = symbol, From = from, To = to });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<OhlcvPrice>(sql, new { Symbol = symbol, From = from, To = to }));
     }
 
     /// <summary>Batch adj_close for multiple symbols — used for momentum sparkline charts.</summary>
@@ -91,7 +91,6 @@ public class StockRepository
         if (table is null || symbols.Length == 0)
             return [];
 
-        using var conn = _db.Create();
         var sql = $"""
             SELECT symbol AS Symbol, date AS Date, adj_close AS [Close], volume AS Volume,
                    CASE WHEN [close] <> 0 THEN high * adj_close / [close] ELSE high END AS High,
@@ -101,14 +100,15 @@ public class StockRepository
               AND adj_close IS NOT NULL
             ORDER BY symbol, date
             """;
-        return await conn.QueryAsync<SymbolClose>(sql, new { Symbols = symbols, From = from });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<SymbolClose>(sql, new { Symbols = symbols, From = from }));
     }
 
     /// <summary>Distinct index keys from silver.index_dim (used to populate dropdowns).</summary>
     public async Task<IEnumerable<string>> GetIndexKeysAsync()
     {
-        using var conn = _db.Create();
         var sql = "SELECT DISTINCT _index FROM silver.index_dim WHERE is_current = 1 ORDER BY _index";
-        return await conn.QueryAsync<string>(sql);
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<string>(sql));
     }
 }

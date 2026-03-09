@@ -14,7 +14,6 @@ public class IndexPerformanceRepository
     public async Task<IEnumerable<IndexPerformance>> GetPerformanceAsync(
         string? index = null, DateTime? from = null, DateTime? to = null)
     {
-        using var conn = _db.Create();
         var sql = """
             SELECT _index AS [Index], perf_date AS PerfDate,
                    daily_return AS DailyReturn, cumulative_factor AS CumulativeFactor,
@@ -29,13 +28,13 @@ public class IndexPerformanceRepository
               AND (@To IS NULL OR perf_date <= @To)
             ORDER BY _index, perf_date
             """;
-        return await conn.QueryAsync<IndexPerformance>(sql, new { Index = index, From = from, To = to });
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<IndexPerformance>(sql, new { Index = index, From = from, To = to }));
     }
 
     /// <summary>Most recent performance row per index (for the snapshot strip).</summary>
     public async Task<IEnumerable<IndexPerformance>> GetLatestSnapshotAsync()
     {
-        using var conn = _db.Create();
         var sql = """
             SELECT p._index AS [Index], p.perf_date AS PerfDate,
                    p.daily_return AS DailyReturn, p.cumulative_factor AS CumulativeFactor,
@@ -52,6 +51,7 @@ public class IndexPerformanceRepository
             ) latest ON p._index = latest._index AND p.perf_date = latest.max_date
             ORDER BY p._index
             """;
-        return await conn.QueryAsync<IndexPerformance>(sql);
+        return await _db.WithDeadlockRetryAsync(conn =>
+            conn.QueryAsync<IndexPerformance>(sql));
     }
 }
