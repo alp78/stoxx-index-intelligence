@@ -538,39 +538,41 @@ else
                     </MudPaper>
                 </MudItem>
 
-                <!-- Row 2: Value | Sentiment | Health Warnings -->
+                <!-- Row 2: Quality | Sentiment | Health Warnings -->
+                <!-- Strongest Fundamentals (Quality) -->
                 <MudItem xs="12" md="4" Style="display: flex;">
                     <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
-                        <div class="mb-2">
-                            <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                                <ChildContent>
-                                    <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Best Relative Value</MudText>
-                                </ChildContent>
-                                <TooltipContent>
-                                    <div style="@_tipStyle">
-                                        <div style="@_tipHead">Relative Value Score</div>
-                                        <div style="@_tipDesc">Cross-sectional z-scores of valuation ratios vs index peers (inverted — lower multiples score higher):</div>
-                                        <ul style="@_tipList">
-                                            <li><b>P/E</b> &mdash; price-to-earnings</li>
-                                            <li><b>P/B</b> &mdash; price-to-book</li>
-                                            <li><b>EV/EBITDA</b> &mdash; enterprise value vs cash earnings</li>
-                                            <li><b>Dividend Yield</b> &mdash; higher yield = higher score</li>
-                                        </ul>
-                                        <div style="@_tipNote">Top-ranked stocks trade at the deepest discount to the index median. Verify fundamentals — cheap can mean value trap.</div>
-                                    </div>
-                                </TooltipContent>
-                            </MudTooltip>
-                            <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
-                        </div>
-                        <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
-                            <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
-                            <tbody>
-                                @foreach (var s in TopValue)
-                                {
-                                    <tr>
-                                        <td>@s.RelativeValueRank</td>
-                                        <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
-                                        <td>
+                    <div class="mb-2">
+                        <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                            <ChildContent>
+                                <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Strongest Fundamentals</MudText>
+                            </ChildContent>
+                            <TooltipContent>
+                                <div style="@_tipStyle">
+                                    <div style="@_tipHead">Quality / Moat Score</div>
+                                    <div style="@_tipDesc">Z-scored quarterly financial metrics vs index peers:</div>
+                                    <ul style="@_tipList">
+                                        <li><b>Gross Margin</b> &mdash; pricing power</li>
+                                        <li><b>ROE</b> &mdash; capital efficiency</li>
+                                        <li><b>Operating Margin</b> &mdash; operational leverage</li>
+                                        <li><b>Leverage</b> &mdash; inverted (low debt = high score)</li>
+                                        <li><b>FCF Yield</b> &mdash; free cash flow / market cap</li>
+                                    </ul>
+                                    <div style="@_tipNote">Updated quarterly with earnings. High scores = superior profitability, low debt, strong cash generation.</div>
+                                </div>
+                            </TooltipContent>
+                        </MudTooltip>
+                        <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@QuarterlyAsOf</MudText>
+                    </div>
+                    <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                        <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
+                        <tbody>
+                            @foreach (var s in TopQuality)
+                            {
+                                <tr>
+                                    <td>@s.QualityRank</td>
+                                    <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                    <td>
                                             @{ var si = LookupStock(s.Index, s.Symbol); }
                                             <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
                                                 <TooltipContent>
@@ -595,15 +597,15 @@ else
                                                         }
                                                     </div>
                                                 </TooltipContent>
-                                                <ChildContent><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                                <ChildContent><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></ChildContent>
                                             </MudTooltip>
                                         </td>
-                                        <td>@F(s.RelativeValueScore)</td>
-                                        <td><span class="score-bar" style="width: @ScoreBarWidth(s.RelativeValueScore, TopValue.Select(x => x.RelativeValueScore)); background: #42A5F5;"></span></td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
+                                    <td>@F(s.QualityScore)</td>
+                                    <td><span class="score-bar" style="width: @ScoreBarWidth(s.QualityScore, TopQuality.Select(x => x.QualityScore)); background: #26A69A;"></span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
                     </MudPaper>
                 </MudItem>
 
@@ -678,40 +680,39 @@ else
                     </MudPaper>
                 </MudItem>
 
-                <!-- Strongest Fundamentals (Quality) -->
+                <!-- Best Relative Value -->
                 <MudItem xs="12" md="4" Style="display: flex;">
                     <MudPaper Class="pa-4" Elevation="2" Style="width: 100%;">
-                    <div class="mb-2">
-                        <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
-                            <ChildContent>
-                                <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Strongest Fundamentals</MudText>
-                            </ChildContent>
-                            <TooltipContent>
-                                <div style="@_tipStyle">
-                                    <div style="@_tipHead">Quality / Moat Score</div>
-                                    <div style="@_tipDesc">Z-scored quarterly financial metrics vs index peers:</div>
-                                    <ul style="@_tipList">
-                                        <li><b>Gross Margin</b> &mdash; pricing power</li>
-                                        <li><b>ROE</b> &mdash; capital efficiency</li>
-                                        <li><b>Operating Margin</b> &mdash; operational leverage</li>
-                                        <li><b>Leverage</b> &mdash; inverted (low debt = high score)</li>
-                                        <li><b>FCF Yield</b> &mdash; free cash flow / market cap</li>
-                                    </ul>
-                                    <div style="@_tipNote">Updated quarterly with earnings. High scores = superior profitability, low debt, strong cash generation.</div>
-                                </div>
-                            </TooltipContent>
-                        </MudTooltip>
-                        <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@QuarterlyAsOf</MudText>
-                    </div>
-                    <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
-                        <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
-                        <tbody>
-                            @foreach (var s in TopQuality)
-                            {
-                                <tr>
-                                    <td>@s.QualityRank</td>
-                                    <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
-                                    <td>
+                        <div class="mb-2">
+                            <MudTooltip Placement="Placement.Top" Color="Color.Transparent">
+                                <ChildContent>
+                                    <MudText Typo="Typo.h6" Class="mb-0" Style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.2);">Best Relative Value</MudText>
+                                </ChildContent>
+                                <TooltipContent>
+                                    <div style="@_tipStyle">
+                                        <div style="@_tipHead">Relative Value Score</div>
+                                        <div style="@_tipDesc">Cross-sectional z-scores of valuation ratios vs index peers (inverted — lower multiples score higher):</div>
+                                        <ul style="@_tipList">
+                                            <li><b>P/E</b> &mdash; price-to-earnings</li>
+                                            <li><b>P/B</b> &mdash; price-to-book</li>
+                                            <li><b>EV/EBITDA</b> &mdash; enterprise value vs cash earnings</li>
+                                            <li><b>Dividend Yield</b> &mdash; higher yield = higher score</li>
+                                        </ul>
+                                        <div style="@_tipNote">Top-ranked stocks trade at the deepest discount to the index median. Verify fundamentals — cheap can mean value trap.</div>
+                                    </div>
+                                </TooltipContent>
+                            </MudTooltip>
+                            <MudText Typo="Typo.caption" Style="display: block; opacity: 0.3; font-size: 0.65rem;">@DailyAsOf</MudText>
+                        </div>
+                        <MudSimpleTable Dense="true" Hover="true" Class="compact-table">
+                            <thead><tr><th>#</th><th></th><th>Symbol</th><th>Score</th><th style="width: 60px;"></th></tr></thead>
+                            <tbody>
+                                @foreach (var s in TopValue)
+                                {
+                                    <tr>
+                                        <td>@s.RelativeValueRank</td>
+                                        <td style="padding: 0 2px;"><img src="logos/@(s.Index)/@(s.Symbol).png" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; vertical-align: middle;" onerror="this.style.display='none'" /></td>
+                                        <td>
                                             @{ var si = LookupStock(s.Index, s.Symbol); }
                                             <MudTooltip Arrow="true" Placement="Placement.Right" Color="Color.Dark">
                                                 <TooltipContent>
@@ -736,15 +737,15 @@ else
                                                         }
                                                     </div>
                                                 </TooltipContent>
-                                                <ChildContent><MudLink Href="@QuarterlyStockLink(s)">@s.Symbol</MudLink></ChildContent>
+                                                <ChildContent><MudLink Href="@StockLink(s)">@s.Symbol</MudLink></ChildContent>
                                             </MudTooltip>
                                         </td>
-                                    <td>@F(s.QualityScore)</td>
-                                    <td><span class="score-bar" style="width: @ScoreBarWidth(s.QualityScore, TopQuality.Select(x => x.QualityScore)); background: #26A69A;"></span></td>
-                                </tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
+                                        <td>@F(s.RelativeValueScore)</td>
+                                        <td><span class="score-bar" style="width: @ScoreBarWidth(s.RelativeValueScore, TopValue.Select(x => x.RelativeValueScore)); background: #42A5F5;"></span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
                     </MudPaper>
                 </MudItem>
 
