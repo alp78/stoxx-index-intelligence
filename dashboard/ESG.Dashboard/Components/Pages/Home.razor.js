@@ -92,7 +92,12 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
                     try { other.setVisibleRange(range); } catch (_) {}
                 }
             }
-            _syncing = false;
+            // Reset on next frame so deferred callbacks from setVisibleRange
+            // (triggered by fixLeftEdge/fixRightEdge clamping on charts with
+            // different data lengths) are still suppressed by the guard.
+            // Synchronous reset allowed those callbacks to propagate back a
+            // wider range, causing progressive zoom-out during panning.
+            requestAnimationFrame(() => { _syncing = false; });
         });
     }
 
@@ -131,7 +136,7 @@ export function batchUpdateCharts(charts, tooltips) {
         if (c.from != null && c.to != null) ts.setVisibleRange({ from: c.from, to: c.to });
         else ts.fitContent();
     }
-    _syncing = false;
+    requestAnimationFrame(() => { _syncing = false; });
     for (const t of tooltips) {
         t.container._ttLookup = t.lookup;
         t.container._ttIndices = t.indices;
@@ -148,7 +153,7 @@ export function batchSetVisibleRange(entries) {
         if (e.from != null && e.to != null) ts.setVisibleRange({ from: e.from, to: e.to });
         else ts.fitContent();
     }
-    _syncing = false;
+    requestAnimationFrame(() => { _syncing = false; });
 }
 
 // ── Batch momentum chart update (all series + range in ONE call) ─────
