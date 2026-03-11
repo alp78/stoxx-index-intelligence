@@ -21,10 +21,12 @@ function _resolve(ref) {
 }
 
 let _syncing = false;       // true during batch (programmatic) updates — suppresses ALL callbacks
-let _batchTimer = 0;       // debounce timer for releasing _syncing after batch updates
-let _syncLeader = null;    // the timeScale currently driving user-initiated zoom/pan
-let _leaderTimer = 0;      // debounce timer for releasing sync leadership
+let _batchTimer = 0;        // debounce timer for releasing _syncing after batch updates
+let _syncLeader = null;     // the timeScale currently driving user-initiated zoom/pan
+let _leaderTimer = 0;       // debounce timer for releasing sync leadership
 let _lastUserRange = null;  // persists zoom/pan position across index switches
+let _chartTimeScales = [];  // parallel array: timeScale refs for all synced charts
+let _chartBarCounts = [];   // parallel array: data.length per chart (for logical range offset)
 
 // Initializes multiple line charts in a single JS call — replaces N×(ApplyOptions +
 // AddSeries + TimeScale + SetData + SetVisibleRange) wrapper round-trips with 1 call.
@@ -79,31 +81,47 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
     }
 
     // ── Sync zoom/pan across all charts ──
-    // Use time-based range sync so charts with different data lengths stay
-    // aligned on the same calendar window (logical range would drift when
-    // bar counts differ, e.g. rolling-30d starts later than synthetic).
-    const timeScales = [];
+    // Use LOGICAL range sync (fractional bar indices) instead of time-based sync.
+    // Time-based setVisibleRange snaps to bar boundaries, causing the leader to
+    // drift ahead of followers by a fraction of a bar during scroll-zoom/pan.
+    // Logical range preserves sub-bar positioning for pixel-perfect sync.
+    // Charts have different data lengths (e.g. rolling-30d starts 30 bars later
+    // than synthetic), so we apply a bar-count offset when syncing.
+    _chartTimeScales = [];
+    _chartBarCounts = entries.map(e => e.data.length);
     for (const e of entries) {
         const chart = _resolve(e.chartRef);
-        timeScales.push(chart.timeScale());
+        _chartTimeScales.push(chart.timeScale());
     }
-    for (const ts of timeScales) {
-        ts.subscribeVisibleTimeRangeChange(range => {
+    for (let idx = 0; idx < _chartTimeScales.length; idx++) {
+        const ts = _chartTimeScales[idx];
+        ts.subscribeVisibleLogicalRangeChange(logicalRange => {
             // During programmatic batch updates, suppress everything.
-            if (_syncing || !range) return;
+            if (_syncing || !logicalRange) return;
             // If another chart is leading (its clamping callbacks are firing),
             // suppress this callback to prevent feedback loops.
             if (_syncLeader && _syncLeader !== ts) return;
             // This chart is the leader — either it initiated the interaction
             // or it's continuing a scroll/pan gesture.
             _syncLeader = ts;
-            for (const other of timeScales) {
-                if (other !== ts) {
-                    try { other.setVisibleRange(range); } catch (_) {}
+            const leaderIdx = _chartTimeScales.indexOf(ts);
+            const leaderBars = _chartBarCounts[leaderIdx];
+            for (let i = 0; i < _chartTimeScales.length; i++) {
+                if (i !== leaderIdx) {
+                    // Offset: charts end on the same date but start on different dates.
+                    // follower bar = leader bar + (followerBars - leaderBars)
+                    const delta = _chartBarCounts[i] - leaderBars;
+                    try {
+                        _chartTimeScales[i].setVisibleLogicalRange({
+                            from: logicalRange.from + delta,
+                            to: logicalRange.to + delta
+                        });
+                    } catch (_) {}
                 }
             }
-            // Persist the user's zoom/pan position so it survives index switches.
-            _lastUserRange = range;
+            // Persist as time range for index switches (time is more stable across data reloads).
+            const timeRange = ts.getVisibleRange();
+            if (timeRange) _lastUserRange = timeRange;
             // Release leadership after 100ms of inactivity. This keeps the leader
             // active during rapid scroll events (each tick resets the timer) while
             // suppressing clamping callbacks from follower charts throughout.
@@ -133,6 +151,10 @@ export function batchUpdateCharts(charts, tooltips) {
             }
         }
         series.setData(c.data);
+        // Update bar count for logical range offset calculation.
+        const resolvedTs = _resolve(c.timeScale);
+        const tsIdx = _chartTimeScales.indexOf(resolvedTs);
+        if (tsIdx !== -1) _chartBarCounts[tsIdx] = c.data.length;
         // Re-create price lines on update (remove old ones first)
         if (c.priceLines) {
             try {
