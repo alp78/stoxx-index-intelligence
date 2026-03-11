@@ -2041,6 +2041,9 @@ else
         _selectedPeriod = period;
         try
         {
+            // Clear persisted zoom so the period switch shows the full new range.
+            if (_jsModule is not null)
+                await _jsModule.InvokeVoidAsync("clearZoomState");
             // All 5 charts filter data by period cutoff, so reload everything.
             await BatchUpdateAllLineCharts();
         }

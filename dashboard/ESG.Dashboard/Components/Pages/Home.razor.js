@@ -20,7 +20,11 @@ function _resolve(ref) {
     return window.lightweightChartsBlazor.getStoredReference(ref);
 }
 
-let _syncing = false;  // shared guard: prevents zoom/pan sync loops during batch updates
+let _syncing = false;       // true during batch (programmatic) updates — suppresses ALL callbacks
+let _batchTimer = 0;       // debounce timer for releasing _syncing after batch updates
+let _syncLeader = null;    // the timeScale currently driving user-initiated zoom/pan
+let _leaderTimer = 0;      // debounce timer for releasing sync leadership
+let _lastUserRange = null;  // persists zoom/pan position across index switches
 
 // Initializes multiple line charts in a single JS call — replaces N×(ApplyOptions +
 // AddSeries + TimeScale + SetData + SetVisibleRange) wrapper round-trips with 1 call.
@@ -85,19 +89,26 @@ export function batchInitLineCharts(entries, tooltips, chartOptions, seriesOptio
     }
     for (const ts of timeScales) {
         ts.subscribeVisibleTimeRangeChange(range => {
+            // During programmatic batch updates, suppress everything.
             if (_syncing || !range) return;
-            _syncing = true;
+            // If another chart is leading (its clamping callbacks are firing),
+            // suppress this callback to prevent feedback loops.
+            if (_syncLeader && _syncLeader !== ts) return;
+            // This chart is the leader — either it initiated the interaction
+            // or it's continuing a scroll/pan gesture.
+            _syncLeader = ts;
             for (const other of timeScales) {
                 if (other !== ts) {
                     try { other.setVisibleRange(range); } catch (_) {}
                 }
             }
-            // Reset on next frame so deferred callbacks from setVisibleRange
-            // (triggered by fixLeftEdge/fixRightEdge clamping on charts with
-            // different data lengths) are still suppressed by the guard.
-            // Synchronous reset allowed those callbacks to propagate back a
-            // wider range, causing progressive zoom-out during panning.
-            requestAnimationFrame(() => { _syncing = false; });
+            // Persist the user's zoom/pan position so it survives index switches.
+            _lastUserRange = range;
+            // Release leadership after 100ms of inactivity. This keeps the leader
+            // active during rapid scroll events (each tick resets the timer) while
+            // suppressing clamping callbacks from follower charts throughout.
+            clearTimeout(_leaderTimer);
+            _leaderTimer = setTimeout(() => { _syncLeader = null; }, 100);
         });
     }
 
@@ -133,15 +144,36 @@ export function batchUpdateCharts(charts, tooltips) {
             }
         }
         const ts = _resolve(c.timeScale);
-        if (c.from != null && c.to != null) ts.setVisibleRange({ from: c.from, to: c.to });
-        else ts.fitContent();
+        // If user has zoomed/panned and the data supports it, restore that position
+        // instead of resetting to the full range. This preserves zoom across index switches.
+        if (_lastUserRange && c.from != null && c.to != null) {
+            // Clamp to the new data bounds so we don't show empty space
+            const clampedFrom = Math.max(_lastUserRange.from, c.from);
+            const clampedTo = Math.min(_lastUserRange.to, c.to);
+            if (clampedTo > clampedFrom) {
+                ts.setVisibleRange({ from: clampedFrom, to: clampedTo });
+            } else {
+                ts.setVisibleRange({ from: c.from, to: c.to });
+            }
+        } else if (c.from != null && c.to != null) {
+            ts.setVisibleRange({ from: c.from, to: c.to });
+        } else {
+            ts.fitContent();
+        }
     }
-    requestAnimationFrame(() => { _syncing = false; });
+    clearTimeout(_batchTimer);
+    _batchTimer = setTimeout(() => { _syncing = false; }, 100);
     for (const t of tooltips) {
         t.container._ttLookup = t.lookup;
         t.container._ttIndices = t.indices;
         t.container._ttOptions = t.options || {};
     }
+}
+
+// Clears persisted zoom/pan position so the next batchUpdateCharts uses full range.
+// Call this when the user explicitly switches period.
+export function clearZoomState() {
+    _lastUserRange = null;
 }
 
 // Range-only update: moves visible window without replacing data or tooltips.
@@ -153,7 +185,8 @@ export function batchSetVisibleRange(entries) {
         if (e.from != null && e.to != null) ts.setVisibleRange({ from: e.from, to: e.to });
         else ts.fitContent();
     }
-    requestAnimationFrame(() => { _syncing = false; });
+    clearTimeout(_batchTimer);
+    _batchTimer = setTimeout(() => { _syncing = false; }, 100);
 }
 
 // ── Batch momentum chart update (all series + range in ONE call) ─────
