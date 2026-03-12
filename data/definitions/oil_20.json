@@ -1,0 +1,13 @@
+{
+    "name": "Oil & Gas 20",
+    "color": "#D4A017",
+    "currency": "$",
+    "symbols": [
+        "XOM", "CVX", "SHEL", "TTE", "BP", "EQNR",
+        "COP", "EOG", "OXY", "DVN",
+        "SLB", "HAL", "BKR",
+        "WMB", "KMI", "ENB",
+        "VLO", "MPC", "PSX"
+    ],
+    "history_start": "2021-01-01"
+}

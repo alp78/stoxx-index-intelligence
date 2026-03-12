@@ -1,6 +1,6 @@
 .esg/
 .env/
-/data/
+/data/*
 !/data/definitions/
 logs/
 __pycache__/
