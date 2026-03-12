@@ -453,6 +453,15 @@ def _cleanup_orphan_logos(key, def_symbols):
                      step="sync", index=key, symbol=symbol)
 
 
+def download_logos(key, symbols):
+    """Public API: download logos for all symbols in an index. Idempotent — skips existing."""
+    token = _get_logo_token()
+    if not token:
+        log_warning(logger, "LOGO_DEV_TOKEN not set — skipping logo download", step="setup", index=key)
+        return
+    _sync_logos_added(key, symbols, token)
+
+
 # ---------------------------------------------------------------------------
 # Dimension reload
 # ---------------------------------------------------------------------------

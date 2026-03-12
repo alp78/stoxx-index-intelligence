@@ -344,6 +344,17 @@ def _populate_data(targets):
             log_error(logger, f"Failed to fetch/load pulse snapshots: {e}",
                       step="setup", index=key)
 
+        # Download logos
+        try:
+            import json
+            def_file = _DEFINITIONS_DIR / f"{key}.json"
+            symbols = json.loads(def_file.read_text(encoding="utf-8"))["symbols"]
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ingestion"))
+            from transforms.sync_definitions import download_logos  # type: ignore[import-not-found]
+            download_logos(key, symbols)
+        except Exception as e:
+            log_warning(logger, f"Logo download failed: {e}", step="setup", index=key)
+
         log_info(logger, "All data layers populated for this index", step="setup", index=key)
 
 
