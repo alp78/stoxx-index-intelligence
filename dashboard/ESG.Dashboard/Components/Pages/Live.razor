@@ -42,7 +42,7 @@ else
             <span class="closed-dot"></span>
             <span style="font-size: 0.55rem; font-weight: 700; color: #EF5350; letter-spacing: 1px;">CLOSED</span>
         }
-        <span style="font-size: 0.6rem; opacity: 0.35;">@exchange.Name &middot; @exchange.City &middot; @exchange.LocalTime</span>
+        <span style="font-size: 0.6rem; opacity: 0.35;">@exchange.Name &middot; @exchange.LocalTime</span>
 
         <MudText Typo="Typo.caption" Style="opacity: 0.3; font-size: 0.65rem; margin-left: auto;">
             @if (_lastDataTimestamp.HasValue) { @($"Updated {_lastDataTimestamp.Value:dd MMM yyyy HH:mm} CET") }
@@ -307,9 +307,7 @@ else
     }
     private Dictionary<(string, string), StockInfo> _stockLookup = new();
 
-    // Fixed index order
-    private static readonly string[] _indices =
-        ["euro_stoxx_50", "stoxx_usa_50", "stoxx_asia_50"];
+    private string[] _indices = [];
 
     private static readonly string[] _chartPeriods = ["5D", "1M", "3M", "6M"];
 
@@ -318,7 +316,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         _loading = true;
-        _selectedIndex = _indices.Contains(IdxState.SelectedIndex) ? IdxState.SelectedIndex : _indices[0];
+        await IdxReg.EnsureLoadedAsync();
+        _indices = (await StockRepo.GetIndexKeysAsync()).ToArray();
+        _selectedIndex = _indices.Contains(IdxState.SelectedIndex) ? IdxState.SelectedIndex : _indices.FirstOrDefault() ?? "";
         var stocksTask = StockRepo.GetStocksAsync();
         await Task.WhenAll(LoadAllData(), stocksTask);
         _stockLookup = (await stocksTask).ToDictionary(s => (s.Index, s.Symbol));
@@ -609,42 +609,14 @@ else
         }
     }
 
-    // ── Market hours (approximate exchange sessions in UTC) ─────────
+    // ── Market hours & exchange info (driven by IndexRegistry) ──────
 
-    private static bool IsMarketOpen(string index)
-    {
-        var utcNow = DateTime.UtcNow;
-        var dow = utcNow.DayOfWeek;
-        if (dow is DayOfWeek.Saturday or DayOfWeek.Sunday) return false;
+    private bool IsMarketOpen(string index) => IdxReg.IsMarketOpen(index);
 
-        var t = utcNow.TimeOfDay;
-        return index switch
-        {
-            "euro_stoxx_50" => t >= new TimeSpan(8, 0, 0) && t <= new TimeSpan(16, 30, 0),
-            "stoxx_usa_50" => t >= new TimeSpan(14, 30, 0) && t <= new TimeSpan(21, 0, 0),
-            "stoxx_asia_50" => t >= new TimeSpan(0, 0, 0) && t <= new TimeSpan(8, 0, 0),
-            _ => false
-        };
-    }
+    private record ExchangeData(string Name, string LocalTime);
 
-    // ── Exchange info ──────────────────────────────────────────────────
-
-    private record ExchangeData(string Name, string City, string LocalTime);
-
-    private static ExchangeData ExchangeInfo(string index)
-    {
-        var utcNow = DateTimeOffset.UtcNow;
-        return index switch
-        {
-            "euro_stoxx_50" => new("Xetra", "Frankfurt",
-                utcNow.ToOffset(TimeSpan.FromHours(1)).ToString("HH:mm") + " CET"),
-            "stoxx_usa_50" => new("NYSE", "New York",
-                utcNow.ToOffset(TimeSpan.FromHours(-5)).ToString("HH:mm") + " EST"),
-            "stoxx_asia_50" => new("TSE", "Tokyo",
-                utcNow.ToOffset(TimeSpan.FromHours(9)).ToString("HH:mm") + " JST"),
-            _ => new("--", "--", "--")
-        };
-    }
+    private ExchangeData ExchangeInfo(string index) =>
+        new(IdxReg.GetExchangeName(index), IdxReg.GetExchangeLocalTime(index));
 
     // ── Helpers ──────────────────────────────────────────────────────
 
