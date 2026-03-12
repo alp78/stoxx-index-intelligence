@@ -1044,11 +1044,15 @@ else
             : keys.FirstOrDefault() ?? "euro_stoxx_50";
 
         var perf = (await perfTask).ToList();
+        var todayUtc = DateTime.UtcNow.Date;
         _perfByIndex = perf
             .GroupBy(p => p.Index)
             .ToDictionary(g => g.Key, g =>
             {
-                var ordered = g.OrderBy(p => p.PerfDate).ToList();
+                // Exclude today — intraday pipeline runs produce incomplete performance data
+                // until all markets close (22:00 UTC for US).
+                var ordered = g.Where(p => p.PerfDate < todayUtc)
+                               .OrderBy(p => p.PerfDate).ToList();
                 // Trim trailing zero-return rows — stale placeholder data from the pipeline
                 while (ordered.Count > 1 && Math.Abs(ordered[^1].DailyReturn ?? 0) < 0.0001)
                     ordered.RemoveAt(ordered.Count - 1);
