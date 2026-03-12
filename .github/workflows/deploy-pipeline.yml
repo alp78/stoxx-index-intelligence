@@ -8,6 +8,7 @@ on:
       - "ingestion/**"
       - "utils/**"
       - "db/**"
+      - "data/definitions/**"
       - "docker/pipeline.Dockerfile"
       - "docker/pipeline-entrypoint.sh"
       - ".github/workflows/deploy-pipeline.yml"
