@@ -17,7 +17,7 @@ default_args = {
 with DAG(
     "stoxx_tickers",
     description="Hourly refresh of most active tickers per index",
-    schedule="0 0-21 * * 1-5",  # Every hour, 00:00-21:00 UTC Mon-Fri
+    schedule="0 9 * * 1-5",  # Daily at 09:00 UTC (10:00 CET) Mon-Fri
     start_date=datetime(2025, 1, 1),
     catchup=False,
     max_active_runs=1,
