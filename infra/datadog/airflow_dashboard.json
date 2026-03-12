@@ -1,0 +1,300 @@
+{
+  "title": "STOXX — Airflow Orchestration",
+  "description": "Scheduler health, DAG performance, task execution, and resource utilization for the STOXX pipeline.",
+  "widgets": [
+    {
+      "definition": {
+        "title": "Scheduler Heartbeat",
+        "type": "query_value",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "max:airflow.scheduler_heartbeat{*}",
+                "aggregator": "last"
+              }
+            ]
+          }
+        ],
+        "autoscale": false,
+        "precision": 0
+      },
+      "layout": { "x": 0, "y": 0, "width": 3, "height": 2 }
+    },
+    {
+      "definition": {
+        "title": "DAG Bag Size",
+        "type": "query_value",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "max:airflow.dagbag_size{*}",
+                "aggregator": "last"
+              }
+            ]
+          }
+        ],
+        "autoscale": false,
+        "precision": 0
+      },
+      "layout": { "x": 3, "y": 0, "width": 3, "height": 2 }
+    },
+    {
+      "definition": {
+        "title": "Executor — Running Tasks",
+        "type": "query_value",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "max:airflow.executor.running_tasks{*}",
+                "aggregator": "last"
+              }
+            ]
+          }
+        ],
+        "autoscale": false,
+        "precision": 0
+      },
+      "layout": { "x": 6, "y": 0, "width": 3, "height": 2 }
+    },
+    {
+      "definition": {
+        "title": "Executor — Open Slots",
+        "type": "query_value",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "max:airflow.executor.open_slots{*}",
+                "aggregator": "last"
+              }
+            ]
+          }
+        ],
+        "autoscale": false,
+        "precision": 0
+      },
+      "layout": { "x": 9, "y": 0, "width": 3, "height": 2 }
+    },
+    {
+      "definition": {
+        "title": "Task Successes vs Failures",
+        "type": "timeseries",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "formulas": [
+              { "alias": "Successes", "formula": "query1" },
+              { "alias": "Failures", "formula": "query2" }
+            ],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "sum:airflow.ti.finish.stoxx_pulse.fetch_and_load_pulse.success{*} + sum:airflow.ti.finish.stoxx_tickers.fetch_and_load_tickers.success{*}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query2",
+                "query": "sum:airflow.ti.finish.stoxx_pulse.fetch_and_load_pulse.failed{*} + sum:airflow.ti.finish.stoxx_tickers.fetch_and_load_tickers.failed{*}"
+              }
+            ],
+            "display_type": "bars",
+            "style": {
+              "palette": "dog_classic"
+            }
+          }
+        ],
+        "yaxis": { "include_zero": true }
+      },
+      "layout": { "x": 0, "y": 2, "width": 6, "height": 3 }
+    },
+    {
+      "definition": {
+        "title": "DAG Run Duration (avg)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "formulas": [
+              { "alias": "stoxx_pulse", "formula": "query1" },
+              { "alias": "stoxx_tickers", "formula": "query2" },
+              { "alias": "stoxx_daily", "formula": "query3" }
+            ],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:airflow.dagrun.duration.success.stoxx_pulse.avg{*}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query2",
+                "query": "avg:airflow.dagrun.duration.success.stoxx_tickers.avg{*}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query3",
+                "query": "avg:airflow.dagrun.duration.success.avg{*}"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": { "include_zero": true }
+      },
+      "layout": { "x": 6, "y": 2, "width": 6, "height": 3 }
+    },
+    {
+      "definition": {
+        "title": "Task Queued Duration (p95)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "max:airflow.dag.stoxx_pulse.fetch_and_load_pulse.queued_duration.95percentile{*}"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": { "include_zero": true }
+      },
+      "layout": { "x": 0, "y": 5, "width": 6, "height": 3 }
+    },
+    {
+      "definition": {
+        "title": "DAG Parse Time",
+        "type": "timeseries",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:airflow.dag_processing.total_parse_time{*}"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": { "include_zero": true }
+      },
+      "layout": { "x": 6, "y": 5, "width": 6, "height": 3 }
+    },
+    {
+      "definition": {
+        "title": "Pool — Open vs Used Slots",
+        "type": "timeseries",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "formulas": [
+              { "alias": "Open", "formula": "query1" },
+              { "alias": "Used", "formula": "query2" }
+            ],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:airflow.pool.open_slots{*} by {pool_name}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query2",
+                "query": "avg:airflow.pool.used_slots{*} by {pool_name}"
+              }
+            ],
+            "display_type": "area"
+          }
+        ],
+        "yaxis": { "include_zero": true }
+      },
+      "layout": { "x": 0, "y": 8, "width": 6, "height": 3 }
+    },
+    {
+      "definition": {
+        "title": "Scheduler Loop & Task Scheduling",
+        "type": "timeseries",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "formulas": [
+              { "alias": "Executable Tasks", "formula": "query1" },
+              { "alias": "Starving Tasks", "formula": "query2" },
+              { "alias": "Loop Duration (ms)", "formula": "query3" }
+            ],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:airflow.scheduler.tasks.executable{*}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query2",
+                "query": "avg:airflow.scheduler.tasks.starving{*}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query3",
+                "query": "avg:airflow.scheduler.scheduler_loop_duration.avg{*}"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": { "include_zero": true }
+      },
+      "layout": { "x": 6, "y": 8, "width": 6, "height": 3 }
+    },
+    {
+      "definition": {
+        "title": "Airflow Container Logs",
+        "type": "log_stream",
+        "query": "service:(airflow-scheduler OR airflow-webserver OR airflow-triggerer)",
+        "columns": ["core_host", "core_service", "log_status"],
+        "indexes": [],
+        "message_display": "inline",
+        "sort": { "column": "time", "order": "desc" }
+      },
+      "layout": { "x": 0, "y": 11, "width": 12, "height": 4 }
+    }
+  ],
+  "template_variables": [
+    {
+      "name": "dag_id",
+      "prefix": "dag_id",
+      "available_values": [],
+      "default": "*"
+    }
+  ],
+  "layout_type": "ordered",
+  "notify_list": [],
+  "reflow_type": "fixed"
+}

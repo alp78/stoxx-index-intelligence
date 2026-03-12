@@ -1,0 +1,485 @@
+{
+  "title": "Pipeline Watch",
+  "description": "End-to-end monitoring: Cloud Run pipeline execution, SQL Server VM infrastructure, database internals, logs, and APM traces.",
+  "widgets": [
+    {
+      "definition": {
+        "title": "Cloud Run Pipeline",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "definition": {
+              "title": "Pipeline Runs",
+              "type": "query_value",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:gcp.run.job.completed_execution_count{job_name:stoxx-pipeline}.as_count()",
+                      "aggregator": "sum"
+                    }
+                  ],
+                  "formulas": [{ "formula": "query1" }]
+                }
+              ],
+              "autoscale": true,
+              "precision": 0,
+              "timeseries_background": { "yaxis": {}, "type": "bars" }
+            },
+            "layout": { "x": 0, "y": 0, "width": 4, "height": 3 }
+          },
+          {
+            "definition": {
+              "title": "Peak Memory",
+              "type": "query_value",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "formulas": [{ "formula": "query1" }],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "avg:gcp.run.container.memory.usage.avg{job_name:stoxx-pipeline}",
+                      "aggregator": "max"
+                    }
+                  ]
+                }
+              ],
+              "autoscale": true,
+              "precision": 1,
+              "timeseries_background": { "type": "bars", "yaxis": {} }
+            },
+            "layout": { "x": 4, "y": 0, "width": 4, "height": 3 }
+          },
+          {
+            "definition": {
+              "title": "Peak CPU",
+              "type": "query_value",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "formulas": [{ "formula": "query1" }],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "avg:gcp.run.container.cpu.utilizations.avg{job_name:stoxx-pipeline}",
+                      "aggregator": "max"
+                    }
+                  ]
+                }
+              ],
+              "autoscale": true,
+              "precision": 1,
+              "timeseries_background": { "type": "bars", "yaxis": {} }
+            },
+            "layout": { "x": 8, "y": 0, "width": 4, "height": 3 }
+          },
+          {
+            "definition": {
+              "title": "Pipeline Step Duration",
+              "type": "bar_chart",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "name": "query1",
+                      "data_source": "apm_metrics",
+                      "stat": "latency_avg",
+                      "service": "stoxx-pipeline",
+                      "group_by": ["resource_name"]
+                    }
+                  ],
+                  "response_format": "scalar",
+                  "formulas": [{ "formula": "query1" }],
+                  "sort": {
+                    "order_by": [{ "type": "group", "name": "resource_name", "order": "asc" }],
+                    "count": 20
+                  }
+                }
+              ],
+              "style": { "display": { "type": "stacked", "legend": "automatic" }, "scaling": "absolute" }
+            },
+            "layout": { "x": 0, "y": 3, "width": 12, "height": 4 }
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 0, "width": 12, "height": 8 }
+    },
+    {
+      "definition": {
+        "title": "SQL Server VM — Infrastructure",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "definition": {
+              "title": "Available Memory",
+              "type": "query_value",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "avg:system.mem.usable{host:stoxx-sql}",
+                      "aggregator": "last"
+                    }
+                  ],
+                  "formulas": [{ "formula": "query1" }]
+                }
+              ],
+              "autoscale": true,
+              "precision": 0
+            },
+            "layout": { "x": 0, "y": 0, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "CPU",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "user", "query": "avg:system.cpu.user{host:stoxx-sql}" },
+                    { "data_source": "metrics", "name": "system", "query": "avg:system.cpu.system{host:stoxx-sql}" },
+                    { "data_source": "metrics", "name": "iowait", "query": "avg:system.cpu.iowait{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 4, "y": 0, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "System Load",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "load1", "query": "avg:system.load.1{host:stoxx-sql}" },
+                    { "data_source": "metrics", "name": "load5", "query": "avg:system.load.5{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 8, "y": 0, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Memory (Used vs Available)",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "used", "query": "avg:system.mem.used{host:stoxx-sql}" },
+                    { "data_source": "metrics", "name": "usable", "query": "avg:system.mem.usable{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 0, "y": 2, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Disk Utilization",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "query1", "query": "avg:system.io.util{host:stoxx-sql} by {device}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 4, "y": 2, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Disk IOPS (r/w)",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "reads", "query": "avg:system.io.r_s{host:stoxx-sql}" },
+                    { "data_source": "metrics", "name": "writes", "query": "avg:system.io.w_s{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 8, "y": 2, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Disk I/O Wait",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "query1", "query": "avg:system.io.await{host:stoxx-sql} by {device}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 0, "y": 4, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Network (sent/recv)",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "sent", "query": "avg:system.net.bytes_sent{host:stoxx-sql}" },
+                    { "data_source": "metrics", "name": "recv", "query": "avg:system.net.bytes_rcvd{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 4, "y": 4, "width": 4, "height": 2 }
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 8, "width": 12, "height": 7 }
+    },
+    {
+      "definition": {
+        "title": "SQL Server — Database Internals",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "definition": {
+              "title": "Connections by Login",
+              "type": "bar_chart",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:sqlserver.sqlserver.connections.by_login{host:stoxx-sql} by {login_name,program_name}",
+                      "aggregator": "max"
+                    }
+                  ],
+                  "response_format": "scalar",
+                  "formulas": [
+                    {
+                      "formula": "query1",
+                      "number_format": { "unit": { "type": "custom_unit_label", "label": "conns" } }
+                    }
+                  ],
+                  "sort": { "count": 10, "order_by": [{ "type": "formula", "index": 0, "order": "desc" }] }
+                }
+              ],
+              "style": { "display": { "type": "flat" }, "palette": "datadog16" }
+            },
+            "layout": { "x": 0, "y": 0, "width": 12, "height": 3 }
+          },
+          {
+            "definition": {
+              "title": "Page Life Expectancy",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "query1", "query": "avg:sqlserver.buffer.page_life_expectancy{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "min", "value"]
+            },
+            "layout": { "x": 0, "y": 3, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Buffer Cache Hit Ratio",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "query1", "query": "avg:sqlserver.buffer.cache_hit_ratio{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "min", "value"]
+            },
+            "layout": { "x": 4, "y": 3, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Checkpoint Pages/sec",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "query1", "query": "avg:sqlserver.buffer.checkpoint_pages{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 8, "y": 3, "width": 4, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Batch Requests/sec",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "query1", "query": "avg:sqlserver.stats.batch_requests{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 0, "y": 5, "width": 6, "height": 2 }
+          },
+          {
+            "definition": {
+              "title": "Lock Waits",
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    { "data_source": "metrics", "name": "query1", "query": "avg:sqlserver.stats.lock_waits{host:stoxx-sql}" }
+                  ],
+                  "display_type": "line"
+                }
+              ],
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "max", "value"]
+            },
+            "layout": { "x": 6, "y": 5, "width": 6, "height": 2 }
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 15, "width": 12, "height": 8 }
+    },
+    {
+      "definition": {
+        "title": "Logs & APM Traces",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "definition": {
+              "title": "Airflow Logs",
+              "type": "list_stream",
+              "requests": [
+                {
+                  "response_format": "event_list",
+                  "query": {
+                    "data_source": "logs_stream",
+                    "query_string": "host:stoxx-airflow",
+                    "indexes": [],
+                    "storage": "hot"
+                  },
+                  "columns": [
+                    { "field": "status_line", "width": "auto" },
+                    { "field": "timestamp", "width": "auto" },
+                    { "field": "host", "width": "auto" },
+                    { "field": "service", "width": "auto" },
+                    { "field": "content", "width": "compact" }
+                  ]
+                }
+              ]
+            },
+            "layout": { "x": 0, "y": 0, "width": 12, "height": 4 }
+          },
+          {
+            "definition": {
+              "title": "Pipeline APM Traces",
+              "type": "list_stream",
+              "requests": [
+                {
+                  "response_format": "event_list",
+                  "query": {
+                    "data_source": "trace_stream",
+                    "query_string": "@_top_level:1 service:stoxx-pipeline -@span.type:sqlite",
+                    "indexes": []
+                  },
+                  "columns": [
+                    { "field": "timestamp", "width": "auto" },
+                    { "field": "service", "width": "auto" },
+                    { "field": "resource_name", "width": "auto" },
+                    { "field": "@duration", "width": "auto" },
+                    { "field": "@http.status_code", "width": "auto" },
+                    { "field": "span_count", "width": "auto" },
+                    { "field": "latency_breakdown", "width": "auto" }
+                  ]
+                }
+              ]
+            },
+            "layout": { "x": 0, "y": 4, "width": 12, "height": 4 }
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 23, "width": 12, "height": 9 }
+    }
+  ],
+  "template_variables": [],
+  "layout_type": "ordered",
+  "notify_list": [],
+  "reflow_type": "fixed"
+}
