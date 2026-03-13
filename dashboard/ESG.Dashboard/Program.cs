@@ -16,9 +16,18 @@ builder.Services.AddMudServices();
 // In-memory cache (reduces DB load — scores change at most daily)
 builder.Services.AddMemoryCache();
 
-// Database
+// Database — password injected via DB_PASSWORD env var (Secret Manager in Cloud Run)
 var connectionString = builder.Configuration.GetConnectionString("stoxx")
     ?? throw new InvalidOperationException("Connection string 'stoxx' not found.");
+var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD");
+if (!string.IsNullOrEmpty(dbPassword))
+{
+    var csb = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connectionString)
+    {
+        Password = dbPassword
+    };
+    connectionString = csb.ConnectionString;
+}
 builder.Services.AddSingleton(new DbConnectionFactory(connectionString));
 builder.Services.AddScoped<ScoresRepository>();
 builder.Services.AddScoped<IndexPerformanceRepository>();

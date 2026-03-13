@@ -46,7 +46,16 @@ resource "google_cloud_run_v2_service" "dashboard" {
 
       env {
         name  = "ConnectionStrings__stoxx"
-        value = "Server=${local.sql_ip},1433;Database=stoxx;User Id=${local.sql_user};Password=${var.db_password};TrustServerCertificate=true"
+        value = "Server=${local.sql_ip},1433;Database=stoxx;User Id=${local.sql_user};TrustServerCertificate=true"
+      }
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_password.secret_id
+            version = "latest"
+          }
+        }
       }
 
       resources {
