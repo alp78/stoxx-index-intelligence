@@ -11,11 +11,14 @@ public class DbConnectionFactory
 
     private readonly string _connectionString;
 
+    /// <summary>Initializes a new instance with the specified SQL Server connection string.</summary>
+    /// <param name="connectionString">ADO.NET connection string for SQL Server.</param>
     public DbConnectionFactory(string connectionString)
     {
         _connectionString = connectionString;
     }
 
+    /// <summary>Creates a new <see cref="SqlConnection"/> from the configured connection string.</summary>
     public IDbConnection Create() => new SqlConnection(_connectionString);
 
     /// <summary>Executes a database operation with automatic retry on deadlock (error 1205).</summary>

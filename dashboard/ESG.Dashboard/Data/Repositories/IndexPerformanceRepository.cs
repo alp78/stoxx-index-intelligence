@@ -8,6 +8,8 @@ public class IndexPerformanceRepository
 {
     private readonly DbConnectionFactory _db;
 
+    /// <summary>Initializes a new instance with the specified database connection factory.</summary>
+    /// <param name="db">Factory for creating SQL Server connections.</param>
     public IndexPerformanceRepository(DbConnectionFactory db) => _db = db;
 
     /// <summary>Full time-series of index performance, optionally filtered by index and date range.</summary>

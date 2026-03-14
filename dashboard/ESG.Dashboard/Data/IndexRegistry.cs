@@ -17,8 +17,11 @@ public class IndexRegistry
     private static readonly string[] DefaultColors =
         ["#4285F4", "#66BB6A", "#EF5350", "#FFA726", "#AB47BC", "#26C6DA", "#EC407A", "#8D6E63"];
 
+    /// <summary>Initializes a new instance with the specified database connection factory.</summary>
+    /// <param name="db">Factory for creating SQL Server connections.</param>
     public IndexRegistry(DbConnectionFactory db) => _db = db;
 
+    /// <summary>Loads index metadata and dominant exchange info from the database if not already cached. Thread-safe.</summary>
     public async Task EnsureLoadedAsync()
     {
         if (_indices is not null) return;
@@ -80,17 +83,21 @@ public class IndexRegistry
         finally { _lock.Release(); }
     }
 
+    /// <summary>Returns the human-readable display name for the given index key (e.g. "Euro STOXX 50").</summary>
     public string GetDisplayName(string key) =>
         _indices is not null && _indices.TryGetValue(key, out var m) ? m.DisplayName : FormatKeyFallback(key);
 
+    /// <summary>Returns the silver-layer OHLCV table name for the given index key (e.g. "silver.eurostoxx50_ohlcv").</summary>
     public string? GetOhlcvTable(string key) =>
         _indices is not null && _indices.TryGetValue(key, out var m)
             ? m.OhlcvTable
             : $"silver.{key.Replace("_", "")}_ohlcv";
 
+    /// <summary>Returns the chart color hex code assigned to the given index key.</summary>
     public string GetColor(string key) =>
         _indices is not null && _indices.TryGetValue(key, out var m) ? m.Color : "#A0AEC0";
 
+    /// <summary>Returns the base currency for the given index key (e.g. "EUR", "USD").</summary>
     public string GetCurrency(string key) =>
         _indices is not null && _indices.TryGetValue(key, out var m) ? m.Currency : "";
 
@@ -134,10 +141,12 @@ public class IndexRegistry
         catch { return false; }
     }
 
+    /// <summary>Converts an index key like "euro_stoxx_50" into a title-cased fallback display name.</summary>
     private static string FormatKeyFallback(string key) =>
         string.Join(' ', key.Split('_').Select(w =>
             w.Length > 0 ? char.ToUpper(w[0]) + w[1..] : w));
 
+    /// <summary>Internal model representing index metadata loaded from bronze.dim_index.</summary>
     private class IndexMeta
     {
         public required string Key { get; init; }
@@ -147,6 +156,7 @@ public class IndexRegistry
         public required string Currency { get; init; }
     }
 
+    /// <summary>Internal model representing dominant exchange info for an index.</summary>
     private class ExchangeMeta
     {
         public required string ExchangeName { get; init; }

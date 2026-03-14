@@ -12,8 +12,11 @@ public class CountryFlags
     private Dictionary<string, string>? _codes;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    /// <summary>Initializes a new instance with the specified database connection factory.</summary>
+    /// <param name="db">Factory for creating SQL Server connections.</param>
     public CountryFlags(DbConnectionFactory db) => _db = db;
 
+    /// <summary>Loads country-to-ISO mappings from the database if not already cached. Thread-safe.</summary>
     public async Task EnsureLoadedAsync()
     {
         if (_codes is not null) return;

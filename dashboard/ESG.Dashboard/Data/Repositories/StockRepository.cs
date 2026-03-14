@@ -9,6 +9,9 @@ public class StockRepository
     private readonly DbConnectionFactory _db;
     private readonly IndexRegistry _registry;
 
+    /// <summary>Initializes a new instance with the specified database connection factory and index registry.</summary>
+    /// <param name="db">Factory for creating SQL Server connections.</param>
+    /// <param name="registry">Registry providing index-specific table names.</param>
     public StockRepository(DbConnectionFactory db, IndexRegistry registry)
     {
         _db = db;

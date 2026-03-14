@@ -8,6 +8,8 @@ public class ScoresRepository
 {
     private readonly DbConnectionFactory _db;
 
+    /// <summary>Initializes a new instance with the specified database connection factory.</summary>
+    /// <param name="db">Factory for creating SQL Server connections.</param>
     public ScoresRepository(DbConnectionFactory db) => _db = db;
 
     /// <summary>Latest daily scores for all stocks (per-index MAX date). Used by Overview and Stock Explorer.</summary>

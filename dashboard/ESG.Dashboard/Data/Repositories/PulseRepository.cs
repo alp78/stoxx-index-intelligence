@@ -3,10 +3,13 @@ using ESG.Dashboard.Data.Models;
 
 namespace ESG.Dashboard.Data.Repositories;
 
+/// <summary>Reads from bronze.pulse and bronze.pulse_tickers — real-time price snapshots and activity rankings.</summary>
 public class PulseRepository
 {
     private readonly DbConnectionFactory _db;
 
+    /// <summary>Initializes a new instance with the specified database connection factory.</summary>
+    /// <param name="db">Factory for creating SQL Server connections.</param>
     public PulseRepository(DbConnectionFactory db) => _db = db;
 
     /// <summary>
