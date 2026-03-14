@@ -88,7 +88,7 @@ public class IndexRegistry
         _indices is not null && _indices.TryGetValue(key, out var m) ? m.DisplayName : FormatKeyFallback(key);
 
     /// <summary>Returns the silver-layer OHLCV table name for the given index key (e.g. "silver.eurostoxx50_ohlcv").</summary>
-    public string? GetOhlcvTable(string key) =>
+    public string GetOhlcvTable(string key) =>
         _indices is not null && _indices.TryGetValue(key, out var m)
             ? m.OhlcvTable
             : $"silver.{key.Replace("_", "")}_ohlcv";

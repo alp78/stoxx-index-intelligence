@@ -55,7 +55,6 @@ public class StockRepository
         string index, string symbol, DateTime? from = null, DateTime? to = null)
     {
         var table = _registry.GetOhlcvTable(index);
-        if (table is null) return [];
 
         // Table name is from IndexRegistry (loaded from DB), not user input
         // Compute MA 30/90 via SQL window functions (server-side, avoids client recalc)
@@ -91,7 +90,7 @@ public class StockRepository
         string index, string[] symbols, DateTime from)
     {
         var table = _registry.GetOhlcvTable(index);
-        if (table is null || symbols.Length == 0)
+        if (symbols.Length == 0)
             return [];
 
         var sql = $"""
